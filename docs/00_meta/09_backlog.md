@@ -1,4 +1,4 @@
-# Backlog do MVP
+# Backlog priorizado
 
 ## P0 — Fundação
 
@@ -21,11 +21,11 @@
 ## P1 — Oferta
 
 - [ ] Prévia de oferta.
-- [ ] Persistência da fotografia imutável da oferta.
-- [ ] Geração determinística da mensagem-base.
-- [ ] Confirmação humana antes do envio.
-- [ ] Envio via WhatsApp Gateway.
-- [ ] Registro de status de saída.
+- [ ] Fotografia imutável da oferta.
+- [ ] Geração da mensagem-base.
+- [ ] Confirmação humana.
+- [ ] Envio via Gateway.
+- [ ] Registro de status de entrega.
 
 ## Fora do primeiro MVP
 
