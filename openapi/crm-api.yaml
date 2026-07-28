@@ -1,0 +1,569 @@
+openapi: 3.1.0
+info:
+  title: CRM Conversacional API
+  version: 0.1.0
+  description: API de domínio e persistência integrada ao WhatsApp Gateway.
+servers:
+  - url: https://crm-api.example.com
+security:
+  - InternalHmac: []
+tags:
+  - name: Internal
+  - name: Customers
+  - name: Price Lists
+  - name: Offers
+
+paths:
+  /health:
+    get:
+      security: []
+      operationId: getHealth
+      responses:
+        "200":
+          description: Serviço saudável
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+
+  /internal/whatsapp/events:
+    post:
+      tags: [Internal]
+      operationId: receiveWhatsappEvent
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/Signature"
+        - $ref: "#/components/parameters/Timestamp"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WhatsappEvent"
+      responses:
+        "202":
+          description: Evento aceito
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /internal/outbound-status:
+    post:
+      tags: [Internal]
+      operationId: updateOutboundStatus
+      parameters:
+        - $ref: "#/components/parameters/Signature"
+        - $ref: "#/components/parameters/Timestamp"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OutboundStatusUpdate"
+      responses:
+        "204":
+          description: Status atualizado
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /customers/by-whatsapp/{phone}:
+    get:
+      tags: [Customers]
+      operationId: findCustomerByWhatsapp
+      parameters:
+        - name: phone
+          in: path
+          required: true
+          description: Telefone E.164, com o sinal + codificado na URL.
+          schema:
+            type: string
+            pattern: "^\\+[1-9][0-9]{7,14}$"
+      responses:
+        "200":
+          description: Cliente e contato
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerContact"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /customers/{customerId}/preferred-products:
+    get:
+      tags: [Customers]
+      operationId: listPreferredProducts
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+      responses:
+        "200":
+          description: Produtos preferenciais ativos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PreferredProduct"
+
+  /price-lists/current:
+    get:
+      tags: [Price Lists]
+      operationId: getCurrentPriceList
+      parameters:
+        - name: at
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Tabela ativa na data informada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceListSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /offers/preview:
+    post:
+      tags: [Offers]
+      operationId: previewOffer
+      description: Calcula a oferta sem persistir uma nova oferta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferRequest"
+      responses:
+        "200":
+          description: Prévia calculada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OfferPreview"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /offers:
+    post:
+      tags: [Offers]
+      operationId: createOffer
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferRequest"
+      responses:
+        "201":
+          description: Oferta persistida como fotografia
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /offers/{offerId}:
+    get:
+      tags: [Offers]
+      operationId: getOffer
+      parameters:
+        - $ref: "#/components/parameters/OfferId"
+      responses:
+        "200":
+          description: Oferta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /offers/{offerId}/approve:
+    post:
+      tags: [Offers]
+      operationId: approveOffer
+      parameters:
+        - $ref: "#/components/parameters/OfferId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approved_by]
+              properties:
+                approved_by:
+                  type: string
+                  minLength: 1
+                final_message:
+                  type: string
+      responses:
+        "200":
+          description: Oferta aprovada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /offers/{offerId}/send:
+    post:
+      tags: [Offers]
+      operationId: sendOffer
+      description: Envia somente ofertas previamente aprovadas.
+      parameters:
+        - $ref: "#/components/parameters/OfferId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          description: Envio solicitado ao Gateway
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [offer_id, status]
+                properties:
+                  offer_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    const: PENDING
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+components:
+  securitySchemes:
+    InternalHmac:
+      type: apiKey
+      in: header
+      name: X-Signature
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 200
+    Signature:
+      name: X-Signature
+      in: header
+      required: true
+      schema:
+        type: string
+    Timestamp:
+      name: X-Timestamp
+      in: header
+      required: true
+      schema:
+        type: string
+        format: date-time
+    CustomerId:
+      name: customerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OfferId:
+      name: offerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unauthorized:
+      description: Assinatura ausente, inválida ou expirada
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Conflict:
+      description: Conflito de estado ou idempotência
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unprocessable:
+      description: Regra de negócio não atendida
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        trace_id:
+          type: string
+
+    WhatsappEvent:
+      type: object
+      additionalProperties: false
+      required: [event_id, received_at, channel, waba_id, phone_number_id, from, message]
+      properties:
+        event_id:
+          type: string
+        received_at:
+          type: string
+          format: date-time
+        channel:
+          type: string
+          const: whatsapp
+        waba_id:
+          type: string
+        phone_number_id:
+          type: string
+        from:
+          type: string
+          pattern: "^[1-9][0-9]{7,14}$"
+        message:
+          type: object
+          required: [type]
+          properties:
+            type:
+              type: string
+              enum: [text]
+            text:
+              type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    EventAccepted:
+      type: object
+      required: [event_id, status]
+      properties:
+        event_id:
+          type: string
+        status:
+          type: string
+          enum: [ACCEPTED, ALREADY_PROCESSED]
+
+    OutboundStatusUpdate:
+      type: object
+      required: [gateway_message_id, status, occurred_at]
+      properties:
+        gateway_message_id:
+          type: string
+        status:
+          type: string
+          enum: [SENT, DELIVERED, READ, FAILED]
+        occurred_at:
+          type: string
+          format: date-time
+        error:
+          type: string
+
+    CustomerContact:
+      type: object
+      required: [customer_id, customer_name, state_code, contact_id, contact_name, whatsapp_e164]
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        customer_name:
+          type: string
+        state_code:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        contact_id:
+          type: string
+          format: uuid
+        contact_name:
+          type: string
+        whatsapp_e164:
+          type: string
+
+    PreferredProduct:
+      type: object
+      required: [product_id, sku, display_name, display_order]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        display_name:
+          type: string
+        display_order:
+          type: integer
+
+    PriceListSummary:
+      type: object
+      required: [id, name, reference_month, valid_from, currency]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        reference_month:
+          type: string
+          format: date
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: [string, "null"]
+          format: date-time
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+
+    OfferRequest:
+      type: object
+      additionalProperties: false
+      required: [customer_id, destination_state, payment_term, product_ids]
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        contact_id:
+          type: string
+          format: uuid
+        destination_state:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        payment_term:
+          type: string
+          enum: [TERM, ANTICIPATED, DAYS_14]
+        product_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        quantities_kg:
+          type: object
+          additionalProperties:
+            type: string
+            pattern: "^[0-9]+(\\.[0-9]{1,3})?$"
+
+    Money:
+      type: string
+      description: Valor decimal; nunca ponto flutuante.
+      pattern: "^-?[0-9]+(\\.[0-9]{1,4})?$"
+      examples: ["12.0500"]
+
+    OfferItem:
+      type: object
+      required:
+        [product_id, display_name, base_price, payment_price, freight_per_kg,
+         final_price_per_kg, availability]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        base_price:
+          $ref: "#/components/schemas/Money"
+        payment_price:
+          $ref: "#/components/schemas/Money"
+        freight_per_kg:
+          $ref: "#/components/schemas/Money"
+        final_price_per_kg:
+          $ref: "#/components/schemas/Money"
+        availability:
+          type: string
+          enum: [AVAILABLE, OUT_OF_STOCK, SUSPENDED, FUTURE_ARRIVAL, CONSULT]
+        expected_arrival_date:
+          type: [string, "null"]
+          format: date
+        note:
+          type: [string, "null"]
+
+    OfferPreview:
+      type: object
+      required: [customer_id, reference_month, currency, items, message_preview]
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        reference_month:
+          type: string
+          format: date
+        currency:
+          type: string
+          const: BRL
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OfferItem"
+        message_preview:
+          type: string
+
+    Offer:
+      allOf:
+        - $ref: "#/components/schemas/OfferPreview"
+        - type: object
+          required: [id, status, created_at]
+          properties:
+            id:
+              type: string
+              format: uuid
+            status:
+              type: string
+              enum: [DRAFT, PENDING_APPROVAL, APPROVED, REJECTED, SENT, FAILED, CANCELLED]
+            approved_by:
+              type: [string, "null"]
+            approved_at:
+              type: [string, "null"]
+              format: date-time
+            sent_at:
+              type: [string, "null"]
+              format: date-time
+            created_at:
+              type: string
+              format: date-time
