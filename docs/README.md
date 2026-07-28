@@ -1,22 +1,29 @@
 # Documentação
 
-Este diretório é a memória operacional do CRM Conversacional API.
-
-## Fontes únicas
-
-- [Escopo e objetivos](01_definition/mvp-scope.md)
-- [Arquitetura](01_definition/architecture.md)
-- [Modelo de domínio](01_definition/domain-model.md)
-- [Progresso atual](00_meta/PROGRESS.md)
-- [Backlog](00_meta/BACKLOG.md)
-- [Decisões](00_meta/DECISIONS.md)
-- [Contrato OpenAPI](../openapi/crm-api.yaml)
-- [Migração PostgreSQL](../db/migrations/0001_initial.sql)
+Memória operacional do CRM Conversacional API.
 
 ## Estrutura
 
-- `00_meta`: coordenação, decisões, progresso e próximos passos.
-- `01_definition`: problema, domínio e arquitetura.
-- `02_execution`: planos de implementação.
-- `03_validation`: critérios e evidências de validação.
-- `04_technical`: referências técnicas e contratos.
+| Diretório | Função |
+|---|---|
+| `00_meta` | Orquestração, progresso, decisões, backlog e issues |
+| `10_product` | Manifesto e roadmap do produto |
+| `20_domain` | Regras e modelo do domínio |
+| `30_architecture` | Arquitetura e contrato da API |
+| `40_delivery` | Blueprints das fases de entrega |
+| `50_validation` | Critérios e evidências de validação |
+
+## Leitura obrigatória antes de implementar
+
+1. [Orquestração](00_meta/AGENT_SKILL_ORCHESTRATION.md)
+2. [Progresso](00_meta/07_progress.md)
+3. [Backlog](00_meta/09_backlog.md)
+4. [Manifesto](10_product/BUSINESS_FEATURE_MANIFESTO.md)
+5. [Roadmap](10_product/MVP_ROADMAP.md)
+6. [Contrato do projeto](00_meta/AGENT_SKILL_PROJECT.md)
+7. Blueprint da fase ativa em `40_delivery`
+
+## Artefatos executáveis
+
+- [OpenAPI](../openapi/crm-api.yaml)
+- [Migração PostgreSQL](../db/migrations/0001_initial.sql)
