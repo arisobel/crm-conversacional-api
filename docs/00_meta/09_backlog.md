@@ -14,8 +14,9 @@
 - [ ] CRUD de clientes e contatos.
 - [ ] CRUD de famílias e produtos.
 - [ ] Lista preferencial cliente-produto.
-- [ ] Importação manual de tabela mensal.
-- [ ] Consulta da tabela vigente.
+- [ ] Executar a importação manual revisada da tabela especial de 20/07/2026.
+- [x] Implementar a consulta interna da tabela vigente por contato WhatsApp.
+- [x] Adicionar ordenação explícita de item de tabela (`0002`) para preservar a sequência comercial revisada.
 - [ ] Regras determinísticas de desconto, frete e imposto.
 
 ## P1 — Oferta

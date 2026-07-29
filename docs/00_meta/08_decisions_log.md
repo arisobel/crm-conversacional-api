@@ -51,3 +51,13 @@ controle. Nas chamadas síncronas para esta API, ele informa `X-Tenant-Slug` e a
 requisição com HMAC, timestamp e corpo canônicos. Cada implantação do CRM aceita somente
 o tenant configurado. A decisão preserva a unicidade de telefone por tenant no DDL e
 impede busca acidental de um contato em outro tenant.
+
+## ADR-009 — Importação comercial revisável antes da ativação
+
+**Status:** aceita em 2026-07-29.
+
+A tabela especial recebida em PDF é uma referência comercial de duas colunas, com linhas
+de preço, disponibilidade e chegada que não podem ser publicadas por extração automática
+sem revisão. O CRM aceitará carga manual estruturada em CSV, gerará a tabela inicialmente
+como `DRAFT` e exigirá ativação explícita. Itens sem preço atual são representados por
+disponibilidade controlada e não são expostos como preço zero ao Gateway.

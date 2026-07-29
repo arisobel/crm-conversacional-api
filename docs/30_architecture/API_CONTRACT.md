@@ -40,3 +40,13 @@ Durante a rotação, a implantação pode aceitar temporariamente
 - `GET /customers/by-whatsapp/{phone}` exige a autenticação interna acima, normaliza
   somente espaço, ponto, hífen e parênteses de apresentação, e retorna apenas contato,
   cliente e tenant ativos.
+
+## Corte F1 — tabela vigente para o Gateway
+
+- `GET /price-lists/current/by-whatsapp/{phone}` usa a mesma autenticação HMAC e o
+  mesmo escopo de tenant da busca de contato. Ele retorna o contato ativo, uma única
+  tabela `ACTIVE` vigente e seus itens ativos de catálogo.
+- Valores monetários são strings decimais. Para `OUT_OF_STOCK`, `SUSPENDED` e `CONSULT`,
+  `base_price` é `null`; o Gateway deve apresentar a disponibilidade, nunca `R$ 0,00`.
+- O endpoint não aplica desconto, frete, imposto nem aprova uma oferta. Essas regras e a
+  mensagem comercial final pertencem aos cortes posteriores e permanecem determinísticos.

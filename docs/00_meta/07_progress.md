@@ -1,10 +1,10 @@
 # Progresso central
 
-Atualizado em: 2026-07-28
+Atualizado em: 2026-07-29
 
 ## Estado atual
 
-**Fase ativa:** F0 — fundação documental e técnica do MVP.
+**Fase ativa:** F1 — catálogo e leitura estruturada da tabela vigente.
 
 ## Concluído
 
@@ -20,15 +20,17 @@ Atualizado em: 2026-07-28
 - Modelos ORM iniciais de tenant, cliente e contato; migração Alembic executável que
   aplica o DDL PostgreSQL aprovado.
 - Contrato de escopo de tenant e HMAC com o WhatsApp Gateway registrado.
+- Leitura interna da tabela `ACTIVE` por contato WhatsApp, com disponibilidade explícita
+  e valores decimais estruturados, sem cálculo comercial implícito.
 
 ## Em andamento
 
-- Validação da migração Alembic em PostgreSQL real e do Compose local.
+- Carga revisável da tabela especial de 20/07/2026 e conferência humana antes de ativá-la.
 
 ## Próximo baby-step
 
-Subir o Compose, aplicar a migração em PostgreSQL e validar a primeira chamada assinada
-do Gateway para busca de contato por WhatsApp.
+Preparar a carga CSV da tabela especial, revisá-la com o comercial, ativar somente a
+tabela conferida e validar a leitura assinada pelo Gateway.
 
 ## Evidências
 

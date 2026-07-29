@@ -1,6 +1,7 @@
 import hashlib
 import hmac
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -13,8 +14,10 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from crm_api.core.config import Settings
 from crm_api.main import create_app
 from crm_api.models.base import Base
+from crm_api.models.catalog import Product, ProductFamily
 from crm_api.models.customer import Customer, Tenant
 from crm_api.models.customer_contact import CustomerContact
+from crm_api.models.pricing import AvailabilityStatus, PriceList, PriceListItem, PriceListStatus
 
 
 def _settings() -> Settings:
@@ -71,7 +74,7 @@ async def app():
         id=uuid4(),
         tenant_id=tenant.id,
         customer_id=active_customer.id,
-        name="Vitória Exemplo",
+        name="VitÃ³ria Exemplo",
         whatsapp_e164="+5511999999999",
     )
     inactive_contact = CustomerContact(
@@ -89,6 +92,46 @@ async def app():
         name="Contato de Cliente Inativo",
         whatsapp_e164="+5511977777777",
     )
+    family = ProductFamily(id=uuid4(), tenant_id=tenant.id, name="Texturizado", display_order=10)
+    available_product = Product(
+        id=uuid4(),
+        tenant_id=tenant.id,
+        family_id=family.id,
+        sku="TEX-75-36-CRU",
+        commercial_name="75/36 trama cru",
+    )
+    unavailable_product = Product(
+        id=uuid4(),
+        tenant_id=tenant.id,
+        family_id=family.id,
+        sku="TEX-150-144-PRETO",
+        commercial_name="150/144 trama preto",
+    )
+    price_list = PriceList(
+        id=uuid4(),
+        tenant_id=tenant.id,
+        name="Tabela especial",
+        reference_month=date.today().replace(day=1),
+        valid_from=datetime.now(UTC) - timedelta(days=1),
+        status=PriceListStatus.ACTIVE,
+    )
+    available_item = PriceListItem(
+        id=uuid4(),
+        tenant_id=tenant.id,
+        price_list_id=price_list.id,
+        product_id=available_product.id,
+        base_price=Decimal("12.0500"),
+        availability=AvailabilityStatus.AVAILABLE,
+    )
+    unavailable_item = PriceListItem(
+        id=uuid4(),
+        tenant_id=tenant.id,
+        price_list_id=price_list.id,
+        product_id=unavailable_product.id,
+        base_price=Decimal("0"),
+        availability=AvailabilityStatus.OUT_OF_STOCK,
+        notes="PreÃ§o indisponÃ­vel na fonte",
+    )
     async with application.state.session_factory() as session:
         session.add_all(
             [
@@ -98,6 +141,12 @@ async def app():
                 active_contact,
                 inactive_contact,
                 inactive_customer_contact,
+                family,
+                available_product,
+                unavailable_product,
+                price_list,
+                available_item,
+                unavailable_item,
             ]
         )
         await session.commit()
@@ -157,7 +206,7 @@ async def test_find_customer_by_whatsapp_normalizes_presentation_characters(clie
 
     assert response.status_code == 200
     assert response.json()["customer_name"] == "Tecelagem Exemplo Ltda."
-    assert response.json()["contact_name"] == "Vitória Exemplo"
+    assert response.json()["contact_name"] == "VitÃ³ria Exemplo"
     assert response.json()["whatsapp_e164"] == "+5511999999999"
 
 
@@ -195,6 +244,53 @@ async def test_find_customer_accepts_previous_hmac_key_during_rotation(app, clie
     response = await client.get(path, headers=_headers_with_secret(path, b"previous-test-secret"))
 
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_current_price_list_by_whatsapp_returns_structured_prices(client):
+    path = "/price-lists/current/by-whatsapp/+5511999999999"
+
+    response = await client.get(path, headers=_headers(path))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["customer"]["contact_id"]
+    assert body["price_list"]["name"] == "Tabela especial"
+    assert body["items"] == [
+        {
+            "product_id": body["items"][0]["product_id"],
+            "family_name": "Texturizado",
+            "sku": "TEX-150-144-PRETO",
+            "display_name": "150/144 trama preto",
+            "unit": "KG",
+            "availability": "OUT_OF_STOCK",
+            "base_price": None,
+            "expected_arrival_date": None,
+            "arrival_note": None,
+            "notes": "PreÃ§o indisponÃ­vel na fonte",
+        },
+        {
+            "product_id": body["items"][1]["product_id"],
+            "family_name": "Texturizado",
+            "sku": "TEX-75-36-CRU",
+            "display_name": "75/36 trama cru",
+            "unit": "KG",
+            "availability": "AVAILABLE",
+            "base_price": "12.0500",
+            "expected_arrival_date": None,
+            "arrival_note": None,
+            "notes": None,
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_current_price_list_by_whatsapp_hides_inactive_contact(client):
+    path = "/price-lists/current/by-whatsapp/+5511988888888"
+
+    response = await client.get(path, headers=_headers(path))
+
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio

@@ -168,6 +168,37 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /price-lists/current/by-whatsapp/{phone}:
+    get:
+      tags: [Price Lists]
+      operationId: getCurrentPriceListByWhatsapp
+      description: >
+        Retorna a tabela ativa e seus itens para o contato ativo identificado pelo WhatsApp,
+        sempre dentro do tenant assinado pelo Gateway. Itens indisponíveis não expõem preço.
+      parameters:
+        - $ref: "#/components/parameters/TenantSlug"
+        - $ref: "#/components/parameters/Timestamp"
+        - name: phone
+          in: path
+          required: true
+          description: Telefone E.164, com o sinal + codificado na URL.
+          schema:
+            type: string
+            pattern: "^\\+[1-9][0-9]{7,14}$"
+      responses:
+        "200":
+          description: Contato, tabela vigente e itens de preço
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentPriceList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
   /offers/preview:
     post:
       tags: [Offers]
@@ -504,6 +535,52 @@ components:
         currency:
           type: string
           pattern: "^[A-Z]{3}$"
+
+    CurrentPriceListItem:
+      type: object
+      required:
+        [product_id, family_name, sku, display_name, unit, availability, base_price]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        family_name:
+          type: string
+        sku:
+          type: string
+        display_name:
+          type: string
+        unit:
+          type: string
+          const: KG
+        availability:
+          type: string
+          enum: [AVAILABLE, OUT_OF_STOCK, SUSPENDED, FUTURE_ARRIVAL, CONSULT]
+        base_price:
+          oneOf:
+            - $ref: "#/components/schemas/Money"
+            - type: "null"
+          description: Nulo quando não existe preço comercial atual para o item indisponível.
+        expected_arrival_date:
+          type: [string, "null"]
+          format: date
+        arrival_note:
+          type: [string, "null"]
+        notes:
+          type: [string, "null"]
+
+    CurrentPriceList:
+      type: object
+      required: [customer, price_list, items]
+      properties:
+        customer:
+          $ref: "#/components/schemas/CustomerContact"
+        price_list:
+          $ref: "#/components/schemas/PriceListSummary"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurrentPriceListItem"
 
     OfferRequest:
       type: object

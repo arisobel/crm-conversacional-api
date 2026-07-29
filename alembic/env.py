@@ -7,8 +7,10 @@ from sqlalchemy.pool import NullPool
 
 from alembic import context
 from crm_api.models.base import Base
+from crm_api.models.catalog import Product, ProductFamily  # noqa: F401
 from crm_api.models.customer import Customer, Tenant  # noqa: F401
 from crm_api.models.customer_contact import CustomerContact  # noqa: F401
+from crm_api.models.pricing import PriceList, PriceListItem  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
