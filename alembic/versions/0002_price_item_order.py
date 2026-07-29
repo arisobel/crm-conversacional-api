@@ -1,13 +1,13 @@
 """Add explicit display order to imported price-list items.
 
-Revision ID: 0002_price_list_item_display_order
+Revision ID: 0002_price_item_order
 Revises: 0001_initial_schema
 Create Date: 2026-07-29
 """
 
 from alembic import op
 
-revision = "0002_price_list_item_display_order"
+revision = "0002_price_item_order"
 down_revision = "0001_initial_schema"
 branch_labels = None
 depends_on = None
