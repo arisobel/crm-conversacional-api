@@ -12,6 +12,8 @@ Para consultas síncronas do primeiro corte, o Gateway resolve previamente a rot
 valor UTF-8 `timestamp.method.path.body`, separado por ponto; para um `GET`, o
 corpo é vazio. O CRM aceita somente o slug de tenant configurado na própria
 implantação. Assim, um telefone nunca é pesquisado globalmente entre tenants.
+Durante a rotação, a implantação pode aceitar temporariamente
+`CRM_INTERNAL_HMAC_PREVIOUS_SECRET`, sem alterar o cabeçalho ou interromper o Gateway.
 
 ## Operações do MVP
 

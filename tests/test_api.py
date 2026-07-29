@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -30,6 +31,17 @@ def _headers(path: str, *, tenant_slug: str = "test-tenant") -> dict[str, str]:
     signature = hmac.new(b"test-secret", canonical, hashlib.sha256).hexdigest()
     return {
         "X-Tenant-Slug": tenant_slug,
+        "X-Timestamp": timestamp,
+        "X-Signature": signature,
+    }
+
+
+def _headers_with_secret(path: str, secret: bytes) -> dict[str, str]:
+    timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    canonical = f"{timestamp}.GET.{path}.".encode()
+    signature = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
+    return {
+        "X-Tenant-Slug": "test-tenant",
         "X-Timestamp": timestamp,
         "X-Signature": signature,
     }
@@ -174,6 +186,15 @@ async def test_find_customer_rejects_invalid_tenant_signature(client):
 
     assert response.status_code == 401
     assert response.json()["detail"] == "invalid internal request"
+
+
+@pytest.mark.asyncio
+async def test_find_customer_accepts_previous_hmac_key_during_rotation(app, client):
+    app.state.settings.internal_hmac_previous_secret = SecretStr("previous-test-secret")
+    path = "/customers/by-whatsapp/+5511999999999"
+    response = await client.get(path, headers=_headers_with_secret(path, b"previous-test-secret"))
+
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio

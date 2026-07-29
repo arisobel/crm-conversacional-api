@@ -73,7 +73,9 @@ uv run pytest
 resolver previamente o tenant pelo fluxo da linha Meta e enviar `X-Tenant-Slug`,
 `X-Timestamp` (ISO 8601 UTC) e `X-Signature`. A assinatura é o hexadecimal de
 HMAC-SHA256 de `timestamp.method.path.body`, usando `CRM_INTERNAL_HMAC_SECRET`; no GET,
-o corpo é vazio. Consulte o [contrato da API](docs/30_architecture/API_CONTRACT.md).
+o corpo é vazio. Durante a rotação sem interrupção, mantenha a chave antiga
+temporariamente em `CRM_INTERNAL_HMAC_PREVIOUS_SECRET`. Consulte o
+[contrato da API](docs/30_architecture/API_CONTRACT.md).
 
 Exemplo de formato de resposta:
 

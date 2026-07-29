@@ -50,11 +50,13 @@ async def verify_internal_request(
             body,
         ]
     )
-    expected = hmac.new(
-        settings.internal_hmac_secret.get_secret_value().encode("utf-8"),
-        canonical,
-        hashlib.sha256,
-    ).hexdigest()
-    if not hmac.compare_digest(x_signature, expected):
+    secrets = [settings.internal_hmac_secret]
+    if settings.internal_hmac_previous_secret is not None:
+        secrets.append(settings.internal_hmac_previous_secret)
+    signatures = [
+        hmac.new(secret.get_secret_value().encode("utf-8"), canonical, hashlib.sha256).hexdigest()
+        for secret in secrets
+    ]
+    if not any(hmac.compare_digest(x_signature, expected) for expected in signatures):
         raise _unauthorized()
     return x_tenant_slug

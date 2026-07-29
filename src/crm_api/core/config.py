@@ -10,10 +10,10 @@ class Settings(BaseSettings):
     database_url: str
     tenant_slug: str
     internal_hmac_secret: SecretStr
+    internal_hmac_previous_secret: SecretStr | None = None
     internal_hmac_tolerance_seconds: int = 300
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
