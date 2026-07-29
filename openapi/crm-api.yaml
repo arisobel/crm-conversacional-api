@@ -199,6 +199,46 @@ paths:
         "422":
           $ref: "#/components/responses/Unprocessable"
 
+  /price-lists/current/by-whatsapp/{phone}/items:
+    get:
+      tags: [Price Lists]
+      operationId: searchCurrentPriceListItemsByWhatsapp
+      description: >
+        Retorna somente os itens da tabela ativa que correspondem a todos os termos de busca
+        no SKU, nome comercial, especificação ou família. Uma resposta 200 com itens vazios
+        significa que o contato e a tabela existem, mas não houve correspondência.
+      parameters:
+        - $ref: "#/components/parameters/TenantSlug"
+        - $ref: "#/components/parameters/Timestamp"
+        - name: phone
+          in: path
+          required: true
+          description: Telefone E.164, com o sinal + codificado na URL.
+          schema:
+            type: string
+            pattern: "^\\+[1-9][0-9]{7,14}$"
+        - name: query
+          in: query
+          required: true
+          description: Termos do produto; todos devem corresponder deterministicamente.
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 120
+      responses:
+        "200":
+          description: Contato, tabela vigente e itens encontrados
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentPriceList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
   /offers/preview:
     post:
       tags: [Offers]

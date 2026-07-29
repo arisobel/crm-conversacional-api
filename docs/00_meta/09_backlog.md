@@ -4,7 +4,7 @@
 
 - [x] Definir stack e versão do runtime.
 - [x] Criar configuração local e para CapRover.
-- [ ] Aplicar migrações PostgreSQL.
+- [x] Aplicar migrações PostgreSQL no ambiente CapRover.
 - [x] Implementar autenticação interna por HMAC.
 - [ ] Implementar idempotência por `event_id`.
 - [ ] Criar testes de integração com PostgreSQL.
@@ -14,10 +14,21 @@
 - [ ] CRUD de clientes e contatos.
 - [ ] CRUD de famílias e produtos.
 - [ ] Lista preferencial cliente-produto.
-- [ ] Executar a importação manual revisada da tabela especial de 20/07/2026.
+- [x] Executar, revisar e ativar a importação manual da tabela especial de 20/07/2026.
 - [x] Implementar a consulta interna da tabela vigente por contato WhatsApp.
 - [x] Adicionar ordenação explícita de item de tabela (`0002`) para preservar a sequência comercial revisada.
+- [x] Integrar o comando `tabela` no Gateway compartilhado.
+- [ ] Consulta específica de item por SKU, nome comercial, especificação ou família.
 - [ ] Regras determinísticas de desconto, frete e imposto.
+
+## P2 — Operação administrativa
+
+- [ ] Definir autenticação, papéis e auditoria do painel interno.
+- [ ] CRUD administrativo de clientes e contatos.
+- [ ] CRUD administrativo de famílias, produtos e preferências por cliente.
+- [ ] Importação CSV com prévia, validação e relatório de divergências.
+- [ ] Revisão e ativação de tabela por usuário autorizado.
+- [ ] Histórico de alterações comerciais.
 
 ## P1 — Oferta
 

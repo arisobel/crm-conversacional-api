@@ -61,3 +61,23 @@ de preço, disponibilidade e chegada que não podem ser publicadas por extraçã
 sem revisão. O CRM aceitará carga manual estruturada em CSV, gerará a tabela inicialmente
 como `DRAFT` e exigirá ativação explícita. Itens sem preço atual são representados por
 disponibilidade controlada e não são expostos como preço zero ao Gateway.
+
+## ADR-010 — Comando explícito para consulta de tabela no WhatsApp
+
+**Status:** aceita em 2026-07-29.
+
+O Gateway interpreta somente `tabela`, `tabela de preço` e `tabela de preços` como
+pedido da lista completa. Ele chama o CRM pela rede interna do CapRover com o mesmo HMAC e
+tenant do lookup de cadastro. O CRM continua sendo a única fonte de preço e
+disponibilidade; o Gateway apenas formata a resposta. A lista enviada informa valores-base
+por kg, nunca simula condição de pagamento, frete, imposto ou desconto ainda não
+configurados.
+
+## ADR-011 — Interface administrativa como cliente da API, não do banco
+
+**Status:** aceita em 2026-07-29.
+
+O futuro painel administrativo será uma aplicação interna autenticada que usa operações
+administrativas próprias do CRM. Não receberá URL, usuário ou senha do PostgreSQL e não
+alterará tabelas diretamente. O MVP do painel cobre clientes/contatos, famílias/produtos,
+importação revisável de CSV, revisão de itens e ativação auditável de tabela.

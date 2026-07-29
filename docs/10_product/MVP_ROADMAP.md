@@ -12,6 +12,10 @@ Documentação, DDL, OpenAPI, stack executável, PostgreSQL e saúde do serviço
 
 Clientes, contatos, famílias, produtos e preferências por cliente.
 
+**Corte entregue:** leitura da tabela ativa por contato WhatsApp e comando `tabela` no
+Gateway. A próxima entrega deste corte é `produto <termo>`, para reduzir a tabela ativa a
+itens encontrados deterministicamente.
+
 ## F2 — Preços e condições
 
 Tabela por competência/vigência, disponibilidade, chegada, pagamento, frete e impostos.
@@ -35,3 +39,9 @@ Entrada idempotente, envio aprovado e atualização de status.
 ## Pós-MVP
 
 Importação automática de PDFs, negociação autônoma, motor tributário genérico e servidor MCP.
+
+## Operação administrativa
+
+O painel administrativo interno inicia após a consulta específica de produto. Ele não é
+um atalho para o banco: autentica usuários, chama a API do CRM e preserva trilha de
+auditoria para cadastros e ativações de tabela.

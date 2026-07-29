@@ -296,6 +296,26 @@ async def test_current_price_list_by_whatsapp_hides_inactive_contact(client):
 
 
 @pytest.mark.asyncio
+async def test_current_price_list_item_search_matches_active_table_terms(client):
+    path = "/price-lists/current/by-whatsapp/+5511999999999/items"
+
+    response = await client.get(f"{path}?query=75%2F36%20trama", headers=_headers(path))
+
+    assert response.status_code == 200
+    assert [item["sku"] for item in response.json()["items"]] == ["TEX-75-36-CRU"]
+
+
+@pytest.mark.asyncio
+async def test_current_price_list_item_search_returns_empty_items_without_a_match(client):
+    path = "/price-lists/current/by-whatsapp/+5511999999999/items"
+
+    response = await client.get(f"{path}?query=inexistente", headers=_headers(path))
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+
+
+@pytest.mark.asyncio
 async def test_whatsapp_number_must_be_unique_within_a_tenant(app):
     async with app.state.session_factory() as session:
         tenant = await session.scalar(select(Tenant).where(Tenant.slug == "test-tenant"))

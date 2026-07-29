@@ -1,3 +1,5 @@
+import re
+import unicodedata
 from datetime import UTC, datetime
 
 from crm_api.models.pricing import AvailabilityStatus
@@ -15,6 +17,25 @@ _NO_CURRENT_PRICE = {
     AvailabilityStatus.SUSPENDED,
     AvailabilityStatus.CONSULT,
 }
+_SEARCH_SEPARATOR = re.compile(r"[^a-z0-9]+")
+
+
+def _search_tokens(value: str) -> list[str]:
+    normalized = unicodedata.normalize("NFKD", value)
+    ascii_value = "".join(
+        character for character in normalized if not unicodedata.combining(character)
+    )
+    return [token for token in _SEARCH_SEPARATOR.split(ascii_value.casefold()) if token]
+
+
+def _matches_search_terms(item: CurrentPriceListItemResponse, terms: list[str]) -> bool:
+    searchable_value = " ".join(
+        part
+        for part in (item.sku, item.display_name, item.specification, item.family_name)
+        if part
+    )
+    searchable_tokens = set(_search_tokens(searchable_value))
+    return all(term in searchable_tokens for term in terms)
 
 
 class CurrentPriceListService:
@@ -67,3 +88,20 @@ class CurrentPriceListService:
                 for item, product, family in item_rows
             ],
         )
+
+    async def search_items_by_whatsapp(
+        self, tenant_slug: str, phone: str, query: str, *, at: datetime | None = None
+    ) -> CurrentPriceListResponse | None:
+        current_price_list = await self.find_by_whatsapp(tenant_slug, phone, at=at)
+        if current_price_list is None:
+            return None
+
+        search_terms = _search_tokens(query)
+        if not search_terms:
+            return current_price_list.model_copy(update={"items": []})
+        matching_items = [
+            item
+            for item in current_price_list.items
+            if _matches_search_terms(item, search_terms)
+        ]
+        return current_price_list.model_copy(update={"items": matching_items})

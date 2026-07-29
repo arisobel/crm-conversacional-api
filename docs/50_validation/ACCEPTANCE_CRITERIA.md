@@ -14,6 +14,11 @@
 - Prévia não cria oferta.
 - Envio sem aprovação retorna conflito.
 - Assinatura inválida é rejeitada.
+- A tabela ativa enviada por WhatsApp não expõe `R$ 0,00` para itens sem preço comercial.
+- Itens com mesmo nome comercial incluem especificação suficiente para diferenciação.
+- O comando `tabela` não apresenta desconto, prazo, frete ou imposto não configurados.
+- A busca específica retorna resultados somente da tabela ativa e do tenant do contato
+  autenticado.
 
 ## Cenário Vitória
 

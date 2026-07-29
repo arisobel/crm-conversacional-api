@@ -4,7 +4,7 @@ Atualizado em: 2026-07-29
 
 ## Estado atual
 
-**Fase ativa:** F1 — catálogo e leitura estruturada da tabela vigente.
+**Fase ativa:** F1 — catálogo, tabela vigente e consulta por produto.
 
 ## Concluído
 
@@ -22,18 +22,25 @@ Atualizado em: 2026-07-29
 - Contrato de escopo de tenant e HMAC com o WhatsApp Gateway registrado.
 - Leitura interna da tabela `ACTIVE` por contato WhatsApp, com disponibilidade explícita
   e valores decimais estruturados, sem cálculo comercial implícito.
+- Carga CSV revisada da tabela especial de 20/07/2026, ativada em produção para o tenant
+  `empresa-textil`.
+- Integração publicada no Gateway: o comando `tabela` consulta a lista vigente por HMAC,
+  agrupa itens por família e exibe preço-base, indisponibilidade e chegada prevista.
+- Especificação técnica exposta na resposta para distinguir itens com o mesmo nome
+  comercial, como os itens Rubberflex.
 
 ## Em andamento
 
-- Carga revisável da tabela especial de 20/07/2026 e conferência humana antes de ativá-la.
+- Consulta específica de produto no WhatsApp, com busca determinística na tabela vigente.
 
 ## Próximo baby-step
 
-Preparar a carga CSV da tabela especial, revisá-la com o comercial, ativar somente a
-tabela conferida e validar a leitura assinada pelo Gateway.
+Implementar a busca assinada de itens da tabela vigente por SKU, nome comercial,
+especificação e família; em seguida, expor o comando `produto <termo>` no Gateway.
 
 ## Evidências
 
 - DDL: `db/migrations/0001_initial.sql`
 - OpenAPI: `openapi/crm-api.yaml`
 - Critérios: `docs/50_validation/ACCEPTANCE_CRITERIA.md`
+- Operação F1: `docs/40_delivery/F1_PRICE_LIST_GATEWAY.md`

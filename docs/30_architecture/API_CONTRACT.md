@@ -50,3 +50,16 @@ Durante a rotação, a implantação pode aceitar temporariamente
   `base_price` é `null`; o Gateway deve apresentar a disponibilidade, nunca `R$ 0,00`.
 - O endpoint não aplica desconto, frete, imposto nem aprova uma oferta. Essas regras e a
   mensagem comercial final pertencem aos cortes posteriores e permanecem determinísticos.
+- No Gateway publicado, `tabela`, `tabela de preço` e `tabela de preços` chamam esse
+  endpoint. Mensagens diferentes preservam o lookup de cadastro existente.
+
+## Próximo corte F1 — item específico
+
+- O CRM expõe uma consulta interna assinada de itens da tabela vigente por contato
+  WhatsApp e termo de busca. O termo é comparado deterministicamente com SKU, nome
+  comercial, especificação e família.
+- O Gateway reconhecerá `produto <termo>` e devolverá um item quando houver resultado
+  inequívoco; havendo vários, apresentará opções com SKU e especificação para o contato
+  refinar a consulta.
+- A operação continua somente de leitura, no tenant informado pelo Gateway, e não cria
+  oferta nem aplica regra comercial.
