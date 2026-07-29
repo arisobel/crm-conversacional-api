@@ -62,6 +62,15 @@ Resultado único gera uma ficha curta do item. Resultados múltiplos preservam S
 especificação para o contato escolher sem ambiguidade. A operação é somente de leitura e
 não cria oferta, nem calcula prazo, frete, imposto ou desconto.
 
+## Evolução: manifesto de capacidades
+
+O CRM publica `GET /internal/interaction-capabilities`, assinado por HMAC, para que o
+Gateway carregue na primeira mensagem da sessão as intenções e ações permitidas. O cache é
+por `linha + fluxo + contato`, expira após 30 minutos de inatividade e contém somente
+metadados de interpretação; não contém preço, dados de tabela ou mensagens.
+
+O piloto é exclusivo do CRM. CKJ e Liondata não usam esse manifesto neste momento.
+
 ## Painel administrativo planejado
 
 O painel será uma aplicação interna autenticada que usa operações administrativas da API

@@ -19,6 +19,8 @@
 - [x] Adicionar ordenação explícita de item de tabela (`0002`) para preservar a sequência comercial revisada.
 - [x] Integrar o comando `tabela` no Gateway compartilhado.
 - [ ] Consulta específica de item por SKU, nome comercial, especificação ou família.
+- [ ] Validar em produção o manifesto de capacidades por sessão no `crm_api`.
+- [ ] Migrar aliases e intenções CRM para configuração administrativa auditável.
 - [ ] Regras determinísticas de desconto, frete e imposto.
 
 ## P2 — Operação administrativa

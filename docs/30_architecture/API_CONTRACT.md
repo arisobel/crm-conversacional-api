@@ -63,3 +63,16 @@ Durante a rotação, a implantação pode aceitar temporariamente
   refinar a consulta.
 - A operação continua somente de leitura, no tenant informado pelo Gateway, e não cria
   oferta nem aplica regra comercial.
+
+## Manifesto de capacidades por sessão
+
+- `GET /internal/interaction-capabilities` exige o mesmo HMAC e tenant das demais
+  consultas internas. Ele publica intenções, aliases, exemplos, slots e identificadores de
+  ação permitida do CRM.
+- O Gateway busca o manifesto na primeira mensagem da sessão `linha + fluxo + contato` e
+  respeita `session_ttl_seconds`. O cache não contém tabela, preço ou texto de conversa.
+- O Gateway executa somente ações locais previamente associadas aos identificadores
+  publicados. O CRM não fornece URL, SQL, fórmulas ou código executável no manifesto.
+- A LLM, quando usada pelo Gateway, é limitada a uma saída estruturada com `intent_id` e
+  slots declarados no manifesto. A consulta de dados, cálculo e resposta comercial
+  continuam determinísticos no CRM.

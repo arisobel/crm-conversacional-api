@@ -247,6 +247,30 @@ async def test_find_customer_accepts_previous_hmac_key_during_rotation(app, clie
 
 
 @pytest.mark.asyncio
+async def test_interaction_capabilities_are_authenticated_and_versioned(client):
+    path = "/internal/interaction-capabilities"
+
+    response = await client.get(path, headers=_headers(path))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "crm_api"
+    assert body["version"] == "1"
+    assert body["session_ttl_seconds"] == 1800
+    assert {intent["action"] for intent in body["intents"]} == {
+        "GET_CURRENT_PRICE_LIST",
+        "SEARCH_CURRENT_PRICE_LIST_ITEMS",
+    }
+
+
+@pytest.mark.asyncio
+async def test_interaction_capabilities_reject_invalid_hmac(client):
+    response = await client.get("/internal/interaction-capabilities")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_current_price_list_by_whatsapp_returns_structured_prices(client):
     path = "/price-lists/current/by-whatsapp/+5511999999999"
 

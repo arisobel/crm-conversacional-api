@@ -81,3 +81,23 @@ O futuro painel administrativo será uma aplicação interna autenticada que usa
 administrativas próprias do CRM. Não receberá URL, usuário ou senha do PostgreSQL e não
 alterará tabelas diretamente. O MVP do painel cobre clientes/contatos, famílias/produtos,
 importação revisável de CSV, revisão de itens e ativação auditável de tabela.
+
+## ADR-012 — Manifesto de capacidades por backend durante a sessão
+
+**Status:** aceita em 2026-07-29.
+
+O Gateway permanece responsável por receber, rotear, interpretar mensagens livres e
+responder no canal. Cada backend pode publicar, por um endpoint interno autenticado, um
+manifesto versionado de intenções, aliases, exemplos, slots necessários e ações permitidas.
+Na primeira mensagem da sessão `linha + fluxo + contato`, o Gateway carrega o manifesto do
+backend selecionado e o mantém em cache por inatividade; para o CRM, o TTL inicial é de
+30 minutos. Uma nova sessão recarrega a versão vigente.
+
+O manifesto não pode conter URL arbitrária, SQL, fórmula comercial, segredo, código ou
+prompt executável. Ações são identificadores fechados que o adaptador local do Gateway
+conhece e autoriza. A classificação usa regras do manifesto primeiro e LLM estruturada
+somente como fallback; a LLM pode retornar uma intenção e slots, mas nunca preço, cálculo
+ou resposta comercial inventada.
+
+O piloto aplica-se exclusivamente ao `crm_api`. CKJ e Liondata permanecem nos adaptadores
+atuais até que o mecanismo seja validado em produção.

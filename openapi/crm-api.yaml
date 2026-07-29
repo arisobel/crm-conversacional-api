@@ -14,6 +14,27 @@ tags:
   - name: Offers
 
 paths:
+  /internal/interaction-capabilities:
+    get:
+      tags: [Interaction Capabilities]
+      operationId: getInternalInteractionCapabilities
+      description: >
+        Publica o manifesto versionado de intenções e ações permitidas pelo CRM para o
+        Gateway durante uma sessão de contato. O manifesto não contém URLs, SQL, fórmulas
+        comerciais nem conteúdo de preço.
+      parameters:
+        - $ref: "#/components/parameters/TenantSlug"
+        - $ref: "#/components/parameters/Timestamp"
+      responses:
+        "200":
+          description: Manifesto de capacidades de interação
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InteractionCapabilities"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /health:
     get:
       security: []
@@ -539,6 +560,50 @@ components:
           type: string
         whatsapp_e164:
           type: string
+
+    InteractionIntent:
+      type: object
+      required: [id, description, aliases, examples, action, required_slots]
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        aliases:
+          type: array
+          items:
+            type: string
+        examples:
+          type: array
+          items:
+            type: string
+        action:
+          type: string
+          enum: [GET_CURRENT_PRICE_LIST, SEARCH_CURRENT_PRICE_LIST_ITEMS]
+        required_slots:
+          type: array
+          items:
+            type: string
+
+    InteractionCapabilities:
+      type: object
+      required: [provider, version, session_ttl_seconds, fallback_message, intents]
+      properties:
+        provider:
+          type: string
+          const: crm_api
+        version:
+          type: string
+        session_ttl_seconds:
+          type: integer
+          minimum: 60
+          maximum: 86400
+        fallback_message:
+          type: string
+        intents:
+          type: array
+          items:
+            $ref: "#/components/schemas/InteractionIntent"
 
     PreferredProduct:
       type: object
