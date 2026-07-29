@@ -22,6 +22,7 @@ Memória operacional do CRM Conversacional API.
 5. [Roadmap](10_product/MVP_ROADMAP.md)
 6. [Contrato do projeto](00_meta/AGENT_SKILL_PROJECT.md)
 7. [Entrega F1 — tabela vigente no WhatsApp](40_delivery/F1_PRICE_LIST_GATEWAY.md)
+8. [Backlog da interface administrativa](40_delivery/ADMIN_INTERFACE_BACKLOG.md)
 
 ## Artefatos executáveis
 

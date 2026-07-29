@@ -25,12 +25,12 @@
 
 ## P2 — Operação administrativa
 
-- [ ] Definir autenticação, papéis e auditoria do painel interno.
-- [ ] CRUD administrativo de clientes e contatos.
-- [ ] CRUD administrativo de famílias, produtos e preferências por cliente.
-- [ ] Importação CSV com prévia, validação e relatório de divergências.
-- [ ] Revisão e ativação de tabela por usuário autorizado.
-- [ ] Histórico de alterações comerciais.
+- [ ] Fase A: definir autenticação, papéis e auditoria do painel interno.
+- [ ] Fase B: CRUD administrativo de clientes e contatos, incluindo estado de autorização Gateway.
+- [ ] Fase C: CRUD de famílias, produtos e preferências por cliente.
+- [ ] Fase D: importação CSV com prévia, validação, revisão e ativação auditável.
+- [ ] Fase E: aliases, exemplos e versão do manifesto conversacional CRM.
+- [ ] Integração CRM → Gateway para solicitar autorização de telefone de forma idempotente.
 
 ## P1 — Oferta
 
