@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import select
 
 from crm_api.core.config import Settings
-from crm_api.imports.price_table import import_price_table
+from crm_api.imports.price_table import activate_price_list, import_price_table
 from crm_api.main import create_app
 from crm_api.models.base import Base
 from crm_api.models.catalog import Product
@@ -46,7 +46,6 @@ async def test_import_creates_a_draft_price_list_and_hides_unpriced_items(tmp_pa
                 reference_month=date.today().replace(day=1),
                 valid_from=datetime.now(UTC),
                 valid_until=None,
-                activate=False,
             )
 
         imported = await session.scalar(select(PriceList).where(PriceList.id == price_list.id))
@@ -67,4 +66,11 @@ async def test_import_creates_a_draft_price_list_and_hides_unpriced_items(tmp_pa
         (10, "TEX-02", "0.0000"),
         (20, "TEX-01", "12.0500"),
     ]
+
+    async with app.state.session_factory() as session:
+        async with session.begin():
+            activated = await activate_price_list(
+                session, tenant_slug="test-tenant", price_list_id=price_list.id
+            )
+    assert activated.status == PriceListStatus.ACTIVE
     await app.state.engine.dispose()

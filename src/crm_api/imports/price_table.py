@@ -125,7 +125,6 @@ async def import_price_table(
     reference_month: date,
     valid_from: datetime,
     valid_until: datetime | None,
-    activate: bool,
 ) -> PriceList:
     if reference_month.day != 1:
         raise ValueError("reference_month must be the first day of the month")
@@ -150,7 +149,7 @@ async def import_price_table(
         reference_month=reference_month,
         valid_from=valid_from,
         valid_until=valid_until,
-        status=PriceListStatus.ACTIVE if activate else PriceListStatus.DRAFT,
+        status=PriceListStatus.DRAFT,
     )
     session.add(price_list)
     await session.flush()
@@ -193,41 +192,87 @@ async def import_price_table(
     return price_list
 
 
+async def activate_price_list(
+    session: AsyncSession, *, tenant_slug: str, price_list_id: UUID
+) -> PriceList:
+    tenant = await _get_tenant(session, tenant_slug)
+    price_list = await session.scalar(
+        select(PriceList).where(PriceList.id == price_list_id, PriceList.tenant_id == tenant.id)
+    )
+    if price_list is None:
+        raise ValueError("price list not found for tenant")
+    if price_list.status is not PriceListStatus.DRAFT:
+        raise ValueError("only a DRAFT price list can be activated")
+
+    candidate_until = price_list.valid_until or datetime.max.replace(
+        tzinfo=price_list.valid_from.tzinfo
+    )
+    overlapping_active = await session.scalar(
+        select(PriceList.id).where(
+            PriceList.tenant_id == tenant.id,
+            PriceList.status == PriceListStatus.ACTIVE,
+            PriceList.id != price_list.id,
+            PriceList.valid_from < candidate_until,
+            (PriceList.valid_until.is_(None) | (PriceList.valid_until > price_list.valid_from)),
+        )
+    )
+    if overlapping_active is not None:
+        raise ValueError("an overlapping ACTIVE price list already exists")
+    price_list.status = PriceListStatus.ACTIVE
+    await session.flush()
+    return price_list
+
+
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Import a reviewed CRM price table from CSV")
-    parser.add_argument("--file", type=Path, required=True)
-    parser.add_argument("--name", required=True)
-    parser.add_argument("--reference-month", type=date.fromisoformat, required=True)
-    parser.add_argument("--valid-from", type=datetime.fromisoformat, required=True)
+    parser.add_argument("--file", type=Path)
+    parser.add_argument("--name")
+    parser.add_argument("--reference-month", type=date.fromisoformat)
+    parser.add_argument("--valid-from", type=datetime.fromisoformat)
     parser.add_argument("--valid-until", type=datetime.fromisoformat)
-    parser.add_argument(
-        "--activate",
-        action="store_true",
-        help="Publish as ACTIVE. Omit to create a reviewable DRAFT.",
-    )
+    parser.add_argument("--activate-price-list", type=UUID)
     return parser.parse_args()
 
 
 async def _main() -> None:
     args = _arguments()
-    if not args.file.is_file():
-        raise ValueError(f"CSV file not found: {args.file}")
     settings = get_settings()
     engine, session_factory = create_session_factory(settings)
     try:
         async with session_factory() as session:
             async with session.begin():
-                price_list = await import_price_table(
-                    session,
-                    tenant_slug=settings.tenant_slug,
-                    source_path=args.file,
-                    name=args.name,
-                    reference_month=args.reference_month,
-                    valid_from=args.valid_from,
-                    valid_until=args.valid_until,
-                    activate=args.activate,
-                )
-        print(f"Imported {price_list.id} as {price_list.status.value}.")
+                if args.activate_price_list is not None:
+                    import_arguments = (
+                        args.file,
+                        args.name,
+                        args.reference_month,
+                        args.valid_from,
+                        args.valid_until,
+                    )
+                    if any(import_arguments):
+                        raise ValueError("activation does not accept import arguments")
+                    price_list = await activate_price_list(
+                        session,
+                        tenant_slug=settings.tenant_slug,
+                        price_list_id=args.activate_price_list,
+                    )
+                    action = "Activated"
+                else:
+                    if not all((args.file, args.name, args.reference_month, args.valid_from)):
+                        raise ValueError("file, name, reference_month and valid_from are required")
+                    if not args.file.is_file():
+                        raise ValueError(f"CSV file not found: {args.file}")
+                    price_list = await import_price_table(
+                        session,
+                        tenant_slug=settings.tenant_slug,
+                        source_path=args.file,
+                        name=args.name,
+                        reference_month=args.reference_month,
+                        valid_from=args.valid_from,
+                        valid_until=args.valid_until,
+                    )
+                    action = "Imported"
+        print(f"{action} {price_list.id} as {price_list.status.value}.")
     finally:
         await engine.dispose()
 

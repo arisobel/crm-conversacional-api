@@ -14,9 +14,14 @@ uv run python -m crm_api.imports.price_table `
 ```
 
 O comando acima cria uma lista `DRAFT`; ela não é retornada ao Gateway. Após revisar
-produtos, preço, disponibilidade e datas, repita a carga corrigida com `--activate`.
-Não há sobrescrita: para corrigir uma carga, cancele a lista anterior pelo futuro CRUD ou
-use uma competência/nome novo após a conferência administrativa.
+produtos, preço, disponibilidade e datas, ative a mesma lista pelo UUID retornado:
+
+```powershell
+uv run python -m crm_api.imports.price_table --activate-price-list UUID_DA_TABELA
+```
+
+O ativador rejeita sobreposição com outra tabela `ACTIVE`. Não há sobrescrita: para
+corrigir uma carga, crie uma nova lista com outra competência/nome após a conferência.
 
 Para `OUT_OF_STOCK`, `SUSPENDED` e `CONSULT`, `base_price` pode ficar vazio. O importador
 armazena zero técnico apenas porque o DDL exige valor não nulo; o endpoint devolve
