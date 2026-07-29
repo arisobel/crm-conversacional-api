@@ -25,11 +25,36 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [status]
+                required: [status, service]
                 properties:
                   status:
                     type: string
                     const: ok
+                  service:
+                    type: string
+                    const: crm-conversacional-api
+
+  /ready:
+    get:
+      security: []
+      operationId: getReadiness
+      responses:
+        "200":
+          description: Banco de dados acessível
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+                  service:
+                    type: string
+                    const: crm-conversacional-api
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /internal/whatsapp/events:
     post:
@@ -83,6 +108,8 @@ paths:
       tags: [Customers]
       operationId: findCustomerByWhatsapp
       parameters:
+        - $ref: "#/components/parameters/TenantSlug"
+        - $ref: "#/components/parameters/Timestamp"
         - name: phone
           in: path
           required: true
@@ -99,6 +126,10 @@ paths:
                 $ref: "#/components/schemas/CustomerContact"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
 
   /customers/{customerId}/preferred-products:
     get:
@@ -282,6 +313,14 @@ components:
       schema:
         type: string
         format: date-time
+    TenantSlug:
+      name: X-Tenant-Slug
+      in: header
+      required: true
+      description: Tenant resolvido pelo Gateway para o aplicativo e fluxo ativos.
+      schema:
+        type: string
+        minLength: 1
     CustomerId:
       name: customerId
       in: path
@@ -324,6 +363,12 @@ components:
             $ref: "#/components/schemas/Problem"
     Unprocessable:
       description: Regra de negócio não atendida
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ServiceUnavailable:
+      description: Dependência operacional indisponível
       content:
         application/problem+json:
           schema:

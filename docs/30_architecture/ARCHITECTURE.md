@@ -20,3 +20,7 @@ flowchart TD
 ## Segurança entre serviços
 
 HTTPS, assinatura HMAC, timestamp com tolerância, chave rotacionável, idempotência e segredos somente em variáveis de ambiente.
+
+O Gateway resolve a linha Meta, o aplicativo e o fluxo antes de chamar a API. Para
+cada implantação do CRM, ele repassa o slug do tenant correspondente em uma chamada
+HMAC autenticada; a API nunca infere nem pesquisa tenants por telefone sem esse escopo.

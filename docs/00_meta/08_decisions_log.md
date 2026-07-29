@@ -41,3 +41,13 @@ O domínio e a API HTTP serão estabilizados antes de uma eventual camada MCP.
 **Status:** aceita em 2026-07-28.
 
 A documentação passa a usar `00_meta`, `10_product`, `20_domain`, `30_architecture`, `40_delivery` e `50_validation`. DDL e OpenAPI permanecem como artefatos técnicos executáveis em diretórios próprios.
+
+## ADR-008 — Tenant resolvido pelo Gateway em chamadas internas
+
+**Status:** aceita em 2026-07-28.
+
+O `whatsapp-webhook-caprover` já resolve linha Meta, aplicativo e fluxo no plano de
+controle. Nas chamadas síncronas para esta API, ele informa `X-Tenant-Slug` e assina a
+requisição com HMAC, timestamp e corpo canônicos. Cada implantação do CRM aceita somente
+o tenant configurado. A decisão preserva a unicidade de telefone por tenant no DDL e
+impede busca acidental de um contato em outro tenant.

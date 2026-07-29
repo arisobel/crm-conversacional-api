@@ -2,10 +2,10 @@
 
 ## P0 — Fundação
 
-- [ ] Definir stack e versão do runtime.
-- [ ] Criar configuração local e para CapRover.
+- [x] Definir stack e versão do runtime.
+- [x] Criar configuração local e para CapRover.
 - [ ] Aplicar migrações PostgreSQL.
-- [ ] Implementar autenticação interna por HMAC.
+- [x] Implementar autenticação interna por HMAC.
 - [ ] Implementar idempotência por `event_id`.
 - [ ] Criar testes de integração com PostgreSQL.
 
