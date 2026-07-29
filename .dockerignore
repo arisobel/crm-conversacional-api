@@ -1,0 +1,9 @@
+.git
+.venv
+.env
+dist
+docs/90_references
+__pycache__
+.pytest_cache
+.ruff_cache
+*.pyc

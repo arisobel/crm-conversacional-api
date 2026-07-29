@@ -60,6 +60,40 @@ docker compose up -d api
 
 O volume `postgres_data` preserva o banco local. `.env` não é versionado.
 
+## Publicação no CapRover
+
+O repositório inclui `captain-definition`, `Dockerfile` e `docker-entrypoint.sh`.
+O contêiner atende na porta `8000` e, quando `CRM_RUN_MIGRATIONS_ON_STARTUP=true`,
+executa `alembic upgrade head` antes de iniciar a API.
+
+No CapRover, crie a aplicação e configure **Container HTTP Port** como `8000`. Nas
+variáveis de ambiente, defina ao menos:
+
+```text
+CRM_DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST:5432/DBNAME
+CRM_TENANT_SLUG=tenant-da-empresa
+CRM_INTERNAL_HMAC_SECRET=segredo-longo-e-aleatorio
+CRM_RUN_MIGRATIONS_ON_STARTUP=true
+```
+
+Use `CRM_INTERNAL_HMAC_PREVIOUS_SECRET` somente durante rotação de chave. Nunca envie
+`.env`, senha de banco ou a tabela comercial real ao pacote de deploy. Para o primeiro
+deploy, mantenha uma única instância enquanto a migração é aplicada.
+
+Crie o pacote aceito pelo painel ou pela CLI do CapRover com:
+
+```powershell
+.\build.ps1
+```
+
+Ele gera `dist/crm-conversacional-api-<timestamp>.tar`, contendo somente o contexto de
+build necessário, e preserva apenas os cinco tarballs mais recentes. Faça upload do
+arquivo no painel, ou use:
+
+```powershell
+caprover deploy --tarFile .\dist\crm-conversacional-api-<timestamp>.tar
+```
+
 ## Comandos de qualidade
 
 ```powershell
