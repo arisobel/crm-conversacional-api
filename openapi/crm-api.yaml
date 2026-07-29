@@ -539,7 +539,7 @@ components:
     CurrentPriceListItem:
       type: object
       required:
-        [product_id, family_name, sku, display_name, unit, availability, base_price]
+        [product_id, family_name, sku, display_name, specification, unit, availability, base_price]
       properties:
         product_id:
           type: string
@@ -550,6 +550,8 @@ components:
           type: string
         display_name:
           type: string
+        specification:
+          type: [string, "null"]
         unit:
           type: string
           const: KG

@@ -56,6 +56,7 @@ class CurrentPriceListService:
                     family_name=family.name,
                     sku=product.sku,
                     display_name=product.commercial_name,
+                    specification=product.specification,
                     unit=product.unit,
                     availability=item.availability.value,
                     base_price=None if item.availability in _NO_CURRENT_PRICE else item.base_price,

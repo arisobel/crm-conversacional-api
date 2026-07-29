@@ -23,6 +23,7 @@ class CurrentPriceListItemResponse(BaseModel):
     family_name: str
     sku: str
     display_name: str
+    specification: str | None
     unit: str
     availability: str
     base_price: Decimal | None
