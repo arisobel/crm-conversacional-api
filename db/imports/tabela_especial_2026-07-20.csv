@@ -1,0 +1,16 @@
+family_name;family_order;sku;commercial_name;specification;availability;base_price;expected_arrival_date;arrival_note;display_order;notes
+Texturizado cru;10;TEX-75-36-URD;75/36 urdume;;AVAILABLE;12,05;;;10;Linha conferida no PDF especial de 20/07/2026
+Texturizado cru;10;TEX-75-36-TRAMA-CHINA;75/36 trama (AAA);China;SUSPENDED;;;;20;Sem preço atual no PDF
+Texturizado cru;10;TEX-75-72-SI-TRAMA;75/72 SI trama;China;AVAILABLE;13,15;;;30;
+Texturizado cru;10;TEX-75-96-SI-TRAMA;75/96 SI trama;;AVAILABLE;11,13;;;40;
+Texturizado cru;10;TEX-100-36-TRAMA;100/36 trama;;FUTURE_ARRIVAL;12,90;2026-08-03;Chegada indicada como 03/08/2026;50;
+Texturizado tinto;20;TEX-75-36-TRAMA-PRETO;75/36 trama preto;OTP;SUSPENDED;;;;10;Sem preço atual no PDF
+Texturizado tinto;20;TEX-150-96-TRAMA-PRETO;150/96 trama preto;LTP - HE;AVAILABLE;12,94;;;20;
+Texturizado tinto;20;TEX-200-96-TRAMA-PRETO;200/96 trama preto;LTP - HE;AVAILABLE;13,87;;;30;
+Lisos;30;LIS-75-36-BRY;75/36 liso BRY;;AVAILABLE;13,10;;;10;
+Elastano;40;ELA-20-1-PUE;20/1 PUE;;AVAILABLE;13,20;;;10;
+Elastano;40;ELA-70-1-PUE;70/1 PUE;;FUTURE_ARRIVAL;12,79;2026-08-11;Chegada indicada como 11/08/2026;20;
+Borracha Rubberflex;50;RB-44-40-TALCO-LG1X4C1RB;44/40 c/ talco branca;BRX TAL - cód. LG1X4C1RB;AVAILABLE;22,00;;;10;
+Borracha Rubberflex;50;RB-44-40-TALCO-LG1X2C1RB;44/40 c/ talco branca;BRC TAL - cód. LG1X2C1RB;AVAILABLE;24,25;;;20;
+Fiados - PV;60;PV-30-1-65PES35CV;PV 30/1;65 PES/35 CV (CX);AVAILABLE;14,60;;;10;
+Fiados - Poliéster;70;PES-30-1;PES 30/1;BAG;AVAILABLE;17,60;;;10;

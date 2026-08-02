@@ -14,6 +14,27 @@ tags:
   - name: Offers
 
 paths:
+  /internal/interaction-capabilities:
+    get:
+      tags: [Interaction Capabilities]
+      operationId: getInternalInteractionCapabilities
+      description: >
+        Publica o manifesto versionado de intenções e ações permitidas pelo CRM para o
+        Gateway durante uma sessão de contato. O manifesto não contém URLs, SQL, fórmulas
+        comerciais nem conteúdo de preço.
+      parameters:
+        - $ref: "#/components/parameters/TenantSlug"
+        - $ref: "#/components/parameters/Timestamp"
+      responses:
+        "200":
+          description: Manifesto de capacidades de interação
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InteractionCapabilities"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /health:
     get:
       security: []
@@ -25,11 +46,36 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [status]
+                required: [status, service]
                 properties:
                   status:
                     type: string
                     const: ok
+                  service:
+                    type: string
+                    const: crm-conversacional-api
+
+  /ready:
+    get:
+      security: []
+      operationId: getReadiness
+      responses:
+        "200":
+          description: Banco de dados acessível
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+                  service:
+                    type: string
+                    const: crm-conversacional-api
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /internal/whatsapp/events:
     post:
@@ -83,6 +129,8 @@ paths:
       tags: [Customers]
       operationId: findCustomerByWhatsapp
       parameters:
+        - $ref: "#/components/parameters/TenantSlug"
+        - $ref: "#/components/parameters/Timestamp"
         - name: phone
           in: path
           required: true
@@ -99,6 +147,10 @@ paths:
                 $ref: "#/components/schemas/CustomerContact"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
 
   /customers/{customerId}/preferred-products:
     get:
@@ -136,6 +188,77 @@ paths:
                 $ref: "#/components/schemas/PriceListSummary"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /price-lists/current/by-whatsapp/{phone}:
+    get:
+      tags: [Price Lists]
+      operationId: getCurrentPriceListByWhatsapp
+      description: >
+        Retorna a tabela ativa e seus itens para o contato ativo identificado pelo WhatsApp,
+        sempre dentro do tenant assinado pelo Gateway. Itens indisponíveis não expõem preço.
+      parameters:
+        - $ref: "#/components/parameters/TenantSlug"
+        - $ref: "#/components/parameters/Timestamp"
+        - name: phone
+          in: path
+          required: true
+          description: Telefone E.164, com o sinal + codificado na URL.
+          schema:
+            type: string
+            pattern: "^\\+[1-9][0-9]{7,14}$"
+      responses:
+        "200":
+          description: Contato, tabela vigente e itens de preço
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentPriceList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /price-lists/current/by-whatsapp/{phone}/items:
+    get:
+      tags: [Price Lists]
+      operationId: searchCurrentPriceListItemsByWhatsapp
+      description: >
+        Retorna somente os itens da tabela ativa que correspondem a todos os termos de busca
+        no SKU, nome comercial, especificação ou família. Uma resposta 200 com itens vazios
+        significa que o contato e a tabela existem, mas não houve correspondência.
+      parameters:
+        - $ref: "#/components/parameters/TenantSlug"
+        - $ref: "#/components/parameters/Timestamp"
+        - name: phone
+          in: path
+          required: true
+          description: Telefone E.164, com o sinal + codificado na URL.
+          schema:
+            type: string
+            pattern: "^\\+[1-9][0-9]{7,14}$"
+        - name: query
+          in: query
+          required: true
+          description: Termos do produto; todos devem corresponder deterministicamente.
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 120
+      responses:
+        "200":
+          description: Contato, tabela vigente e itens encontrados
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentPriceList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
 
   /offers/preview:
     post:
@@ -282,6 +405,14 @@ components:
       schema:
         type: string
         format: date-time
+    TenantSlug:
+      name: X-Tenant-Slug
+      in: header
+      required: true
+      description: Tenant resolvido pelo Gateway para o aplicativo e fluxo ativos.
+      schema:
+        type: string
+        minLength: 1
     CustomerId:
       name: customerId
       in: path
@@ -324,6 +455,12 @@ components:
             $ref: "#/components/schemas/Problem"
     Unprocessable:
       description: Regra de negócio não atendida
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ServiceUnavailable:
+      description: Dependência operacional indisponível
       content:
         application/problem+json:
           schema:
@@ -424,6 +561,50 @@ components:
         whatsapp_e164:
           type: string
 
+    InteractionIntent:
+      type: object
+      required: [id, description, aliases, examples, action, required_slots]
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        aliases:
+          type: array
+          items:
+            type: string
+        examples:
+          type: array
+          items:
+            type: string
+        action:
+          type: string
+          enum: [GET_CURRENT_PRICE_LIST, SEARCH_CURRENT_PRICE_LIST_ITEMS]
+        required_slots:
+          type: array
+          items:
+            type: string
+
+    InteractionCapabilities:
+      type: object
+      required: [provider, version, session_ttl_seconds, fallback_message, intents]
+      properties:
+        provider:
+          type: string
+          const: crm_api
+        version:
+          type: string
+        session_ttl_seconds:
+          type: integer
+          minimum: 60
+          maximum: 86400
+        fallback_message:
+          type: string
+        intents:
+          type: array
+          items:
+            $ref: "#/components/schemas/InteractionIntent"
+
     PreferredProduct:
       type: object
       required: [product_id, sku, display_name, display_order]
@@ -459,6 +640,54 @@ components:
         currency:
           type: string
           pattern: "^[A-Z]{3}$"
+
+    CurrentPriceListItem:
+      type: object
+      required:
+        [product_id, family_name, sku, display_name, specification, unit, availability, base_price]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        family_name:
+          type: string
+        sku:
+          type: string
+        display_name:
+          type: string
+        specification:
+          type: [string, "null"]
+        unit:
+          type: string
+          const: KG
+        availability:
+          type: string
+          enum: [AVAILABLE, OUT_OF_STOCK, SUSPENDED, FUTURE_ARRIVAL, CONSULT]
+        base_price:
+          oneOf:
+            - $ref: "#/components/schemas/Money"
+            - type: "null"
+          description: Nulo quando não existe preço comercial atual para o item indisponível.
+        expected_arrival_date:
+          type: [string, "null"]
+          format: date
+        arrival_note:
+          type: [string, "null"]
+        notes:
+          type: [string, "null"]
+
+    CurrentPriceList:
+      type: object
+      required: [customer, price_list, items]
+      properties:
+        customer:
+          $ref: "#/components/schemas/CustomerContact"
+        price_list:
+          $ref: "#/components/schemas/PriceListSummary"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurrentPriceListItem"
 
     OfferRequest:
       type: object

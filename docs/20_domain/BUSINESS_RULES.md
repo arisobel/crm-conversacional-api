@@ -12,6 +12,12 @@
 - `reference_month` representa o primeiro dia da competência.
 - Preços, descontos, acréscimos e fretes são calculados deterministicamente.
 - Disponibilidade possui estado controlado e pode incluir quantidade, data e observação.
+- A consulta de tabela completa exibe somente preço-base por kg, disponibilidade e chegada.
+  Desconto, prazo, frete e imposto não podem ser inferidos nem redigidos como valores até
+  que regras determinísticas estejam cadastradas.
+- A consulta específica pesquisa somente a tabela `ACTIVE` aplicável ao contato, por SKU,
+  nome comercial, especificação ou família. Resultados múltiplos devem ser devolvidos de
+  forma ordenada para escolha explícita; a LLM não seleciona silenciosamente um produto.
 
 ## Oferta
 

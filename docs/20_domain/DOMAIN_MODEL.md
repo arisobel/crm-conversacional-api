@@ -183,8 +183,10 @@ Preço e disponibilidade de cada produto em uma tabela.
 | `arrival_note` | text | sim | Complemento da previsão |
 | `item_tax_rate` | numeric(6,3) | sim | Alíquota específica entre 0 e 100 |
 | `notes` | text | sim | Observações comerciais |
+| `display_order` | integer | não | Ordem revisada de apresentação; adicionada na migration `0002` |
 
-Restrições: um produto por lista, por `UNIQUE(price_list_id, product_id)`.
+Restrições: um produto por lista, por `UNIQUE(price_list_id, product_id)`. O item começa
+com ordem `0` quando não foi importado com ordenação explícita.
 
 ## 9. `commercial_terms`
 

@@ -22,7 +22,9 @@ Memória operacional do CRM Conversacional API.
 5. [Roadmap](10_product/MVP_ROADMAP.md)
 6. [Backlog multiempresa](10_product/MULTI_COMPANY_BACKLOG.md)
 7. [Contrato do projeto](00_meta/AGENT_SKILL_PROJECT.md)
-8. Blueprint da fase ativa em `40_delivery`
+8. [Entrega F1 — tabela vigente no WhatsApp](40_delivery/F1_PRICE_LIST_GATEWAY.md)
+9. [Backlog da interface administrativa](40_delivery/ADMIN_INTERFACE_BACKLOG.md)
+10. Blueprint da fase ativa em `40_delivery`
 
 ## Artefatos executáveis
 
