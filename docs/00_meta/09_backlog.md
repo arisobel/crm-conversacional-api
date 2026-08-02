@@ -1,5 +1,11 @@
 # Backlog priorizado
 
+## P0 — Decisão multiempresa
+
+- [ ] Aprovar [ADR e backlog de representante multiempresa](../10_product/MULTI_COMPANY_BACKLOG.md).
+- [ ] Definir o significado definitivo de `tenant` e os limites de isolamento.
+- [ ] Definir como linha e fluxo do Gateway resolvem a empresa representada.
+
 ## P0 — Fundação
 
 - [ ] Definir stack e versão do runtime.
