@@ -20,8 +20,9 @@ Memória operacional do CRM Conversacional API.
 3. [Backlog](00_meta/09_backlog.md)
 4. [Manifesto](10_product/BUSINESS_FEATURE_MANIFESTO.md)
 5. [Roadmap](10_product/MVP_ROADMAP.md)
-6. [Contrato do projeto](00_meta/AGENT_SKILL_PROJECT.md)
-7. Blueprint da fase ativa em `40_delivery`
+6. [Backlog multiempresa](10_product/MULTI_COMPANY_BACKLOG.md)
+7. [Contrato do projeto](00_meta/AGENT_SKILL_PROJECT.md)
+8. Blueprint da fase ativa em `40_delivery`
 
 ## Artefatos executáveis
 

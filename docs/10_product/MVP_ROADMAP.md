@@ -35,3 +35,10 @@ Entrada idempotente, envio aprovado e atualização de status.
 ## Pós-MVP
 
 Importação automática de PDFs, negociação autônoma, motor tributário genérico e servidor MCP.
+
+## Evolução multiempresa
+
+Antes de ampliar cadastros ou integração com o Gateway, a plataforma deve
+aprovar o [backlog de representante multiempresa](MULTI_COMPANY_BACKLOG.md).
+O primeiro passo é a decisão de isolamento comercial; implementação de tabelas
+e migrações fica deliberadamente posterior a essa decisão.
