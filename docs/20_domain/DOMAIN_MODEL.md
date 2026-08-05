@@ -1,4 +1,9 @@
-# Modelo de domínio
+# Modelo de domínio — implementado
+
+> Este documento descreve o modelo **em produção hoje**. O modelo **a construir**
+> para a direção de CRM de representantes está em
+> [DOMAIN_MODEL_TARGET.md](DOMAIN_MODEL_TARGET.md). Enquanto as migrações `0003+`
+> não forem aplicadas, este documento continua sendo a verdade.
 
 ## Finalidade e fonte de verdade
 

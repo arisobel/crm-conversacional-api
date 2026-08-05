@@ -1,4 +1,14 @@
-# Backlog — Representante multiempresa
+# Backlog — Representante multiempresa (congelado)
+
+> **Congelado em 2026-08-04 pelo ADR-013.** Aqui "representante" significa uma
+> organização que representa várias empresas fornecedoras. A direção aprovada
+> adota o outro significado: representante é um **usuário com carteira de
+> clientes dentro de um tenant** — ver
+> [direção do produto](REPRESENTATIVE_DIRECTION.md).
+>
+> Os itens `MC-001` a `MC-007` saíram do backlog priorizado. O documento
+> permanece como referência histórica. Se a organização multiempresa voltar, ela
+> será um eixo **adicional** de isolamento, não um substituto.
 
 ## Objetivo
 

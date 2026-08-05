@@ -12,8 +12,80 @@ tags:
   - name: Customers
   - name: Price Lists
   - name: Offers
+  - name: Portal Authentication
+    description: >
+      Sessão do portal do representante. Esquema independente do HMAC do Gateway:
+      uma chamada assinada entre serviços não concede papel administrativo e um
+      cookie de sessão não autoriza rotas internas.
 
 paths:
+  /admin/auth/login:
+    post:
+      tags: [Portal Authentication]
+      operationId: loginPortalUser
+      security: []
+      description: >
+        Autentica um usuário do portal no tenant da implantação e emite um cookie de
+        sessão httpOnly. Credencial inválida, conta inativa e conta bloqueada produzem
+        a mesma resposta, para não revelar a existência da conta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Sessão emitida
+          headers:
+            Set-Cookie:
+              description: Cookie de sessão httpOnly, SameSite=Lax e Secure em produção.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthenticatedUser"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /admin/auth/logout:
+    post:
+      tags: [Portal Authentication]
+      operationId: logoutPortalUser
+      security:
+        - PortalSession: []
+      description: Revoga a sessão vigente no servidor e remove o cookie.
+      responses:
+        "204":
+          description: Sessão revogada
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /admin/auth/me:
+    get:
+      tags: [Portal Authentication]
+      operationId: getPortalUser
+      security:
+        - PortalSession: []
+      description: >
+        Devolve o usuário da sessão. Revalida a ativação do usuário a cada chamada,
+        de modo que desativar a conta invalida cookies já emitidos.
+      responses:
+        "200":
+          description: Usuário autenticado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthenticatedUser"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /internal/interaction-capabilities:
     get:
       tags: [Interaction Capabilities]
@@ -382,6 +454,13 @@ components:
       type: apiKey
       in: header
       name: X-Signature
+    PortalSession:
+      type: apiKey
+      in: cookie
+      name: crm_session
+      description: >
+        Sessão com estado no servidor. O cookie carrega o token em claro; o banco
+        guarda apenas o SHA-256 dele, e o logout revoga a sessão de fato.
 
   parameters:
     IdempotencyKey:
@@ -441,8 +520,20 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: Papel insuficiente para a operação
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
     NotFound:
       description: Recurso não encontrado
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    TooManyRequests:
+      description: Excesso de tentativas na janela
       content:
         application/problem+json:
           schema:
@@ -482,6 +573,39 @@ components:
           type: string
         trace_id:
           type: string
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          minLength: 3
+          maxLength: 320
+          description: Normalizado para caixa baixa antes da busca.
+        password:
+          type: string
+          minLength: 1
+          format: password
+
+    AuthenticatedUser:
+      type: object
+      required: [user_id, tenant_id, full_name, email, role]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, MANAGER, REPRESENTATIVE]
 
     WhatsappEvent:
       type: object

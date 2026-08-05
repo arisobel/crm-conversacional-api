@@ -1,10 +1,19 @@
 # Progresso central
 
-Atualizado em: 2026-07-29
+Atualizado em: 2026-08-05
 
 ## Estado atual
 
-**Fase ativa:** F1 — catálogo, tabela vigente e consulta por produto.
+**Fase ativa:** F5 — portal do representante. R0 implementado; R1 é o próximo.
+
+**Mudança de direção em 2026-08-04:** o produto passa a ser um CRM operado por
+representantes comerciais; o WhatsApp vira canal, não interface primária. Ver
+[direção do produto](../10_product/REPRESENTATIVE_DIRECTION.md), ADRs 013 a 016
+e o [plano de entrega F5](../40_delivery/F5_REPRESENTATIVE_PORTAL.md).
+
+O que estava em andamento — consulta específica de produto no WhatsApp — não foi
+cancelado, mas sai da frente da fila: entra depois de R3, quando o preço já
+vier de `price_entries`.
 
 ## Concluído
 
@@ -29,14 +38,39 @@ Atualizado em: 2026-07-29
 - Especificação técnica exposta na resposta para distinguir itens com o mesmo nome
   comercial, como os itens Rubberflex.
 
+- Planejamento da direção de CRM de representantes: direção do produto,
+  modelo-alvo, plano de entrega R0–R6 e ADRs 013 a 016.
+- **R0 — fundação de identidade.** Migração `0003` com `users`, `user_sessions`,
+  `audit_log` e o enum `user_role`. Argon2id, política de senha, bloqueio por
+  conta após falhas, limitador de tentativas em janela, sessão com estado no
+  servidor (cookie httpOnly, janela deslizante e teto absoluto), autorização por
+  papel separada do HMAC do Gateway, trilha de auditoria de login e CLI
+  `python -m crm_api.admin_cli create-user`.
+
 ## Em andamento
 
-- Consulta específica de produto no WhatsApp, com busca determinística na tabela vigente.
+- Nada em implementação. Aguardando início de R1.
 
 ## Próximo baby-step
 
-Implementar a busca assinada de itens da tabela vigente por SKU, nome comercial,
-especificação e família; em seguida, expor o comando `produto <termo>` no Gateway.
+R1 — migração `0004` com `customers.owner_user_id` e
+`customer_assignment_history`, CRUD de representantes, transferência de titular
+e `GET /admin/me/customers` com escopo de carteira aplicado no repositório.
+
+Em paralelo, obter a confirmação contábil de Q1 e Q2 (ICMS embutido no
+preço-base e fórmula de conversão entre UFs), que bloqueiam R4.
+
+## Pendências abertas de R0
+
+- A migração `0003` **não foi executada contra PostgreSQL**: não há Docker nem
+  banco disponível no ambiente de desenvolvimento atual. A cadeia de revisões
+  foi validada (`0003_identity` é head) e o esquema equivalente roda nos testes
+  sobre SQLite, mas a primeira aplicação real precisa de verificação.
+- `CRM_SESSION_COOKIE_SECURE` precisa permanecer `true` em produção; só os
+  testes o desligam.
+- O limitador de login tem estado em processo. Com mais de uma réplica, ele
+  precisa migrar para armazenamento compartilhado; o bloqueio por conta em
+  `users.locked_until` é o controle que já atravessa réplicas.
 
 ## Evidências
 

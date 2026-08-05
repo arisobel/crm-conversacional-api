@@ -101,3 +101,82 @@ ou resposta comercial inventada.
 
 O piloto aplica-se exclusivamente ao `crm_api`. CKJ e Liondata permanecem nos adaptadores
 atuais até que o mecanismo seja validado em produção.
+
+## ADR-013 — Representante é usuário com carteira, não organização
+
+**Status:** aceita em 2026-08-04.
+
+O produto passa a ser um CRM operado por representantes comerciais. Um
+representante é um **usuário autenticado dentro de um tenant**, com papel
+`REPRESENTATIVE` e uma carteira de clientes; ele não é uma organização que
+representa várias empresas fornecedoras.
+
+O titular vigente fica denormalizado em `customers.owner_user_id` e o histórico
+de titularidade em `customer_assignment_history`. O escopo de leitura é aplicado
+no repositório, não na apresentação.
+
+Consequência: o [backlog de representante multiempresa](../10_product/MULTI_COMPANY_BACKLOG.md)
+fica congelado e seus itens `MC-001` a `MC-007` saem do backlog priorizado. Se a
+organização multiempresa voltar, ela será um eixo adicional de isolamento, não
+um substituto deste.
+
+## ADR-014 — Competência e produto como chave do preço vigente
+
+**Status:** aceita em 2026-08-04.
+
+A chave de idempotência comercial do preço é `(tenant, reference_month, product_id)`.
+Existe **um único preço vigente por produto por competência**. Publicar a mesma
+competência duas vezes é um `UPSERT`, nunca uma segunda tabela.
+
+`price_entries` passa a ser a fonte de verdade e `price_entry_revisions` guarda
+o histórico append-only de cada gravação. `price_lists` e `price_list_items` não
+são removidas: passam a representar o lote de importação revisável exigido pelo
+ADR-009, e a ativação do lote promove os valores para `price_entries`.
+
+Consequência: a coexistência de "tabela normal" e "tabela especial" no mesmo mês
+deixa de existir. A tabela especial de 20/07/2026 é modelada como uma **revisão
+dentro da competência 2026-07**, com autor, momento e valor anterior. O ADR-002
+permanece válido — a competência continua sendo coluna, não tabela física.
+
+## ADR-015 — ICMS por matriz de UF de origem e destino
+
+**Status:** aceita em 2026-08-04 quanto ao modelo; fórmula pendente.
+
+O preço entregue ao cliente varia pela localidade onde ele recebe. A alíquota é
+resolvida por `icms_rules`, com par `(origin_state, destination_state)`,
+vigência e especialização opcional por produto, família e cliente. A UF de
+origem vive em `tenants.origin_state_code`.
+
+A precedência é determinística, da mais específica para a mais genérica:
+cliente+produto, cliente+família, cliente, produto, família, par de UF puro.
+Empate no mesmo nível resolve por `priority` e depois por `valid_from` mais
+recente; se ainda houver empate, o serviço **falha explicitamente**. Ausência de
+regra também falha: não existe alíquota-padrão implícita.
+
+A `tax_rules` atual, pendurada em `price_list_id`, fica depreciada e deixa de
+ser lida; sua remoção física exige ADR próprio.
+
+**Pendente:** a fórmula de conversão entre UFs — cálculo "por dentro"
+(gross-up) ou acréscimo simples — e se o preço-base carregado já contém ICMS
+embutido. São decisões fiscais e precisam de confirmação contábil antes da
+implementação. Elas alteram o serviço de cálculo, não o modelo de dados.
+
+Fora de escopo no primeiro corte: substituição tributária, DIFAL, redução de
+base e Simples Nacional.
+
+## ADR-016 — Interações como projeção de leitura no CRM
+
+**Status:** aceita em 2026-08-04.
+
+O representante precisa ver, na ficha do cliente, o histórico de interações do
+WhatsApp. O Gateway continua dono do canal, conforme o ADR-001; ele empurra para
+o CRM, por endpoint interno HMAC e idempotente, uma projeção append-only em
+`customer_interactions`, idempotente por `(source, external_ref)`.
+
+O CRM não passa a operar o canal: ele guarda apenas o que a ficha precisa
+exibir. O destino arquitetural de `conversations`, `messages`, `inbound_events` e
+`outbound_messages` permanece o Gateway — `customer_interactions` é justamente o
+que remove a necessidade de lê-las aqui.
+
+Falha do push não pode degradar o atendimento no canal. A retenção é
+configurável e o expurgo é auditado.

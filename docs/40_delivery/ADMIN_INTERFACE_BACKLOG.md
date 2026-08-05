@@ -1,5 +1,12 @@
 # Backlog — Interface administrativa do CRM
 
+> **Absorvido em 2026-08-04 por [F5 — portal do representante](F5_REPRESENTATIVE_PORTAL.md).**
+> As fases deste documento foram redistribuídas: A → R0, B → R1 e R2, C → R6,
+> D → R3, E permanece adiada. O painel deixa de ser "administrativo" e passa a
+> ser o portal operado por representantes, com escopo de carteira. O ADR-011
+> continua válido: a interface é cliente da API, nunca do PostgreSQL. Este
+> documento permanece como referência dos requisitos originais.
+
 ## Objetivo
 
 Eliminar a dependência de SQL manual e terminal para manter clientes, contatos, catálogo e
