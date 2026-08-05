@@ -14,6 +14,10 @@ tags:
   - name: Offers
   - name: Portal Users
     description: Administração de usuários e representantes. Exclusiva do papel ADMIN.
+  - name: Customer Records
+    description: >
+      Cadastro comercial: cliente, contatos e localidades. Contatos e localidades são
+      sempre alcançados pelo customerId, que passa pelo escopo de carteira.
   - name: Portfolio
     description: >
       Carteira de clientes. O escopo de linha é aplicado na consulta ao banco, não na
@@ -271,6 +275,34 @@ paths:
           $ref: "#/components/responses/Unprocessable"
 
   /admin/customers:
+    post:
+      tags: [Customer Records]
+      operationId: createCustomer
+      security:
+        - PortalSession: []
+      description: >
+        Cadastra o cliente e já cria a sua localidade padrão, porque o cálculo de ICMS
+        parte dela. Um REPRESENTATIVE só cadastra para a própria carteira: owner_user_id
+        do corpo é ignorado e o titular passa a ser o autor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomer"
+      responses:
+        "201":
+          description: Cliente criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
     get:
       tags: [Portfolio]
       operationId: listPortfolioCustomers
@@ -362,6 +394,189 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Customer Records]
+      operationId: updateCustomer
+      security:
+        - PortalSession: []
+      description: "Edita o cadastro. Desativar o cliente é `active: false`."
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCustomer"
+      responses:
+        "200":
+          description: Cliente atualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /admin/customers/{customerId}/contacts:
+    get:
+      tags: [Customer Records]
+      operationId: listCustomerContacts
+      security:
+        - PortalSession: []
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+      responses:
+        "200":
+          description: Contatos do cliente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CustomerContactRecord"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Customer Records]
+      operationId: createCustomerContact
+      security:
+        - PortalSession: []
+      description: >
+        O telefone é normalizado para E.164 antes de gravar e é único por tenant.
+        Marcar este contato como principal desmarca o anterior na mesma transação.
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerContact"
+      responses:
+        "201":
+          description: Contato criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerContactRecord"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /admin/customers/{customerId}/contacts/{contactId}:
+    patch:
+      tags: [Customer Records]
+      operationId: updateCustomerContact
+      security:
+        - PortalSession: []
+      description: Desativar um contato também retira dele a marca de principal.
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/ContactId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCustomerContact"
+      responses:
+        "200":
+          description: Contato atualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerContactRecord"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /admin/customers/{customerId}/locations:
+    get:
+      tags: [Customer Records]
+      operationId: listCustomerLocations
+      security:
+        - PortalSession: []
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+      responses:
+        "200":
+          description: Localidades do cliente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CustomerLocation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Customer Records]
+      operationId: createCustomerLocation
+      security:
+        - PortalSession: []
+      description: >
+        A UF é validada contra as 27 unidades federativas. A primeira localidade ativa de
+        um cliente vira a padrão automaticamente.
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerLocation"
+      responses:
+        "201":
+          description: Localidade criada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerLocation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /admin/customers/{customerId}/locations/{locationId}:
+    patch:
+      tags: [Customer Records]
+      operationId: updateCustomerLocation
+      security:
+        - PortalSession: []
+      description: >
+        Desativar ou desmarcar a localidade padrão devolve 422: promover outra é uma
+        escolha comercial, e o sistema não elege sozinho para onde a mercadoria vai.
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCustomerLocation"
+      responses:
+        "200":
+          description: Localidade atualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerLocation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
 
   /admin/customers/{customerId}/owner:
     put:
@@ -837,6 +1052,20 @@ components:
       schema:
         type: string
         format: uuid
+    ContactId:
+      name: contactId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    LocationId:
+      name: locationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     Limit:
       name: limit
       in: query
@@ -1112,6 +1341,155 @@ components:
           type: integer
         offset:
           type: integer
+
+    StateCode:
+      type: string
+      description: Uma das 27 unidades federativas; validada na aplicação, não só no CHECK.
+      pattern: "^[A-Za-z]{2}$"
+
+    CreateCustomer:
+      type: object
+      additionalProperties: false
+      required: [legal_name, state_code]
+      properties:
+        legal_name:
+          type: string
+          minLength: 1
+          maxLength: 300
+        state_code:
+          $ref: "#/components/schemas/StateCode"
+        trade_name:
+          type: [string, "null"]
+          maxLength: 300
+        document_number:
+          type: [string, "null"]
+          maxLength: 32
+        owner_user_id:
+          type: [string, "null"]
+          format: uuid
+          description: Ignorado quando quem cria é REPRESENTATIVE.
+
+    UpdateCustomer:
+      type: object
+      additionalProperties: false
+      properties:
+        legal_name:
+          type: string
+          minLength: 1
+          maxLength: 300
+        trade_name:
+          type: [string, "null"]
+          maxLength: 300
+        document_number:
+          type: [string, "null"]
+          maxLength: 32
+        state_code:
+          $ref: "#/components/schemas/StateCode"
+        active:
+          type: boolean
+
+    CustomerContactRecord:
+      type: object
+      required: [contact_id, name, whatsapp_e164, is_primary, active]
+      properties:
+        contact_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        whatsapp_e164:
+          type: string
+          pattern: "^\\+[1-9][0-9]{7,14}$"
+        is_primary:
+          type: boolean
+        active:
+          type: boolean
+
+    CreateCustomerContact:
+      type: object
+      additionalProperties: false
+      required: [name, whatsapp_e164]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        whatsapp_e164:
+          type: string
+          description: Aceita a forma de apresentação; normalizado para E.164 na gravação.
+        is_primary:
+          type: boolean
+          default: false
+
+    UpdateCustomerContact:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        whatsapp_e164:
+          type: string
+        is_primary:
+          type: boolean
+        active:
+          type: boolean
+
+    CustomerLocation:
+      type: object
+      required: [location_id, label, state_code, city, is_default, active]
+      properties:
+        location_id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        state_code:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        city:
+          type: [string, "null"]
+        is_default:
+          type: boolean
+        active:
+          type: boolean
+
+    CreateCustomerLocation:
+      type: object
+      additionalProperties: false
+      required: [label, state_code]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 200
+        state_code:
+          $ref: "#/components/schemas/StateCode"
+        city:
+          type: [string, "null"]
+          maxLength: 200
+        is_default:
+          type: boolean
+          default: false
+
+    UpdateCustomerLocation:
+      type: object
+      additionalProperties: false
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 200
+        state_code:
+          $ref: "#/components/schemas/StateCode"
+        city:
+          type: [string, "null"]
+          maxLength: 200
+        is_default:
+          type: boolean
+        active:
+          type: boolean
 
     OwnerAssignmentRequest:
       type: object

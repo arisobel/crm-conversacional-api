@@ -11,6 +11,7 @@ from sqlalchemy import (
     Text,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -49,6 +50,40 @@ class Customer(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     tenant: Mapped[Tenant] = relationship()
+
+
+class CustomerLocation(Base):
+    """Onde o cliente recebe.
+
+    O ICMS depende da UF de destino, e um cliente pode receber em mais de uma.
+    `Customer.state_code` permanece como UF fiscal do cadastro; a resolução de
+    preço passa a usar a localidade.
+    """
+
+    __tablename__ = "customer_locations"
+    __table_args__ = (
+        # No máximo uma localidade simultaneamente padrão e ativa por cliente.
+        # Índice parcial: uma UNIQUE comum barraria também as não-padrão.
+        Index(
+            "ux_default_location_per_customer",
+            "customer_id",
+            unique=True,
+            sqlite_where=text("is_default AND active"),
+            postgresql_where=text("is_default AND active"),
+        ),
+        Index("ix_customer_locations_customer", "customer_id", "active"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id"), index=True)
+    label: Mapped[str] = mapped_column(Text)
+    state_code: Mapped[str] = mapped_column(String(2))
+    city: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class CustomerAssignmentHistory(Base):

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.api.authentication import CurrentUser, get_current_user, require_roles
+from crm_api.api.scoping import build_customer_admin_service, scope_for, translated_errors
 from crm_api.core.database import get_session
 from crm_api.models.customer import Customer, CustomerAssignmentHistory
 from crm_api.models.user import User, UserRole
@@ -15,6 +16,7 @@ from crm_api.repositories.portfolio import (
     PortfolioScope,
 )
 from crm_api.repositories.users import UserRepository
+from crm_api.schemas.customer_admin import CreateCustomerRequest, UpdateCustomerRequest
 from crm_api.schemas.portfolio import (
     AssignmentHistoryEntry,
     CustomerPage,
@@ -160,6 +162,83 @@ async def list_my_customers(
         limit=limit,
         offset=offset,
     )
+
+
+@router.post(
+    "/customers",
+    response_model=CustomerSummary,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        409: {"description": "Document already used"},
+        422: {"description": "Invalid state code"},
+    },
+)
+async def create_customer(
+    payload: CreateCustomerRequest,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CustomerSummary:
+    """Cadastra o cliente e já cria a sua localidade padrão.
+
+    Um `REPRESENTATIVE` só cadastra para a própria carteira: `owner_user_id` do
+    corpo é ignorado e o titular passa a ser o autor.
+    """
+    service = build_customer_admin_service(session)
+    with translated_errors():
+        customer = await service.create_customer(
+            tenant_id=current_user.tenant_id,
+            actor_user_id=current_user.user_id,
+            actor_role=current_user.role,
+            legal_name=payload.legal_name,
+            state_code=payload.state_code,
+            trade_name=payload.trade_name,
+            document_number=payload.document_number,
+            owner_user_id=payload.owner_user_id,
+            request_id=request.headers.get("x-request-id"),
+        )
+    await session.commit()
+
+    scope = scope_for(current_user)
+    found = await _build_service(session).get_customer(scope, customer.id)
+    return _customer_summary(*found)
+
+
+@router.patch(
+    "/customers/{customer_id}",
+    response_model=CustomerSummary,
+    responses={
+        404: {"description": "Not found or outside the portfolio"},
+        409: {"description": "Document already used"},
+        422: {"description": "Invalid state code"},
+    },
+)
+async def update_customer(
+    customer_id: uuid.UUID,
+    payload: UpdateCustomerRequest,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CustomerSummary:
+    """Edita o cadastro. Desativar o cliente é `active: false`."""
+    service = build_customer_admin_service(session)
+    scope = scope_for(current_user)
+    with translated_errors():
+        await service.update_customer(
+            scope,
+            customer_id,
+            actor_user_id=current_user.user_id,
+            legal_name=payload.legal_name,
+            trade_name=payload.trade_name,
+            document_number=payload.document_number,
+            state_code=payload.state_code,
+            active=payload.active,
+            request_id=request.headers.get("x-request-id"),
+        )
+    await session.commit()
+
+    found = await _build_service(session).get_customer(scope, customer_id)
+    return _customer_summary(*found)
 
 
 @router.get(

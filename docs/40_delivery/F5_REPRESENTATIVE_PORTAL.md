@@ -131,23 +131,43 @@ Fora deste corte: o filtro por **data da última interação** depende de
 
 ---
 
-## R2 — Localidades do cliente
+## R2 — Cadastro comercial e localidades — implementada em 2026-08-05
 
 **Migração `0005`.** Cria `customer_locations` e faz backfill de uma localidade
 padrão por cliente a partir de `customers.state_code`.
 
+**Escopo ampliado em relação ao plano original.** R2 estava especificada apenas
+como localidades, mas a nota de absorção do `ADMIN_INTERFACE_BACKLOG` dizia que
+a Fase B — criar e editar cliente e contatos — cairia em R1 e R2, e nenhuma das
+duas a tinha. Sem isso, cadastrar um cliente continuaria exigindo SQL, que é a
+dor que originou o painel; e criar cliente, contato e localidade é a mesma tela.
+
 Entrega:
 
-- CRUD de localidades na ficha do cliente.
-- Índice parcial de unicidade da localidade padrão ativa.
-- Validação de UF contra a lista das 27 unidades federativas.
+- `POST /admin/customers` e `PATCH /admin/customers/{id}`.
+- `GET/POST /admin/customers/{id}/contacts` e `PATCH .../contacts/{id}`.
+- `GET/POST /admin/customers/{id}/locations` e `PATCH .../locations/{id}`.
+- Índice parcial de unicidade da localidade padrão ativa, e o índice equivalente
+  do contato principal declarado também no modelo ORM.
+- Validação de UF contra as 27 unidades federativas, na aplicação — o `CHECK` do
+  banco só garante o formato, e `XX` passaria por ele.
 
-Aceite:
+Aceite — verificado por `tests/test_customer_admin.py`:
 
 - Todo cliente existente termina o backfill com exatamente uma localidade
   padrão, com a UF que já tinha.
-- Marcar uma segunda localidade como padrão desmarca a anterior na mesma
-  transação.
+- Criar um cliente já cria a sua localidade padrão na mesma transação.
+- Marcar uma segunda localidade como padrão desmarca a anterior; o **banco**
+  recusa duas padrão ativas, não apenas o serviço.
+- Desativar ou desmarcar a localidade padrão devolve `422`: promover outra é
+  escolha comercial, e o sistema não elege sozinho para onde a mercadoria vai.
+- Telefone é normalizado para E.164 e é único por tenant; duplicado devolve `409`.
+- Marcar um novo contato principal desmarca o anterior; desativar um contato
+  também retira dele a marca de principal.
+- Contato ou localidade pedidos através de um cliente de outra carteira devolvem
+  `404` de cliente — não existe rota que os alcance por id solto.
+- Um `REPRESENTATIVE` que cadastra cliente vira o titular; `owner_user_id` do
+  corpo é ignorado para ele.
 - A migração é reversível sem perda de `customers.state_code`.
 
 ---

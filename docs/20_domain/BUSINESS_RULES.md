@@ -60,10 +60,24 @@ plano está em [F5](../40_delivery/F5_REPRESENTATIVE_PORTAL.md).
 - Conflito no backfill ou na importação interrompe a operação e é reportado.
   Nunca se resolve por "último vence".
 
+## Cadastro comercial
+
+- A UF é validada contra as 27 unidades federativas, não apenas contra o formato
+  de duas letras.
+- Telefone de contato é normalizado para E.164 e é único dentro do tenant.
+- No máximo um contato principal ativo por cliente; marcar um novo desmarca o
+  anterior, e desativar um contato retira dele a marca de principal.
+- Documento fiscal é único dentro do tenant quando informado.
+- Criar um cliente cria também a sua localidade padrão.
+- Um representante só cadastra clientes para a própria carteira.
+
 ## Localidade e ICMS
 
 - O preço entregue ao cliente depende da UF onde ele recebe.
 - Um cliente pode ter mais de uma localidade; exatamente uma é a padrão ativa.
+- A primeira localidade ativa de um cliente vira a padrão automaticamente.
+- Desativar ou desmarcar a localidade padrão exige promover outra antes: o
+  sistema não elege sozinho para onde a mercadoria passa a ir.
 - A alíquota vem do par `UF de origem → UF de destino`, vigente na data de
   referência, com especialização opcional por produto, família e cliente.
 - Precedência, da mais específica para a mais genérica: cliente+produto,

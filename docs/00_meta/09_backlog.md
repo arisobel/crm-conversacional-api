@@ -32,7 +32,7 @@ Q1 e Q2 bloqueiam R4. As demais não bloqueiam o início.
 - [x] Teste de isolamento de carteira na camada de repositório.
 - [ ] Filtro por data da última interação — depende de R5.
 
-## P0 — R3 Preço por competência
+## P0 — R3 Preço por competência (próxima)
 
 - [ ] Migração `0006`: `price_entries`, `price_entry_revisions`, status `PUBLISHED`.
 - [ ] Publicação de lote com `UPSERT` transacional e revisão por linha.
@@ -40,11 +40,13 @@ Q1 e Q2 bloqueiam R4. As demais não bloqueiam o início.
 - [ ] Backfill da tabela ativa de 20/07/2026 para a competência `2026-07`.
 - [ ] Teste de contrato antes/depois nas rotas consumidas pelo Gateway.
 
-## P0 — R2 Localidades (próxima)
+## R2 — Cadastro comercial e localidades (implementada)
 
-- [ ] Migração `0005`: `customer_locations` e backfill da UF atual.
-- [ ] CRUD de localidades com unicidade da padrão ativa.
-- [ ] Validação de UF contra as 27 unidades federativas.
+- [x] Migração `0005`: `customer_locations` e backfill da UF atual.
+- [x] CRUD de localidades com unicidade da padrão ativa, garantida pelo banco.
+- [x] Validação de UF contra as 27 unidades federativas.
+- [x] CRUD de cliente — absorvido da Fase B do backlog administrativo.
+- [x] CRUD de contatos com E.164, unicidade por tenant e contato principal.
 
 ## P1 — R4 Motor de ICMS
 

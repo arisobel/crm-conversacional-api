@@ -4,7 +4,7 @@ Atualizado em: 2026-08-05
 
 ## Estado atual
 
-**Fase ativa:** F5 — portal do representante. R0 e R1 implementados; R2 é o
+**Fase ativa:** F5 — portal do representante. R0, R1 e R2 implementados; R3 é o
 próximo.
 
 **Mudança de direção em 2026-08-04:** o produto passa a ser um CRM operado por
@@ -55,25 +55,37 @@ vier de `price_entries`.
   escopo aplicado no repositório, e filtros por UF, produto preferido, situação,
   titularidade e busca textual.
 
+- **R2 — cadastro comercial e localidades.** Migração `0005` com
+  `customer_locations` e backfill de uma localidade padrão por cliente. CRUD de
+  cliente, contatos e localidades pelo portal, com UF validada contra as 27
+  unidades federativas, telefone normalizado em E.164 e único por tenant, e
+  unicidade da localidade padrão e do contato principal garantida por índice
+  parcial no banco. O escopo foi ampliado além do plano: o CRUD de cliente e
+  contatos não tinha etapa dona, e sem ele cadastrar cliente ainda exigiria SQL.
+
 ## Em andamento
 
-- Nada em implementação. Aguardando início de R2.
+- Nada em implementação. Aguardando início de R3.
 
 ## Próximo baby-step
 
-R2 — migração `0005` com `customer_locations`, backfill de uma localidade padrão
-por cliente a partir de `customers.state_code` e unicidade da padrão ativa.
+R3 — migração `0006` com `price_entries` e `price_entry_revisions`, publicação
+de lote com `UPSERT` transacional e backfill da tabela ativa de 20/07/2026 para
+a competência `2026-07`. É a etapa de maior risco: há dado em produção e o
+Gateway consome a rota de tabela vigente.
 
 Em paralelo, obter a confirmação contábil de Q1 e Q2 (ICMS embutido no
 preço-base e fórmula de conversão entre UFs), que bloqueiam R4.
 
 ## Pendências abertas
 
-- As migrações `0003` e `0004` **não foram executadas contra PostgreSQL**: não
-  há Docker nem banco disponível no ambiente de desenvolvimento atual. A cadeia
-  de revisões foi validada (`0004_representative_portfolio` é head) e o esquema
-  equivalente roda nos testes sobre SQLite, mas a primeira aplicação real
-  precisa de verificação.
+- As migrações `0003`, `0004` e `0005` **não foram executadas contra
+  PostgreSQL**: não há Docker nem banco disponível no ambiente de
+  desenvolvimento atual. A cadeia de revisões foi validada
+  (`0005_customer_locations` é head) e o esquema equivalente roda nos testes
+  sobre SQLite, mas a primeira aplicação real precisa de verificação. A `0005`
+  é a que mais merece atenção: além do DDL, ela roda um `INSERT ... SELECT` de
+  backfill sobre `customers`.
 - `CRM_SESSION_COOKIE_SECURE` precisa permanecer `true` em produção; só os
   testes o desligam.
 - O limitador de login tem estado em processo. Com mais de uma réplica, ele

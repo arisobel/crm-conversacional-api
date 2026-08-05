@@ -1,7 +1,17 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, Uuid, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    Uuid,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from crm_api.models.base import Base
@@ -10,7 +20,18 @@ from crm_api.models.customer import Customer
 
 class CustomerContact(Base):
     __tablename__ = "customer_contacts"
-    __table_args__ = (UniqueConstraint("tenant_id", "whatsapp_e164"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "whatsapp_e164"),
+        # Já existia no DDL desde a `0001`; o modelo só passa a declará-lo em R2
+        # para que o invariante também valha nos testes.
+        Index(
+            "ux_primary_contact_per_customer",
+            "customer_id",
+            unique=True,
+            sqlite_where=text("is_primary AND active"),
+            postgresql_where=text("is_primary AND active"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
