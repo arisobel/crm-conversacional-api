@@ -12,6 +12,12 @@ tags:
   - name: Customers
   - name: Price Lists
   - name: Offers
+  - name: Portal Users
+    description: Administração de usuários e representantes. Exclusiva do papel ADMIN.
+  - name: Portfolio
+    description: >
+      Carteira de clientes. O escopo de linha é aplicado na consulta ao banco, não na
+      apresentação, e cliente fora da carteira responde 404 em vez de 403.
   - name: Portal Authentication
     description: >
       Sessão do portal do representante. Esquema independente do HMAC do Gateway:
@@ -86,6 +92,331 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+
+  /admin/users:
+    post:
+      tags: [Portal Users]
+      operationId: createPortalUser
+      security:
+        - PortalSession: []
+      description: Cria um usuário do portal. Exclusivo do papel ADMIN.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePortalUser"
+      responses:
+        "201":
+          description: Usuário criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalUser"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+    get:
+      tags: [Portal Users]
+      operationId: listPortalUsers
+      security:
+        - PortalSession: []
+      parameters:
+        - name: role
+          in: query
+          schema:
+            $ref: "#/components/schemas/UserRole"
+        - name: active
+          in: query
+          schema:
+            type: boolean
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Página de usuários
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalUserPage"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /admin/users/{userId}:
+    get:
+      tags: [Portal Users]
+      operationId: getPortalUserById
+      security:
+        - PortalSession: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Usuário
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalUser"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Portal Users]
+      operationId: updatePortalUser
+      security:
+        - PortalSession: []
+      description: >
+        Altera nome, telefone e papel. Rebaixar o último ADMIN ativo é recusado com 422,
+        porque trancaria todos para fora do portal.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePortalUser"
+      responses:
+        "200":
+          description: Usuário atualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalUser"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /admin/users/{userId}/deactivate:
+    post:
+      tags: [Portal Users]
+      operationId: deactivatePortalUser
+      security:
+        - PortalSession: []
+      description: >
+        Desativa a conta e revoga as sessões já emitidas. Recusa a autodesativação e a
+        desativação do último ADMIN ativo.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Usuário desativado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalUser"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /admin/users/{userId}/activate:
+    post:
+      tags: [Portal Users]
+      operationId: activatePortalUser
+      security:
+        - PortalSession: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Usuário reativado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalUser"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/users/{userId}/password:
+    post:
+      tags: [Portal Users]
+      operationId: setPortalUserPassword
+      security:
+        - PortalSession: []
+      description: Define a senha de outro usuário e revoga todas as sessões dele.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPassword"
+      responses:
+        "200":
+          description: Senha substituída
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalUser"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /admin/customers:
+    get:
+      tags: [Portfolio]
+      operationId: listPortfolioCustomers
+      security:
+        - PortalSession: []
+      description: >
+        Lista clientes já reduzidos ao que o papel permite ver. ADMIN e MANAGER enxergam
+        todo o tenant, inclusive clientes sem titular; REPRESENTATIVE enxerga apenas a
+        própria carteira. O escopo é aplicado na consulta ao banco.
+      parameters:
+        - $ref: "#/components/parameters/StateCodeFilter"
+        - name: preferred_product_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: active
+          in: query
+          schema:
+            type: boolean
+        - name: assigned
+          in: query
+          description: Filtra clientes com ou sem titular designado.
+          schema:
+            type: boolean
+        - $ref: "#/components/parameters/SearchFilter"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Página de clientes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /admin/me/customers:
+    get:
+      tags: [Portfolio]
+      operationId: listMyPortfolioCustomers
+      security:
+        - PortalSession: []
+      description: A carteira de quem está logado, qualquer que seja o papel.
+      parameters:
+        - $ref: "#/components/parameters/StateCodeFilter"
+        - name: preferred_product_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: active
+          in: query
+          schema:
+            type: boolean
+        - $ref: "#/components/parameters/SearchFilter"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Página de clientes da carteira
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /admin/customers/{customerId}:
+    get:
+      tags: [Portfolio]
+      operationId: getPortfolioCustomer
+      security:
+        - PortalSession: []
+      description: >
+        Responde 404 tanto para cliente inexistente quanto para cliente fora da carteira.
+        Um 403 no segundo caso confirmaria a existência da conta de outro representante.
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+      responses:
+        "200":
+          description: Cliente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/customers/{customerId}/owner:
+    put:
+      tags: [Portfolio]
+      operationId: assignCustomerOwner
+      security:
+        - PortalSession: []
+      description: >
+        Designa, transfere ou remove o titular. Exclusivo de ADMIN e MANAGER. Reatribuir o
+        titular vigente é um no-op e não gera linha de histórico.
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OwnerAssignmentRequest"
+      responses:
+        "200":
+          description: Cliente com o titular resultante
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerSummary"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /admin/customers/{customerId}/assignment-history:
+    get:
+      tags: [Portfolio]
+      operationId: listCustomerAssignmentHistory
+      security:
+        - PortalSession: []
+      description: Trilha append-only de titularidade, da mais recente para a mais antiga.
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+      responses:
+        "200":
+          description: Histórico de titularidade
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AssignmentHistoryEntry"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /internal/interaction-capabilities:
     get:
       tags: [Interaction Capabilities]
@@ -499,6 +830,43 @@ components:
       schema:
         type: string
         format: uuid
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    StateCodeFilter:
+      name: state_code
+      in: query
+      description: UF do cliente, em duas letras.
+      schema:
+        type: string
+        pattern: "^[A-Za-z]{2}$"
+    SearchFilter:
+      name: search
+      in: query
+      description: Termo aplicado a razão social, nome fantasia e documento.
+      schema:
+        type: string
+        minLength: 2
+        maxLength: 120
     OfferId:
       name: offerId
       in: path
@@ -606,6 +974,174 @@ components:
         role:
           type: string
           enum: [ADMIN, MANAGER, REPRESENTATIVE]
+
+    UserRole:
+      type: string
+      enum: [ADMIN, MANAGER, REPRESENTATIVE]
+
+    PortalUser:
+      type: object
+      required: [user_id, full_name, email, role, whatsapp_e164, active, last_login_at]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+        email:
+          type: string
+        role:
+          $ref: "#/components/schemas/UserRole"
+        whatsapp_e164:
+          type: [string, "null"]
+        active:
+          type: boolean
+        last_login_at:
+          type: [string, "null"]
+          format: date-time
+
+    PortalUserPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortalUser"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    CreatePortalUser:
+      type: object
+      additionalProperties: false
+      required: [full_name, email, password]
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        email:
+          type: string
+          minLength: 3
+          maxLength: 320
+        password:
+          type: string
+          format: password
+          description: Validada contra a política mínima antes de qualquer gravação.
+        role:
+          $ref: "#/components/schemas/UserRole"
+        whatsapp_e164:
+          type: [string, "null"]
+          pattern: "^\\+[1-9][0-9]{7,14}$"
+
+    UpdatePortalUser:
+      type: object
+      additionalProperties: false
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        role:
+          $ref: "#/components/schemas/UserRole"
+        whatsapp_e164:
+          type: [string, "null"]
+          pattern: "^\\+[1-9][0-9]{7,14}$"
+
+    SetPassword:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password:
+          type: string
+          format: password
+
+    OwnerSummary:
+      type: object
+      required: [user_id, full_name, email]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+        email:
+          type: string
+
+    CustomerSummary:
+      type: object
+      required:
+        [customer_id, legal_name, trade_name, document_number, state_code, active, owner]
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        legal_name:
+          type: string
+        trade_name:
+          type: [string, "null"]
+        document_number:
+          type: [string, "null"]
+        state_code:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        active:
+          type: boolean
+        owner:
+          oneOf:
+            - $ref: "#/components/schemas/OwnerSummary"
+            - type: "null"
+          description: Nulo quando o cliente ainda não tem representante titular.
+
+    CustomerPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomerSummary"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    OwnerAssignmentRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        owner_user_id:
+          type: [string, "null"]
+          format: uuid
+          description: Nulo remove o titular; a remoção também entra no histórico.
+        reason:
+          type: [string, "null"]
+          maxLength: 500
+
+    AssignmentHistoryEntry:
+      type: object
+      required: [assigned_at, assigned_by, reason, owner]
+      properties:
+        assigned_at:
+          type: string
+          format: date-time
+        assigned_by:
+          type: string
+          format: uuid
+        reason:
+          type: [string, "null"]
+        owner:
+          oneOf:
+            - $ref: "#/components/schemas/OwnerSummary"
+            - type: "null"
+          description: Nulo quando o evento registrou a remoção do titular.
 
     WhatsappEvent:
       type: object

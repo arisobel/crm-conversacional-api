@@ -1,6 +1,14 @@
 from fastapi import APIRouter
 
-from crm_api.api.routes import auth, customers, health, interaction_capabilities, price_lists
+from crm_api.api.routes import (
+    admin_customers,
+    admin_users,
+    auth,
+    customers,
+    health,
+    interaction_capabilities,
+    price_lists,
+)
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -8,3 +16,5 @@ api_router.include_router(interaction_capabilities.router)
 api_router.include_router(customers.router)
 api_router.include_router(price_lists.router)
 api_router.include_router(auth.router)
+api_router.include_router(admin_users.router)
+api_router.include_router(admin_customers.router)

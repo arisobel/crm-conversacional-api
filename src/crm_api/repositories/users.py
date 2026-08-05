@@ -1,11 +1,11 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.models.customer import Tenant
-from crm_api.models.user import User, UserSession
+from crm_api.models.user import User, UserRole, UserSession
 
 
 class UserRepository:
@@ -32,6 +32,71 @@ class UserRepository:
 
     async def get_by_id(self, user_id: uuid.UUID) -> User | None:
         return await self._session.scalar(select(User).where(User.id == user_id))
+
+    async def get_in_tenant(self, tenant_id: uuid.UUID, user_id: uuid.UUID) -> User | None:
+        return await self._session.scalar(
+            select(User).where(User.id == user_id, User.tenant_id == tenant_id)
+        )
+
+    async def exists_email(self, tenant_id: uuid.UUID, email: str) -> bool:
+        found = await self._session.scalar(
+            select(User.id).where(User.tenant_id == tenant_id, User.email == email)
+        )
+        return found is not None
+
+    def _listing(
+        self, tenant_id: uuid.UUID, *, role: UserRole | None, active: bool | None
+    ) -> Select[tuple[User]]:
+        statement = select(User).where(User.tenant_id == tenant_id)
+        if role is not None:
+            statement = statement.where(User.role == role)
+        if active is not None:
+            statement = statement.where(User.active.is_(active))
+        return statement
+
+    async def list_users(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        role: UserRole | None = None,
+        active: bool | None = None,
+        limit: int,
+        offset: int,
+    ) -> list[User]:
+        statement = (
+            self._listing(tenant_id, role=role, active=active)
+            .order_by(User.full_name, User.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(await self._session.scalars(statement))
+
+    async def count_users(
+        self, tenant_id: uuid.UUID, *, role: UserRole | None = None, active: bool | None = None
+    ) -> int:
+        statement = self._listing(tenant_id, role=role, active=active).with_only_columns(
+            func.count(User.id)
+        )
+        return await self._session.scalar(statement.order_by(None)) or 0
+
+    async def count_other_active_admins(self, tenant_id: uuid.UUID, user_id: uuid.UUID) -> int:
+        """Conta administradores ativos além do informado.
+
+        Usado para impedir que a última conta `ADMIN` seja desativada ou
+        rebaixada — o que trancaria todo mundo para fora do portal sem caminho
+        de recuperação pela própria aplicação.
+        """
+        return (
+            await self._session.scalar(
+                select(func.count(User.id)).where(
+                    User.tenant_id == tenant_id,
+                    User.role == UserRole.ADMIN,
+                    User.active.is_(True),
+                    User.id != user_id,
+                )
+            )
+            or 0
+        )
 
     def add(self, user: User) -> None:
         self._session.add(user)

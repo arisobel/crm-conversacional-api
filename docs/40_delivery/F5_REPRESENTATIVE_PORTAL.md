@@ -79,27 +79,55 @@ o serviço passar a rodar replicado.
 
 ---
 
-## R1 — Representante e carteira
+## R1 — Representante e carteira — implementada em 2026-08-05
 
 **Migração `0004`.** Adiciona `customers.owner_user_id` e cria
-`customer_assignment_history`.
+`customer_assignment_history`. Nenhum cliente existente recebe titular: a coluna
+nasce nula e a designação é uma decisão comercial explícita.
 
 Entrega:
 
-- CRUD de representantes (papel `REPRESENTATIVE`), restrito a `ADMIN`.
-- Designação e transferência de titular, com motivo, gravando histórico.
+- CRUD de usuários do portal, restrito a `ADMIN`:
+  `POST/GET /admin/users`, `GET/PATCH /admin/users/{id}`,
+  `POST /admin/users/{id}/activate|deactivate|password`.
+- Designação, transferência e remoção de titular em
+  `PUT /admin/customers/{id}/owner`, restrita a `ADMIN` e `MANAGER`.
+- `GET /admin/customers/{id}/assignment-history` — trilha append-only.
 - `GET /admin/customers` com escopo automático por papel.
-- `GET /admin/me/customers` — a carteira do usuário logado.
-- Filtros: UF, produto preferido, situação, data da última interação.
+- `GET /admin/me/customers` — a carteira de quem está logado.
+- Filtros: UF, produto preferido, situação, com/sem titular e busca textual em
+  razão social, nome fantasia e documento.
 
-Aceite:
+Aceite — verificado por `tests/test_portfolio.py` e `tests/test_admin_users.py`:
 
 - Um representante que pede um `customer_id` de outra carteira recebe `404`,
-  não `403` — não confirma a existência do registro.
-- O escopo é aplicado na consulta ao banco; um teste garante que a camada de
-  repositório sozinha já filtra.
-- Transferir titular preserva o histórico anterior e não altera linhas antigas.
+  com o mesmo corpo de um `customer_id` inexistente.
+- O escopo é aplicado na consulta ao banco; um teste exercita o repositório
+  isolado, sem passar por rota nem serviço.
+- Transferir titular grava histórico e não altera linhas antigas; reatribuir o
+  titular vigente é um no-op e não polui a trilha.
+- Remover o titular também é registrado, com `user_id` nulo.
+- Titular proposto inexistente, inativo ou de outro tenant devolve `422` e não
+  altera o cliente.
 - Clientes sem titular aparecem apenas para `ADMIN` e `MANAGER`.
+- Desativar um usuário revoga as sessões dele na mesma operação.
+- Trocar a senha de um usuário revoga as sessões dele.
+- Autodesativação e rebaixamento do último `ADMIN` ativo são recusados.
+
+Decisões tomadas na implementação:
+
+- **`POST /admin/users/{id}/password` não estava no plano.** Sem ela, um
+  administrador não consegue socorrer quem esqueceu a senha, e o CRUD ficaria
+  inutilizável na prática. Revoga sessões e é auditada.
+- **A guarda do último `ADMIN` ativo também não estava no plano.** Desativar ou
+  rebaixar a última conta administrativa trancaria todos para fora do portal sem
+  caminho de recuperação pela própria aplicação.
+- **O titular pode ser qualquer usuário ativo do tenant**, não só um
+  `REPRESENTATIVE`. Restringir ao papel impediria um gerente de segurar contas
+  durante uma transição.
+
+Fora deste corte: o filtro por **data da última interação** depende de
+`customer_interactions`, que só existe em R5. Ele entra junto com a timeline.
 
 ---
 

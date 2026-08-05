@@ -43,6 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             401: "Unauthorized",
             403: "Forbidden",
             404: "Not Found",
+            409: "Conflict",
             422: "Unprocessable Content",
             429: "Too Many Requests",
             503: "Service Unavailable",

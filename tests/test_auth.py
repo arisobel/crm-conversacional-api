@@ -2,12 +2,12 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from conftest import portal_settings
 from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
 from crm_api.api.authentication import CurrentUser, require_roles
-from crm_api.core.config import Settings
 from crm_api.core.passwords import WeakPassword, hash_password, validate_password_policy
 from crm_api.main import create_app
 from crm_api.models.base import Base
@@ -20,20 +20,8 @@ REPRESENTATIVE_EMAIL = "vendedor@teste.com.br"
 INACTIVE_EMAIL = "desligado@teste.com.br"
 
 
-def _settings(**overrides) -> Settings:
-    values = {
-        "database_url": "sqlite+aiosqlite://",
-        "tenant_slug": "test-tenant",
-        "internal_hmac_secret": "test-secret",
-        # O cliente de teste fala HTTP; um cookie `Secure` não seria armazenado.
-        "session_cookie_secure": False,
-    }
-    values.update(overrides)
-    return Settings(**values)
-
-
 async def _build_app(**overrides):
-    application = create_app(_settings(**overrides))
+    application = create_app(portal_settings(**overrides))
     async with application.state.engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
 

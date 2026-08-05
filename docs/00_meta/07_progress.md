@@ -4,7 +4,8 @@ Atualizado em: 2026-08-05
 
 ## Estado atual
 
-**Fase ativa:** F5 — portal do representante. R0 implementado; R1 é o próximo.
+**Fase ativa:** F5 — portal do representante. R0 e R1 implementados; R2 é o
+próximo.
 
 **Mudança de direção em 2026-08-04:** o produto passa a ser um CRM operado por
 representantes comerciais; o WhatsApp vira canal, não interface primária. Ver
@@ -47,30 +48,40 @@ vier de `price_entries`.
   papel separada do HMAC do Gateway, trilha de auditoria de login e CLI
   `python -m crm_api.admin_cli create-user`.
 
+- **R1 — representante e carteira.** Migração `0004` com
+  `customers.owner_user_id` e `customer_assignment_history`. CRUD de usuários do
+  portal restrito a `ADMIN`, designação/transferência/remoção de titular com
+  histórico append-only, `GET /admin/customers` e `GET /admin/me/customers` com
+  escopo aplicado no repositório, e filtros por UF, produto preferido, situação,
+  titularidade e busca textual.
+
 ## Em andamento
 
-- Nada em implementação. Aguardando início de R1.
+- Nada em implementação. Aguardando início de R2.
 
 ## Próximo baby-step
 
-R1 — migração `0004` com `customers.owner_user_id` e
-`customer_assignment_history`, CRUD de representantes, transferência de titular
-e `GET /admin/me/customers` com escopo de carteira aplicado no repositório.
+R2 — migração `0005` com `customer_locations`, backfill de uma localidade padrão
+por cliente a partir de `customers.state_code` e unicidade da padrão ativa.
 
 Em paralelo, obter a confirmação contábil de Q1 e Q2 (ICMS embutido no
 preço-base e fórmula de conversão entre UFs), que bloqueiam R4.
 
-## Pendências abertas de R0
+## Pendências abertas
 
-- A migração `0003` **não foi executada contra PostgreSQL**: não há Docker nem
-  banco disponível no ambiente de desenvolvimento atual. A cadeia de revisões
-  foi validada (`0003_identity` é head) e o esquema equivalente roda nos testes
-  sobre SQLite, mas a primeira aplicação real precisa de verificação.
+- As migrações `0003` e `0004` **não foram executadas contra PostgreSQL**: não
+  há Docker nem banco disponível no ambiente de desenvolvimento atual. A cadeia
+  de revisões foi validada (`0004_representative_portfolio` é head) e o esquema
+  equivalente roda nos testes sobre SQLite, mas a primeira aplicação real
+  precisa de verificação.
 - `CRM_SESSION_COOKIE_SECURE` precisa permanecer `true` em produção; só os
   testes o desligam.
 - O limitador de login tem estado em processo. Com mais de uma réplica, ele
   precisa migrar para armazenamento compartilhado; o bloqueio por conta em
   `users.locked_until` é o controle que já atravessa réplicas.
+- Nenhum cliente de produção tem titular. A carteira só passa a existir quando
+  um administrador designar os titulares pelo portal.
+- O filtro por data da última interação continua pendente até R5.
 
 ## Evidências
 

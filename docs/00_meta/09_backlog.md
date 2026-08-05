@@ -23,13 +23,14 @@ Q1 e Q2 bloqueiam R4. As demais não bloqueiam o início.
 - [ ] Aplicar a migração `0003` contra PostgreSQL e conferir o resultado.
 - [ ] Substituir o limitador em processo caso o serviço passe a rodar replicado.
 
-## P0 — R1 Representante e carteira (próxima)
+## R1 — Representante e carteira (implementada)
 
-- [ ] Migração `0004`: `customers.owner_user_id`, `customer_assignment_history`.
-- [ ] CRUD de representantes.
-- [ ] Designação e transferência de titular com motivo e histórico.
-- [ ] `GET /admin/me/customers` e `GET /admin/customers` com escopo por papel.
-- [ ] Teste de isolamento de carteira na camada de repositório.
+- [x] Migração `0004`: `customers.owner_user_id`, `customer_assignment_history`.
+- [x] CRUD de representantes, com troca de senha e guarda do último `ADMIN`.
+- [x] Designação, transferência e remoção de titular com motivo e histórico.
+- [x] `GET /admin/me/customers` e `GET /admin/customers` com escopo por papel.
+- [x] Teste de isolamento de carteira na camada de repositório.
+- [ ] Filtro por data da última interação — depende de R5.
 
 ## P0 — R3 Preço por competência
 
@@ -39,7 +40,7 @@ Q1 e Q2 bloqueiam R4. As demais não bloqueiam o início.
 - [ ] Backfill da tabela ativa de 20/07/2026 para a competência `2026-07`.
 - [ ] Teste de contrato antes/depois nas rotas consumidas pelo Gateway.
 
-## P1 — R2 Localidades
+## P0 — R2 Localidades (próxima)
 
 - [ ] Migração `0005`: `customer_locations` e backfill da UF atual.
 - [ ] CRUD de localidades com unicidade da padrão ativa.
