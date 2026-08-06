@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Novo cliente{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Novo cliente</h1>
+  <a class="link-voltar" href="/portal/customers">Voltar</a>
+</div>
+
+<form method="post" action="/portal/customers/novo" class="formulario">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <label for="legal_name">Razão social</label>
+  <input id="legal_name" name="legal_name" value="{{ dados.legal_name or '' }}" required>
+
+  <label for="trade_name">Nome fantasia</label>
+  <input id="trade_name" name="trade_name" value="{{ dados.trade_name or '' }}">
+
+  <label for="document_number">Documento</label>
+  <input id="document_number" name="document_number" value="{{ dados.document_number or '' }}">
+
+  <label for="state_code">UF</label>
+  <input id="state_code" name="state_code" maxlength="2" size="2"
+         value="{{ dados.state_code or '' }}" required>
+  <p class="dica">A localidade padrão do cliente é criada com esta UF.</p>
+
+  {% if pode_gerir %}
+  <label for="owner_user_id">Representante titular</label>
+  <select id="owner_user_id" name="owner_user_id">
+    <option value="">Sem titular</option>
+    {% for usuario in representantes %}
+    <option value="{{ usuario.id }}">{{ usuario.full_name }} ({{ usuario.role.value }})</option>
+    {% endfor %}
+  </select>
+  {% else %}
+  <p class="dica">Você será o titular deste cliente.</p>
+  {% endif %}
+
+  <button type="submit">Cadastrar</button>
+</form>
+{% endblock %}

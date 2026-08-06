@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Lista de preço · {{ cliente.legal_name }}{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Lista de preço</h1>
+  <a class="link-voltar" href="/portal/customers/{{ cliente.id }}">Voltar à ficha</a>
+</div>
+
+<p class="dica">
+  {{ cliente.legal_name }} · origem
+  <strong>{{ origem or 'não configurada' }}</strong>
+</p>
+
+<section class="painel">
+  <form method="get" class="filtros">
+    <select name="location_id">
+      {% for local in localidades %}
+      <option value="{{ local.id }}"
+              {% if location_id and local.id == location_id %}selected{% endif %}>
+        {{ local.label }} · {{ local.state_code }}{% if not local.active %} (inativa){% endif %}
+      </option>
+      {% endfor %}
+    </select>
+    <select name="mes">
+      <option value="">Competência vigente</option>
+      {% for competencia in competencias %}
+      <option value="{{ competencia.strftime('%Y-%m') }}"
+              {% if mes == competencia.strftime('%Y-%m') %}selected{% endif %}>
+        {{ competencia.strftime('%m/%Y') }}
+      </option>
+      {% endfor %}
+    </select>
+    <button type="submit">Gerar</button>
+  </form>
+</section>
+
+{% if resolvida %}
+<section class="painel">
+  <div class="cabecalho">
+    <h2>
+      {{ resolvida.reference_month.strftime('%m/%Y') }} ·
+      {{ resolvida.origin_state }} → {{ resolvida.location.state_code }}
+    </h2>
+    <a class="botao"
+       href="/portal/customers/{{ cliente.id }}/price-list?formato=csv{% if location_id %}&amp;location_id={{ location_id }}{% endif %}{% if mes %}&amp;mes={{ mes }}{% endif %}">
+      Exportar CSV
+    </a>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>SKU</th>
+        <th>Produto</th>
+        <th>Família</th>
+        <th>Disponibilidade</th>
+        <th class="numero">Base</th>
+        <th class="numero">Alíquota</th>
+        <th class="numero">Final</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in resolvida.items %}
+      <tr>
+        <td>{{ item.sku }}</td>
+        <td>
+          {{ item.display_name }}
+          {% if item.specification %}<br><span class="vazio">{{ item.specification }}</span>{% endif %}
+        </td>
+        <td>{{ item.family_name }}</td>
+        <td>
+          {{ item.availability }}
+          {% if item.expected_arrival_date %}
+          <br><span class="vazio">chega {{ item.expected_arrival_date.strftime('%d/%m') }}</span>
+          {% endif %}
+        </td>
+        <td class="numero">{% if item.base_price is not none %}{{ item.base_price }}{% else %}—{% endif %}</td>
+        <td class="numero">{% if item.tax_rate is not none %}{{ item.tax_rate }}%{% else %}—{% endif %}</td>
+        <td class="numero">
+          {%- if item.final_price is not none -%}
+          <strong>{{ item.final_price }}</strong>
+          {%- else -%}—{%- endif -%}
+        </td>
+      </tr>
+      {% if item.trace %}
+      <tr class="detalhe">
+        <td colspan="7">
+          <details>
+            <summary>como este preço foi calculado</summary>
+            <span>
+              modo {{ item.trace.mode }} ·
+              base {{ item.trace.base_price }}
+              {% if item.trace.base_tax_rate %}com {{ item.trace.base_tax_rate }}% embutido{% else %}tratada como líquida{% endif %} ·
+              líquido {{ item.trace.net_price }} ·
+              destino {{ item.trace.destination_tax_rate }}% ·
+              regra {{ item.trace.rule_id }} (especificidade {{ item.trace.specificity }})
+            </span>
+          </details>
+        </td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p class="rodape-tabela">
+    {{ resolvida.items | length }} item(ns) em {{ resolvida.currency }}.
+  </p>
+</section>
+{% endif %}
+{% endblock %}

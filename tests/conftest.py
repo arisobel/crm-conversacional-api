@@ -18,7 +18,7 @@ from crm_api.models.catalog import (  # noqa: E402
     Product,
     ProductFamily,
 )
-from crm_api.models.customer import Customer, Tenant  # noqa: E402
+from crm_api.models.customer import Customer, CustomerLocation, Tenant  # noqa: E402
 from crm_api.models.user import User, UserRole  # noqa: E402
 
 PASSWORD = "SenhaForte12345"
@@ -105,6 +105,21 @@ async def build_portal_world(**setting_overrides) -> PortalWorld:
         state_code="SP",
     )
 
+    # Depois de R2 nenhum cliente existe sem localidade padrão: a migração
+    # `0005` fez o backfill e `create_customer` cria a dele junto. O cenário
+    # reproduz isso para não testar um estado que produção não tem.
+    localidades = [
+        CustomerLocation(
+            id=uuid4(),
+            tenant_id=tenant.id,
+            customer_id=cliente.id,
+            label="Principal",
+            state_code=cliente.state_code,
+            is_default=True,
+        )
+        for cliente in (customer_a, customer_b, customer_unassigned)
+    ]
+
     family = ProductFamily(id=uuid4(), tenant_id=tenant.id, name="Texturizado")
     product = Product(
         id=uuid4(),
@@ -131,6 +146,7 @@ async def build_portal_world(**setting_overrides) -> PortalWorld:
                 customer_a,
                 customer_b,
                 customer_unassigned,
+                *localidades,
                 family,
                 product,
                 preference,

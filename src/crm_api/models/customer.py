@@ -24,6 +24,10 @@ class Tenant(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(Text)
     slug: Mapped[str] = mapped_column(Text, unique=True)
+    # UF do estabelecimento que fatura. Origem do par que determina o ICMS.
+    # Nula até ser configurada; o cálculo falha explicitamente sem ela, em vez
+    # de assumir uma origem e produzir um preço plausível e errado.
+    origin_state_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

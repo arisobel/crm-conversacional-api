@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Representantes{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Usuários do portal</h1>
+</div>
+
+<table>
+  <thead>
+    <tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Situação</th><th>Último acesso</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for usuario in usuarios %}
+    <tr>
+      <td>{{ usuario.full_name }}</td>
+      <td>{{ usuario.email }}</td>
+      <td>{{ usuario.role.value }}</td>
+      <td>{% if usuario.active %}ativo{% else %}<span class="vazio">inativo</span>{% endif %}</td>
+      <td>{{ usuario.last_login_at.strftime('%d/%m/%Y %H:%M') if usuario.last_login_at else '—' }}</td>
+      <td class="acoes">
+        {% if usuario.id != current_user.user_id %}
+        <form method="post" action="/portal/users/{{ usuario.id }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          {% if usuario.active %}
+          <button type="submit" name="acao" value="desativar" class="link">desativar</button>
+          {% else %}
+          <button type="submit" name="acao" value="ativar" class="link">reativar</button>
+          {% endif %}
+        </form>
+        {% else %}
+        <span class="vazio">você</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<section class="painel">
+  <h2>Novo usuário</h2>
+  <form method="post" action="/portal/users" class="formulario">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <label for="full_name">Nome</label>
+    <input id="full_name" name="full_name" required>
+
+    <label for="email">E-mail</label>
+    <input id="email" name="email" type="email" required>
+
+    <label for="password">Senha</label>
+    <input id="password" name="password" type="password" autocomplete="new-password" required>
+    <p class="dica">
+      Mínimo de {{ tamanho_minimo_senha }} caracteres, com ao menos uma letra e um número.
+      Não pode conter a parte do e-mail antes do <code>@</code>.
+    </p>
+
+    <label for="role">Papel</label>
+    <select id="role" name="role">
+      <option value="REPRESENTATIVE">REPRESENTATIVE — atende a própria carteira</option>
+      <option value="MANAGER">MANAGER — enxerga todo o tenant</option>
+      <option value="ADMIN">ADMIN — também administra usuários</option>
+    </select>
+
+    <label for="whatsapp_e164">WhatsApp (opcional)</label>
+    <input id="whatsapp_e164" name="whatsapp_e164" placeholder="+5511999999999">
+
+    <button type="submit">Criar usuário</button>
+  </form>
+</section>
+{% endblock %}

@@ -12,6 +12,28 @@ class PriceListRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
 
+    async def get_by_id(self, tenant_id: UUID, price_list_id: UUID) -> PriceList | None:
+        return await self._session.scalar(
+            select(PriceList).where(
+                PriceList.id == price_list_id, PriceList.tenant_id == tenant_id
+            )
+        )
+
+    async def list_batches(self, tenant_id: UUID, *, limit: int = 50) -> list[PriceList]:
+        """Lotes de importação, do mais recente para o mais antigo.
+
+        Um lote é a unidade que a tela publica; a competência é o resultado. Os
+        dois convivem desde a `0006` e a tela precisa mostrar os dois lados.
+        """
+        return list(
+            await self._session.scalars(
+                select(PriceList)
+                .where(PriceList.tenant_id == tenant_id)
+                .order_by(PriceList.reference_month.desc(), PriceList.created_at.desc())
+                .limit(limit)
+            )
+        )
+
     async def get_current(self, tenant_id: UUID, at: datetime) -> PriceList | None:
         statement = (
             select(PriceList)

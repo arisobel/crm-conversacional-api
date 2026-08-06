@@ -14,6 +14,15 @@ tags:
   - name: Offers
   - name: Portal Users
     description: Administração de usuários e representantes. Exclusiva do papel ADMIN.
+  - name: Pricing
+    description: >
+      Preço resolvido por cliente e matriz de ICMS. O preço vigente é chaveado por
+      (tenant, competência, produto); a alíquota vem do par UF de origem → destino.
+  - name: Interactions
+    description: >
+      Histórico de interações do cliente. É uma projeção alimentada por push pelo Gateway,
+      que continua dono da conversa; o CRM guarda o suficiente para montar a linha do tempo
+      da ficha sem consultá-lo.
   - name: Customer Records
     description: >
       Cadastro comercial: cliente, contatos e localidades. Contatos e localidades são
@@ -578,6 +587,97 @@ paths:
         "422":
           $ref: "#/components/responses/Unprocessable"
 
+  /admin/customers/{customerId}/price-list:
+    get:
+      tags: [Pricing]
+      operationId: getResolvedPriceList
+      security:
+        - PortalSession: []
+      description: >
+        Produtos preferidos do cliente, na ordem e com o alias dele, com o preço convertido
+        para a UF da localidade onde ele recebe. Cliente sem produtos preferidos recebe o
+        catálogo ativo inteiro. Regra de ICMS ausente ou ambígua interrompe a lista inteira
+        com 409: entregar uma tabela silenciosamente incompleta faria o representante cotar
+        em cima dela.
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - name: location_id
+          in: query
+          description: Localidade a usar; omitida, vale a padrão ativa do cliente.
+          schema:
+            type: string
+            format: uuid
+        - name: reference_month
+          in: query
+          description: Competência; omitida, vale a mais recente já publicada.
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Lista resolvida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolvedPriceList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /admin/icms-rules:
+    get:
+      tags: [Pricing]
+      operationId: listIcmsRules
+      security:
+        - PortalSession: []
+      parameters:
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Matriz de ICMS
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IcmsRule"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Pricing]
+      operationId: createIcmsRule
+      security:
+        - PortalSession: []
+      description: >
+        Cria uma regra para um par de UFs. `product_id` e `family_id` são mutuamente
+        exclusivos: são níveis diferentes de especificidade e aceitá-los juntos tornaria a
+        precedência ambígua. Exclusivo do papel ADMIN.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIcmsRule"
+      responses:
+        "201":
+          description: Regra criada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IcmsRule"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
   /admin/customers/{customerId}/owner:
     put:
       tags: [Portfolio]
@@ -629,6 +729,74 @@ paths:
                   $ref: "#/components/schemas/AssignmentHistoryEntry"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /internal/interactions:
+    post:
+      tags: [Interactions]
+      operationId: ingestInteractions
+      description: >
+        Projeta eventos de conversa na ficha do cliente. Responde 200 mesmo com itens
+        recusados, com o desfecho de cada um: um evento não resolvido é problema daquele
+        evento, e derrubar o lote inteiro faria o Gateway reenviar indefinidamente os que
+        já tinham sido aceitos. Reenviar o mesmo `external_ref` não duplica.
+      parameters:
+        - $ref: "#/components/parameters/TenantSlug"
+        - $ref: "#/components/parameters/Timestamp"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IngestInteractions"
+      responses:
+        "200":
+          description: Desfecho item a item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestInteractionsResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /admin/customers/{customerId}/interactions:
+    get:
+      tags: [Interactions]
+      operationId: getCustomerTimeline
+      security:
+        - PortalSession: []
+      description: >
+        Histórico do cliente, do mais recente para o mais antigo. Sujeito ao escopo de
+        carteira: cliente fora dela responde 404, e não 403.
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Página da linha do tempo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InteractionPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -1490,6 +1658,272 @@ components:
           type: boolean
         active:
           type: boolean
+
+    ResolvedItem:
+      type: object
+      required:
+        [product_id, sku, family_name, display_name, availability, base_price,
+         final_price, tax_rate]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        family_name:
+          type: string
+        display_name:
+          type: string
+          description: Alias do cliente quando existir; senão, o nome comercial.
+        specification:
+          type: [string, "null"]
+        unit:
+          type: string
+        availability:
+          type: string
+          enum: [AVAILABLE, OUT_OF_STOCK, SUSPENDED, FUTURE_ARRIVAL, CONSULT]
+        base_price:
+          oneOf:
+            - $ref: "#/components/schemas/Money"
+            - type: "null"
+          description: Nulo quando não há preço comercial atual para o item.
+        final_price:
+          oneOf:
+            - $ref: "#/components/schemas/Money"
+            - type: "null"
+          description: Preço convertido para a UF de destino.
+        tax_rate:
+          type: [string, "null"]
+          description: Alíquota aplicada, em percentual.
+        expected_arrival_date:
+          type: [string, "null"]
+          format: date
+        arrival_note:
+          type: [string, "null"]
+        notes:
+          type: [string, "null"]
+        trace:
+          type: [object, "null"]
+          additionalProperties: true
+          description: >
+            Rastro do cálculo: regra aplicada, especificidade, alíquotas de origem e
+            destino, valor líquido e final.
+
+    ResolvedPriceList:
+      type: object
+      required:
+        [customer_id, customer_name, location_id, location_label, origin_state,
+         destination_state, reference_month, currency, items]
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        customer_name:
+          type: string
+        location_id:
+          type: string
+          format: uuid
+        location_label:
+          type: string
+        origin_state:
+          type: string
+        destination_state:
+          type: string
+        reference_month:
+          type: string
+          format: date
+        currency:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResolvedItem"
+
+    IngestInteractions:
+      type: object
+      additionalProperties: false
+      required: [interactions]
+      properties:
+        interactions:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            $ref: "#/components/schemas/IncomingInteraction"
+
+    IncomingInteraction:
+      type: object
+      additionalProperties: false
+      required: [external_ref, direction, occurred_at]
+      description: >
+        `whatsapp_e164` ou `customer_id` é obrigatório: um evento que não se liga a um
+        cliente é recusado com motivo, nunca gravado sem dono.
+      properties:
+        external_ref:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Identificador do evento na origem. Chave da idempotência.
+        direction:
+          type: string
+          enum: [INBOUND, OUTBOUND]
+        occurred_at:
+          type: string
+          format: date-time
+        whatsapp_e164:
+          type: [string, "null"]
+        customer_id:
+          type: [string, "null"]
+          format: uuid
+        source:
+          type: string
+          default: whatsapp-gateway
+        channel:
+          type: string
+          default: WHATSAPP
+        summary:
+          type: [string, "null"]
+          description: Texto ou resumo. Truncado em 2000 caracteres antes de gravar.
+        payload:
+          type: [object, "null"]
+
+    IngestInteractionsResult:
+      type: object
+      required: [created, duplicated, rejected, results]
+      properties:
+        created:
+          type: integer
+        duplicated:
+          type: integer
+        rejected:
+          type: integer
+        results:
+          type: array
+          items:
+            type: object
+            required: [external_ref, outcome]
+            properties:
+              external_ref:
+                type: string
+              outcome:
+                type: string
+                enum: [CREATED, DUPLICATE, REJECTED]
+              interaction_id:
+                type: [string, "null"]
+                format: uuid
+              reason:
+                type: [string, "null"]
+
+    Interaction:
+      type: object
+      required:
+        [interaction_id, customer_id, channel, direction, source, external_ref, occurred_at]
+      properties:
+        interaction_id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        contact_id:
+          type: [string, "null"]
+          format: uuid
+        channel:
+          type: string
+        direction:
+          type: string
+          enum: [INBOUND, OUTBOUND]
+        source:
+          type: string
+        external_ref:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+        summary:
+          type: [string, "null"]
+
+    InteractionPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Interaction"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    IcmsRule:
+      type: object
+      required:
+        [rule_id, origin_state, destination_state, tax_rate, valid_from, priority, active]
+      properties:
+        rule_id:
+          type: string
+          format: uuid
+        origin_state:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        destination_state:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        product_id:
+          type: [string, "null"]
+          format: uuid
+        family_id:
+          type: [string, "null"]
+          format: uuid
+        customer_id:
+          type: [string, "null"]
+          format: uuid
+        tax_rate:
+          type: string
+        valid_from:
+          type: string
+          format: date
+        valid_until:
+          type: [string, "null"]
+          format: date
+        priority:
+          type: integer
+        active:
+          type: boolean
+
+    CreateIcmsRule:
+      type: object
+      additionalProperties: false
+      required: [origin_state, destination_state, tax_rate, valid_from]
+      properties:
+        origin_state:
+          $ref: "#/components/schemas/StateCode"
+        destination_state:
+          $ref: "#/components/schemas/StateCode"
+        tax_rate:
+          type: string
+          description: Percentual entre 0 e 100, decimal.
+        valid_from:
+          type: string
+          format: date
+        valid_until:
+          type: [string, "null"]
+          format: date
+        product_id:
+          type: [string, "null"]
+          format: uuid
+        family_id:
+          type: [string, "null"]
+          format: uuid
+        customer_id:
+          type: [string, "null"]
+          format: uuid
+        priority:
+          type: integer
+          default: 100
 
     OwnerAssignmentRequest:
       type: object

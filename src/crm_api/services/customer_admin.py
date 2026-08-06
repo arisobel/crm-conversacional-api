@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 from crm_api.core.states import normalize_state_code
+from crm_api.models.catalog import CustomerPreferredProduct
 from crm_api.models.customer import Customer, CustomerAssignmentHistory, CustomerLocation
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.user import UserRole
@@ -34,6 +35,18 @@ class LocationNotFound(Exception):
 
 class DefaultLocationRequired(Exception):
     """A operação deixaria o cliente sem localidade padrão ativa."""
+
+
+class ProductNotFound(Exception):
+    """Produto inexistente neste tenant."""
+
+
+class PreferredProductNotFound(Exception):
+    """Preferência inexistente neste cliente."""
+
+
+class DuplicatePreferredProduct(Exception):
+    """O produto já está entre os preferidos ativos do cliente."""
 
 
 class CustomerAdminService:
@@ -420,3 +433,124 @@ class CustomerAdminService:
             request_id=request_id,
         )
         return location
+
+    # ------------------------------------------------------ produtos preferidos
+
+    async def list_preferred_products(self, scope: PortfolioScope, customer_id: uuid.UUID):
+        await self._customer_in_scope(scope, customer_id)
+        return await self._admin.list_preferred_with_product(customer_id)
+
+    async def add_preferred_product(
+        self,
+        scope: PortfolioScope,
+        customer_id: uuid.UUID,
+        *,
+        actor_user_id: uuid.UUID,
+        product_id: uuid.UUID,
+        customer_alias: str | None = None,
+        request_id: str | None = None,
+    ) -> CustomerPreferredProduct:
+        await self._customer_in_scope(scope, customer_id)
+        if await self._admin.get_product(scope.tenant_id, product_id) is None:
+            raise ProductNotFound
+
+        existente = await self._admin.get_preferred_by_product(customer_id, product_id)
+        if existente is not None:
+            if existente.active:
+                raise DuplicatePreferredProduct
+            # Reincluir um produto retirado antes reativa a preferência em vez
+            # de criar outra: a chave `(customer, product)` é única no banco.
+            existente.active = True
+            if customer_alias is not None:
+                existente.customer_alias = customer_alias.strip() or None
+            self._audit.record(
+                action="PREFERRED_PRODUCT_REACTIVATED",
+                entity="customer_preferred_products",
+                tenant_id=scope.tenant_id,
+                actor_user_id=actor_user_id,
+                entity_id=existente.id,
+                after={"customer_id": str(customer_id), "product_id": str(product_id)},
+                request_id=request_id,
+            )
+            return existente
+
+        atuais = await self._admin.list_preferred_with_product(customer_id)
+        preferencia = CustomerPreferredProduct(
+            id=uuid.uuid4(),
+            tenant_id=scope.tenant_id,
+            customer_id=customer_id,
+            product_id=product_id,
+            customer_alias=customer_alias.strip() if customer_alias else None,
+            # Entra no fim da lista; a ordem é editável depois.
+            display_order=len(atuais),
+        )
+        self._admin.add(preferencia)
+        self._audit.record(
+            action="PREFERRED_PRODUCT_ADDED",
+            entity="customer_preferred_products",
+            tenant_id=scope.tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=preferencia.id,
+            after={"customer_id": str(customer_id), "product_id": str(product_id)},
+            request_id=request_id,
+        )
+        return preferencia
+
+    async def update_preferred_product(
+        self,
+        scope: PortfolioScope,
+        customer_id: uuid.UUID,
+        preferred_id: uuid.UUID,
+        *,
+        actor_user_id: uuid.UUID,
+        active: bool | None = None,
+        move: int | None = None,
+        request_id: str | None = None,
+    ) -> CustomerPreferredProduct:
+        """Ativa, desativa ou move a preferência uma posição na ordem.
+
+        Mover troca de lugar com a vizinha em vez de renumerar a lista toda: a
+        ordem só precisa ser estável entre si, e a troca é uma escrita em duas
+        linhas.
+        """
+        await self._customer_in_scope(scope, customer_id)
+        preferencia = await self._admin.get_preferred(customer_id, preferred_id)
+        if preferencia is None:
+            raise PreferredProductNotFound
+
+        antes = {"active": preferencia.active, "display_order": preferencia.display_order}
+
+        if active is not None:
+            preferencia.active = active
+        if move:
+            ativas = [
+                item
+                for item, _, _ in await self._admin.list_preferred_with_product(customer_id)
+                if item.active
+            ]
+            posicao = next(
+                (indice for indice, item in enumerate(ativas) if item.id == preferencia.id),
+                None,
+            )
+            destino = None if posicao is None else posicao + move
+            if destino is not None and 0 <= destino < len(ativas):
+                vizinha = ativas[destino]
+                preferencia.display_order, vizinha.display_order = (
+                    vizinha.display_order,
+                    preferencia.display_order,
+                )
+
+        self._audit.record(
+            action="PREFERRED_PRODUCT_UPDATED",
+            entity="customer_preferred_products",
+            tenant_id=scope.tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=preferencia.id,
+            before=antes,
+            after={
+                "active": preferencia.active,
+                "display_order": preferencia.display_order,
+            },
+            request_id=request_id,
+        )
+        return preferencia

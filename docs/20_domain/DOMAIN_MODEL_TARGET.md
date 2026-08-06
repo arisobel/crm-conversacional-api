@@ -291,27 +291,43 @@ precisa exibir.
 | `id` | uuid | não | PK |
 | `tenant_id` | uuid | não | FK |
 | `customer_id` | uuid | não | FK → `customers.id` |
-| `contact_id` | uuid | sim | FK → `customer_contacts.id` |
-| `user_id` | uuid | sim | FK → `users.id`; representante envolvido |
+| `contact_id` | uuid | sim | FK → `customer_contacts.id`; nulo quando o evento não veio de um contato identificado |
 | `channel` | text | não | `WHATSAPP` no corte atual |
-| `direction` | message_direction | não | `INBOUND` / `OUTBOUND` |
+| `direction` | interaction_direction | não | `INBOUND` / `OUTBOUND` |
 | `occurred_at` | timestamptz | não | Momento no canal, não o de ingestão |
-| `body` | text | sim | Texto ou resumo |
-| `source` | text | não | `GATEWAY` / `CRM` |
+| `summary` | text | sim | Texto ou resumo, truncado em 2000 caracteres |
+| `source` | text | não | `whatsapp-gateway` por padrão |
 | `external_ref` | text | não | Identificador da mensagem na origem |
 | `payload` | jsonb | sim | Metadado adicional |
 | `created_at` | timestamptz | não | Ingestão |
 
 Restrições: `UNIQUE(tenant_id, source, external_ref)` — é a idempotência da
-ingestão. Índice `(tenant_id, customer_id, occurred_at DESC)` para a timeline.
-Sem `UPDATE`, sem `DELETE` fora da rotina de retenção.
+ingestão. Índice `(customer_id, occurred_at DESC)` para a timeline e
+`(tenant_id, occurred_at)` para o expurgo. Sem `UPDATE`, sem `DELETE` fora da
+rotina de retenção.
+
+**Três diferenças entre este alvo e a migração `0008`**, todas deliberadas:
+
+`user_id` não existe. Ele registraria "qual representante estava envolvido", mas
+os eventos vêm do Gateway, que não conhece usuários do CRM, e o portal ainda não
+envia mensagem. Uma coluna sempre nula não documenta nada; ela entra quando
+houver envio pelo portal.
+
+`body` virou `summary`, truncado em 2000 caracteres. A projeção existe para dar
+contexto ao representante, não para ser um arquivo da conversa — que continua no
+Gateway. O nome diz o que a coluna é.
+
+`direction` usa enum próprio, `interaction_direction`, e não `message_direction`
+do Gateway. São dois bancos; reaproveitar o nome sugeriria um vínculo que não
+existe.
 
 ### Ingestão
 
-`POST /internal/interactions` — HMAC, escopo de tenant, aceita lote, idempotente
-por `(source, external_ref)`. Reenvio devolve o mesmo resultado lógico e não
-duplica. O Gateway passa a empurrar cada mensagem tratada; falha de push não
-pode derrubar o atendimento no canal.
+`POST /internal/interactions` — HMAC, escopo de tenant, lote de até 200 eventos,
+idempotente por `(tenant, source, external_ref)`. Reenvio devolve `DUPLICATE` e
+não duplica. Cada item grava em savepoint próprio: um evento recusado não
+derruba os demais do lote. Contrato completo, incluindo o que cabe ao Gateway,
+em [F5_INTERACTION_PUSH_CONTRACT](../40_delivery/F5_INTERACTION_PUSH_CONTRACT.md).
 
 ---
 

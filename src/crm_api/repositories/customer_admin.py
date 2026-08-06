@@ -10,6 +10,7 @@ import uuid
 from sqlalchemy import Select, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from crm_api.models.catalog import CustomerPreferredProduct, Product, ProductFamily
 from crm_api.models.customer import Customer, CustomerLocation
 from crm_api.models.customer_contact import CustomerContact
 
@@ -18,7 +19,10 @@ class CustomerAdminRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
 
-    def add(self, entity: Customer | CustomerContact | CustomerLocation) -> None:
+    def add(
+        self,
+        entity: Customer | CustomerContact | CustomerLocation | CustomerPreferredProduct,
+    ) -> None:
         self._session.add(entity)
 
     async def flush(self) -> None:
@@ -107,6 +111,75 @@ class CustomerAdminRepository:
         if excluding is not None:
             statement = statement.where(CustomerLocation.id != excluding)
         await self._session.execute(statement.values(is_default=False))
+
+    async def list_preferred_products(
+        self, customer_id: uuid.UUID
+    ) -> list[CustomerPreferredProduct]:
+        return list(
+            await self._session.scalars(
+                select(CustomerPreferredProduct)
+                .where(
+                    CustomerPreferredProduct.customer_id == customer_id,
+                    CustomerPreferredProduct.active.is_(True),
+                )
+                .order_by(CustomerPreferredProduct.display_order)
+            )
+        )
+
+    async def list_preferred_with_product(
+        self, customer_id: uuid.UUID
+    ) -> list[tuple[CustomerPreferredProduct, Product, ProductFamily]]:
+        """Preferências do cliente com o produto, na ordem que ele escolheu.
+
+        Inclui as inativas: a tela precisa oferecer o "reativar" sem obrigar a
+        recadastrar, e o alias já digitado se perderia numa exclusão física.
+        """
+        result = await self._session.execute(
+            select(CustomerPreferredProduct, Product, ProductFamily)
+            .join(Product, Product.id == CustomerPreferredProduct.product_id)
+            .join(ProductFamily, ProductFamily.id == Product.family_id)
+            .where(CustomerPreferredProduct.customer_id == customer_id)
+            .order_by(
+                CustomerPreferredProduct.active.desc(),
+                CustomerPreferredProduct.display_order,
+                Product.commercial_name,
+            )
+        )
+        return list(result.tuples())
+
+    async def get_preferred(
+        self, customer_id: uuid.UUID, preferred_id: uuid.UUID
+    ) -> CustomerPreferredProduct | None:
+        return await self._session.scalar(
+            select(CustomerPreferredProduct).where(
+                CustomerPreferredProduct.customer_id == customer_id,
+                CustomerPreferredProduct.id == preferred_id,
+            )
+        )
+
+    async def get_preferred_by_product(
+        self, customer_id: uuid.UUID, product_id: uuid.UUID
+    ) -> CustomerPreferredProduct | None:
+        return await self._session.scalar(
+            select(CustomerPreferredProduct).where(
+                CustomerPreferredProduct.customer_id == customer_id,
+                CustomerPreferredProduct.product_id == product_id,
+            )
+        )
+
+    async def get_product(self, tenant_id: uuid.UUID, product_id: uuid.UUID) -> Product | None:
+        return await self._session.scalar(
+            select(Product).where(Product.tenant_id == tenant_id, Product.id == product_id)
+        )
+
+    async def list_products(self, tenant_id: uuid.UUID) -> list[tuple[Product, ProductFamily]]:
+        result = await self._session.execute(
+            select(Product, ProductFamily)
+            .join(ProductFamily, ProductFamily.id == Product.family_id)
+            .where(Product.tenant_id == tenant_id, Product.active.is_(True))
+            .order_by(ProductFamily.display_order, Product.commercial_name, Product.sku)
+        )
+        return list(result.tuples())
 
     async def count_active_locations(
         self, customer_id: uuid.UUID, *, excluding: uuid.UUID | None = None

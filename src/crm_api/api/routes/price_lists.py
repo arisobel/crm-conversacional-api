@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from crm_api.api.security import verify_internal_request
 from crm_api.core.database import get_session
 from crm_api.repositories.customers import CustomerRepository
+from crm_api.repositories.price_entries import PriceEntryRepository
 from crm_api.repositories.price_lists import PriceListRepository
 from crm_api.schemas.price_lists import CurrentPriceListResponse
 from crm_api.services.customers import InvalidWhatsappNumber, normalize_whatsapp_e164
@@ -34,7 +35,9 @@ async def get_current_price_list_by_whatsapp(
         ) from error
 
     service = CurrentPriceListService(
-        CustomerRepository(session), PriceListRepository(session)
+        CustomerRepository(session),
+        PriceListRepository(session),
+        PriceEntryRepository(session),
     )
     current_price_list = await service.find_by_whatsapp(tenant_slug, normalized_phone)
     if current_price_list is None:
@@ -66,7 +69,9 @@ async def search_current_price_list_items_by_whatsapp(
         ) from error
 
     service = CurrentPriceListService(
-        CustomerRepository(session), PriceListRepository(session)
+        CustomerRepository(session),
+        PriceListRepository(session),
+        PriceEntryRepository(session),
     )
     current_price_list = await service.search_items_by_whatsapp(
         tenant_slug, normalized_phone, query

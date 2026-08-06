@@ -18,6 +18,9 @@ from crm_api.models.catalog import Product, ProductFamily
 from crm_api.models.customer import Customer, Tenant
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.pricing import AvailabilityStatus, PriceList, PriceListItem, PriceListStatus
+from crm_api.repositories.audit import AuditRepository
+from crm_api.repositories.price_entries import PriceEntryRepository
+from crm_api.services.price_publication import PricePublicationService
 
 
 def _settings() -> Settings:
@@ -149,6 +152,16 @@ async def app():
                 unavailable_item,
             ]
         )
+        await session.commit()
+
+        # Desde a `0006` a leitura vem de `price_entries`. Publicar o lote aqui
+        # faz deste arquivo o teste de contrato antes/depois: as asserções
+        # abaixo são as mesmas de antes da migração e não podem mudar.
+        await PricePublicationService(
+            session=session,
+            entries=PriceEntryRepository(session),
+            audit=AuditRepository(session),
+        ).publish_batch(tenant_id=tenant.id, batch_id=price_list.id)
         await session.commit()
 
     yield application

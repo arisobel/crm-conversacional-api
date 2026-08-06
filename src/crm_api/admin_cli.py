@@ -1,9 +1,9 @@
-"""Criação do primeiro usuário administrativo, sem SQL manual.
-
-Uso:
+"""Operações administrativas que não têm tela, sem SQL manual.
 
     python -m crm_api.admin_cli create-user \\
         --email admin@empresa.com.br --name "Nome Sobrenome" --role ADMIN
+
+    python -m crm_api.admin_cli purge-interactions [--days N] [--dry-run]
 
 A senha é lida de `CRM_SEED_PASSWORD` ou, na ausência dela, solicitada pelo
 terminal sem eco. Ela nunca é aceita por argumento de linha de comando, que
@@ -25,7 +25,10 @@ from crm_api.core.passwords import WeakPassword, hash_password, validate_passwor
 from crm_api.models.customer import Tenant
 from crm_api.models.user import User, UserRole
 from crm_api.repositories.audit import AuditRepository
+from crm_api.repositories.interactions import InteractionRepository
+from crm_api.repositories.portfolio import CustomerPortfolioRepository
 from crm_api.services.auth import normalize_email
+from crm_api.services.interactions import InteractionService, RetentionNotConfigured
 
 _PASSWORD_ENV = "CRM_SEED_PASSWORD"
 
@@ -93,6 +96,48 @@ async def _create_user(email: str, full_name: str, role: UserRole) -> None:
         await engine.dispose()
 
 
+async def _purge_interactions(days: int | None, dry_run: bool) -> None:
+    settings = get_settings()
+    retencao = days if days is not None else settings.interaction_retention_days
+    if retencao is None:
+        raise SystemExit(
+            "retenção não definida: informe --days ou CRM_INTERACTION_RETENTION_DAYS"
+        )
+
+    engine, session_factory = create_session_factory(settings)
+    try:
+        async with session_factory() as session:
+            tenant = await session.scalar(
+                select(Tenant).where(Tenant.slug == settings.tenant_slug)
+            )
+            if tenant is None:
+                raise SystemExit(f"tenant '{settings.tenant_slug}' não encontrado")
+
+            service = InteractionService(
+                session=session,
+                interactions=InteractionRepository(session),
+                portfolio=CustomerPortfolioRepository(session),
+                audit=AuditRepository(session),
+            )
+            try:
+                removidas = await service.purge(
+                    tenant_id=tenant.id, retention_days=retencao
+                )
+            except RetentionNotConfigured as error:
+                raise SystemExit(str(error)) from error
+
+            if dry_run:
+                # O expurgo já rodou dentro da transação; desfazê-la devolve o
+                # número real de linhas atingidas sem apagar nada.
+                await session.rollback()
+                print(f"[dry-run] {removidas} interações seriam removidas ({retencao} dias)")
+                return
+            await session.commit()
+            print(f"{removidas} interações removidas (retenção de {retencao} dias)")
+    finally:
+        await engine.dispose()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="crm-admin")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -106,7 +151,17 @@ def main(argv: list[str] | None = None) -> int:
         choices=[role.value for role in UserRole],
     )
 
+    purge = subparsers.add_parser(
+        "purge-interactions", help="remove interações fora da política de retenção"
+    )
+    purge.add_argument("--days", type=int, default=None)
+    purge.add_argument("--dry-run", action="store_true")
+
     arguments = parser.parse_args(argv)
+    if arguments.command == "purge-interactions":
+        asyncio.run(_purge_interactions(arguments.days, arguments.dry_run))
+        return 0
+
     asyncio.run(_create_user(arguments.email, arguments.name, UserRole(arguments.role)))
     return 0
 

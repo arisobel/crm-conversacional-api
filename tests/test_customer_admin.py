@@ -266,13 +266,45 @@ async def test_contact_from_a_different_customer_answers_not_found(world, admin)
 
 @pytest.mark.asyncio
 async def test_first_location_of_a_customer_becomes_the_default(world, admin):
+    """Ramo defensivo: cliente legado, anterior ao backfill da `0005`.
+
+    Pelo fluxo normal isso não acontece — `create_customer` já cria a padrão —
+    mas um cliente sem localidade não pode ficar sem UF de destino.
+    """
+    legado = uuid4()
+    async with world.app.state.session_factory() as session:
+        session.add(
+            Customer(
+                id=legado,
+                tenant_id=world.tenant_id,
+                legal_name="Cliente Legado Ltda.",
+                state_code="SP",
+            )
+        )
+        await session.commit()
+
     response = await admin.post(
-        f"/admin/customers/{world.customer_a_id}/locations",
+        f"/admin/customers/{legado}/locations",
         json={"label": "Matriz", "state_code": "SP", "is_default": False},
     )
 
     assert response.status_code == 201
     assert response.json()["is_default"] is True
+
+
+@pytest.mark.asyncio
+async def test_new_location_does_not_steal_the_default(world, admin):
+    response = await admin.post(
+        f"/admin/customers/{world.customer_a_id}/locations",
+        json={"label": "Filial Sorocaba", "state_code": "SP", "is_default": False},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["is_default"] is False
+
+    listagem = await admin.get(f"/admin/customers/{world.customer_a_id}/locations")
+    padroes = [item["label"] for item in listagem.json() if item["is_default"]]
+    assert padroes == ["Principal"]
 
 
 @pytest.mark.asyncio
@@ -297,7 +329,7 @@ async def test_promoting_a_location_demotes_the_previous_default(world, admin):
 async def test_the_default_location_cannot_be_deactivated_or_demoted(world, admin):
     created = await admin.post(
         f"/admin/customers/{world.customer_a_id}/locations",
-        json={"label": "Matriz", "state_code": "SP"},
+        json={"label": "Matriz", "state_code": "SP", "is_default": True},
     )
     location_id = created.json()["location_id"]
 

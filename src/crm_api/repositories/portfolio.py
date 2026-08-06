@@ -7,12 +7,14 @@ porta aberta para uma rota nova esquecer o filtro e expor a carteira alheia.
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.models.catalog import CustomerPreferredProduct
 from crm_api.models.customer import Customer, CustomerAssignmentHistory
+from crm_api.models.interaction import CustomerInteraction
 from crm_api.models.user import User, UserRole
 
 
@@ -47,6 +49,11 @@ class CustomerFilters:
     active: bool | None = None
     assigned: bool | None = None
     search: str | None = None
+    # Última interação. `interacted_since` responde "quem falou comigo depois
+    # de X"; `interacted` em `False` responde a pergunta oposta e mais útil da
+    # carteira — quem está sem contato nenhum.
+    interacted_since: datetime | None = None
+    interacted: bool | None = None
 
 
 class CustomerPortfolioRepository:
@@ -84,6 +91,18 @@ class CustomerPortfolioRepository:
                     CustomerPreferredProduct.active.is_(True),
                 )
                 .exists()
+            )
+        if filters.interacted_since is not None or filters.interacted is not None:
+            existe = select(CustomerInteraction.id).where(
+                CustomerInteraction.customer_id == Customer.id,
+                CustomerInteraction.tenant_id == scope.tenant_id,
+            )
+            if filters.interacted_since is not None:
+                existe = existe.where(
+                    CustomerInteraction.occurred_at >= filters.interacted_since
+                )
+            statement = statement.where(
+                existe.exists() if filters.interacted is not False else ~existe.exists()
             )
         if filters.search:
             term = f"%{filters.search.strip()}%"

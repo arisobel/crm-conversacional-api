@@ -180,3 +180,80 @@ que remove a necessidade de lê-las aqui.
 
 Falha do push não pode degradar o atendimento no canal. A retenção é
 configurável e o expurgo é auditado.
+
+## ADR-017 — Portal server-rendered na mesma origem da API
+
+**Status:** aceita em 2026-08-05. Resolve a questão Q4 e **revisa** a
+recomendação registrada em `REPRESENTATIVE_DIRECTION.md`, que era de aplicação
+separada.
+
+A recomendação original foi escrita antes da sessão existir. Com o desenho que
+R0 produziu — cookie `httpOnly`, `SameSite=Lax`, estado no servidor — uma
+interface em **outra origem** obriga a três concessões que só existem por causa
+da origem: baixar o cookie para `SameSite=None`, habilitar CORS com credenciais
+e acrescentar proteção anti-CSRF explícita. `SameSite=None` é precisamente a
+configuração que reabre o vetor de CSRF que o `Lax` fechava de graça.
+
+O portal passa a ser servido pelo próprio processo FastAPI, com Jinja2, sob o
+prefixo `/portal`. Não há build de front-end nem segundo deploy: o mesmo
+`build.ps1` e o mesmo contêiner entregam API e telas.
+
+O ADR-011 permanece respeitado: ele proíbe a interface falar com o PostgreSQL,
+não que ela seja servida pelo mesmo processo. As rotas do portal chamam os
+mesmos serviços que a API expõe e não têm acesso privilegiado a nada.
+
+Consequências aceitas:
+
+- Interface menos dinâmica que uma SPA. As telas de cadastro são formulários;
+  o custo aparece só se surgir necessidade de interação rica.
+- API e portal escalam juntos, por serem o mesmo processo.
+- A proteção CSRF é por double-submit cookie, que também cobre o formulário de
+  login — onde ainda não existe sessão para o `SameSite=Lax` proteger.
+
+Se um dia a interface precisar sair para outra origem, a saída existe: as rotas
+`/admin/*` já são o contrato completo, e o portal é um cliente delas.
+
+## ADR-018 — Expurgo de interações recusa rodar sem política de retenção
+
+**Status:** aceita em 2026-08-06. Complementa o ADR-016.
+
+`CRM_INTERACTION_RETENTION_DAYS` não tem valor padrão, e o expurgo levanta erro
+quando é chamado sem ela. A alternativa óbvia — assumir 365 dias, ou 90 — foi
+recusada: por quanto tempo conteúdo de conversa pode ficar guardado é decisão de
+LGPD, e um número escolhido pelo código a tomaria em silêncio, com a aparência
+de política.
+
+O comportamento sem configuração é conservador na direção certa: **nada é
+apagado**. Reter demais é um problema que se corrige rodando o expurgo depois;
+apagar cedo demais não se corrige.
+
+O comando aceita `--dry-run`, que executa a remoção dentro da transação e a
+desfaz. O número relatado é o real, não uma estimativa — quem vai definir o
+prazo consegue ver quanto cada corte removeria antes de escolher.
+
+Consequência aceita: o histórico cresce sem limite até alguém decidir. A
+projeção guarda resumo truncado em 2000 caracteres, não a conversa inteira, o
+que mantém o crescimento em ordem de grandeza tratável.
+
+## ADR-019 — Documentação interativa desligada por padrão
+
+**Status:** aceita em 2026-08-06.
+
+`/docs`, `/redoc` e `/openapi.json` passam a depender de `CRM_EXPOSE_API_DOCS`,
+que vale `false`. Antes eles subiam sempre.
+
+A superfície administrativa cresceu muito desde F0: publicação de preço, matriz
+de ICMS, gestão de usuários, histórico de conversa. O esquema não é segredo — a
+segurança não depende dele — mas publicá-lo entrega um mapa completo e navegável
+a quem apenas alcança a URL, e o custo de deixá-lo ligado é zero benefício em
+produção, onde ninguém explora a API pelo navegador.
+
+O contrato continua versionado e legível em `openapi/crm-api.yaml`, que é a
+fonte de verdade para o Gateway de qualquer forma. Ligar em desenvolvimento é
+uma variável de ambiente.
+
+Junto com isso, todo resposta passa a carregar `Content-Security-Policy` com
+`frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options` e
+`Referrer-Policy: same-origin`. O portal não carrega script nem estilo de fora,
+então a política pode ser restritiva sem quebrar nada — e o dia em que alguém
+introduzir um CDN, a CSP vai avisar antes de o usuário descobrir.

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Entrar{% endblock %}
+
+{% block conteudo %}
+<div class="cartao-login">
+  <h1>CRM</h1>
+  <p class="sub">Portal do representante</p>
+
+  <form method="post" action="/portal/login">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <label for="email">E-mail</label>
+    <input id="email" name="email" type="email" autocomplete="username"
+           value="{{ email or '' }}" required autofocus>
+
+    <label for="password">Senha</label>
+    <input id="password" name="password" type="password"
+           autocomplete="current-password" required>
+
+    <button type="submit">Entrar</button>
+  </form>
+</div>
+{% endblock %}

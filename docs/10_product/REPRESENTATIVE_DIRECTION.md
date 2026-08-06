@@ -94,7 +94,14 @@ modelo de dados em [modelo-alvo](../20_domain/DOMAIN_MODEL_TARGET.md).
 | Q1 | O preço-base carregado já contém ICMS embutido? Qual alíquota? | R4 |
 | Q2 | A conversão entre UFs usa cálculo "por dentro" (padrão) ou acréscimo simples? | R4 |
 | Q3 | Retenção e visibilidade do histórico de interações sob LGPD | R5 |
-| Q4 | A UI vive neste repositório ou em aplicação separada? | R6 |
+| ~~Q4~~ | ~~A UI vive neste repositório ou em aplicação separada?~~ | resolvida |
 
 Q1 e Q2 são decisões fiscais, não técnicas, e precisam de confirmação
 contábil antes de R4 ser implementada. A proposta técnica está no modelo-alvo.
+
+**Q4 foi resolvida em 2026-08-05 pelo ADR-017**, e no sentido oposto ao que este
+documento recomendava. A recomendação de "aplicação separada" foi escrita antes
+de a sessão existir; com o cookie `httpOnly` `SameSite=Lax` que R0 produziu,
+outra origem exigiria `SameSite=None`, CORS com credenciais e CSRF explícito —
+três concessões que a mesma origem dispensa. O portal é server-rendered pelo
+próprio processo FastAPI, sob `/portal`.

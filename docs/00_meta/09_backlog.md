@@ -8,9 +8,14 @@ Plano de entrega: [F5](../40_delivery/F5_REPRESENTATIVE_PORTAL.md).
 - [ ] Confirmar se o preço-base carregado já contém ICMS embutido e qual alíquota (Q1).
 - [ ] Confirmar a fórmula de conversão entre UFs: "por dentro" ou acréscimo simples (Q2).
 - [ ] Definir retenção e visibilidade do histórico de interações sob LGPD (Q3).
-- [ ] Decidir onde vive a interface do portal (Q4) — antes de R6, não antes de R0.
+- [x] Q4 — a interface é server-rendered na mesma origem da API (ADR-017).
 
-Q1 e Q2 bloqueiam R4. As demais não bloqueiam o início.
+Q1 e Q2 bloqueavam R4, que foi implementada assim mesmo com fórmula selecionável
+e sem estimativa implícita; a confirmação continua obrigatória antes de qualquer
+preço convertido chegar a um cliente.
+
+Q3 não bloqueou R5. O que ela decide é o **prazo** de retenção, e enquanto não
+houver decisão o sistema não apaga nada: o expurgo recusa rodar sem política.
 
 ## R0 — Fundação de identidade (implementada)
 
@@ -30,15 +35,15 @@ Q1 e Q2 bloqueiam R4. As demais não bloqueiam o início.
 - [x] Designação, transferência e remoção de titular com motivo e histórico.
 - [x] `GET /admin/me/customers` e `GET /admin/customers` com escopo por papel.
 - [x] Teste de isolamento de carteira na camada de repositório.
-- [ ] Filtro por data da última interação — depende de R5.
+- [x] Filtro por data da última interação — entregue junto com R5.
 
-## P0 — R3 Preço por competência (próxima)
+## R3 — Preço por competência (implementada)
 
-- [ ] Migração `0006`: `price_entries`, `price_entry_revisions`, status `PUBLISHED`.
-- [ ] Publicação de lote com `UPSERT` transacional e revisão por linha.
-- [ ] Importação CSV com prévia e relatório de divergências antes de gravar.
-- [ ] Backfill da tabela ativa de 20/07/2026 para a competência `2026-07`.
-- [ ] Teste de contrato antes/depois nas rotas consumidas pelo Gateway.
+- [x] Migração `0006`: `price_entries`, `price_entry_revisions`, status `PUBLISHED`.
+- [x] Publicação de lote com `UPSERT` transacional e revisão por linha.
+- [x] Backfill da tabela ativa, interrompendo em conflito de competência.
+- [x] Teste de contrato antes/depois nas rotas consumidas pelo Gateway.
+- [ ] Importação CSV com prévia e divergências pela interface — R6b.
 
 ## R2 — Cadastro comercial e localidades (implementada)
 
@@ -48,29 +53,47 @@ Q1 e Q2 bloqueiam R4. As demais não bloqueiam o início.
 - [x] CRUD de cliente — absorvido da Fase B do backlog administrativo.
 - [x] CRUD de contatos com E.164, unicidade por tenant e contato principal.
 
-## P1 — R4 Motor de ICMS
+## R4 — Motor de ICMS (implementada)
 
-- [ ] Migração `0007`: `tenants.origin_state_code`, `icms_rules`, depreciar `tax_rules`.
-- [ ] Resolução determinística por especificidade, com erro em empate e em ausência.
-- [ ] Conversão de preço com `calculation_trace` auditável.
-- [ ] Rota de lista personalizada por cliente, localidade e competência.
+- [x] Migração `0007`: `tenants.origin_state_code`, `icms_rules`, depreciar `tax_rules`.
+- [x] Resolução determinística por especificidade, com erro em empate e em ausência.
+- [x] Conversão de preço com trace auditável e fórmula selecionável.
+- [x] Rota de lista personalizada por cliente, localidade e competência.
+- [x] CRUD da matriz por API, restrito a `ADMIN`.
 - [ ] Carga CSV inicial da matriz das 27 UFs.
+- [ ] **Confirmar Q1/Q2 antes de qualquer preço ir a cliente.**
 
-## P1 — R5 Histórico de interações
+## R5 — Histórico de interações (implementada)
 
-- [ ] Migração `0008`: `customer_interactions`.
-- [ ] `POST /internal/interactions` idempotente por `(source, external_ref)`.
-- [ ] Push assíncrono no Gateway, com retry e sem bloquear a resposta ao contato.
-- [ ] Timeline paginada por cliente, com escopo de carteira.
-- [ ] Rotina de expurgo auditada.
+- [x] Migração `0008`: `customer_interactions` e enum `interaction_direction`.
+- [x] `POST /internal/interactions` idempotente por `(tenant, source, external_ref)`.
+- [x] Timeline paginada por cliente, com escopo de carteira.
+- [x] Rotina de expurgo auditada, que recusa rodar sem política definida.
+- [x] Filtro de carteira por última interação — desbloqueia o pendente de R1.
+- [ ] **Push assíncrono no Gateway**, com retry e sem bloquear a resposta ao
+      contato. Outro repositório; contrato em
+      [F5_INTERACTION_PUSH_CONTRACT](../40_delivery/F5_INTERACTION_PUSH_CONTRACT.md).
+- [ ] Definir Q3 e configurar `CRM_INTERACTION_RETENTION_DAYS`.
+- [ ] Agendar a execução periódica do expurgo.
 
-## P2 — R6 Portal
+## R6a — Telas de cadastro (implementada)
 
-- [ ] Tela de carteira.
-- [ ] Ficha do cliente com localidades, preferências, timeline e tabela resolvida.
-- [ ] Tela da tabela do mês: importar, revisar, publicar, histórico de revisões.
-- [ ] Tela da matriz de ICMS.
-- [ ] Tela de representantes e transferência de carteira.
+- [x] Login, logout e sessão com redirecionamento em vez de `401` JSON.
+- [x] Proteção CSRF por double-submit cookie, cobrindo o formulário de login.
+- [x] Tela de carteira com filtros e escopo por papel.
+- [x] Cadastro e edição de cliente, contatos e localidades.
+- [x] Transferência de titular pela ficha do cliente.
+- [x] Tela de representantes e ativação de usuários.
+
+## R6b — Telas dependentes (implementada)
+
+- [x] Tela da tabela do mês: lotes, publicação, competência e revisões.
+- [x] Tela da matriz de ICMS e lista resolvida por cliente, com exportação CSV.
+- [x] Timeline de interações na ficha do cliente.
+- [x] Produtos preferidos por cliente na ficha, com apelido e ordem.
+- [x] Cabeçalhos contra clickjacking e `/docs` desligado por padrão.
+- [ ] Importação CSV pelo navegador, com prévia e divergências. Hoje a carga é
+      por linha de comando, o que basta para uma pessoa carregando tabela.
 
 ## Pendências herdadas
 

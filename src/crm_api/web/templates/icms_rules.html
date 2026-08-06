@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Matriz de ICMS{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Matriz de ICMS</h1>
+</div>
+
+<p class="dica">
+  UF de origem do faturamento: <strong>{{ origem or 'não configurada' }}</strong>.
+  Sem regra cadastrada para o par de UFs a lista de preço falha em vez de estimar
+  a alíquota.
+</p>
+
+<section class="painel">
+  <h2>Nova regra</h2>
+  <form method="post" action="/portal/icms-rules" class="formulario-linha">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="text" name="origin_state" placeholder="Origem" maxlength="2" size="2"
+           value="{{ origem or '' }}" required>
+    <input type="text" name="destination_state" placeholder="Destino" maxlength="2" size="2" required>
+    <input type="text" name="tax_rate" placeholder="Alíquota (ex.: 12)" size="8" required>
+    <input type="date" name="valid_from" value="{{ hoje.isoformat() }}" required>
+    <input type="number" name="priority" value="100" size="4" title="Desempate: maior vence">
+    <button type="submit">Cadastrar</button>
+  </form>
+  <p class="dica">
+    Regras por produto, família ou cliente são cadastradas pela API
+    (<code>POST /admin/icms-rules</code>); esta tela cadastra o par de UFs puro,
+    que é a base da matriz.
+  </p>
+</section>
+
+<section class="painel">
+  <h2>Regras vigentes</h2>
+  {% if regras %}
+  <table>
+    <thead>
+      <tr>
+        <th>Origem</th>
+        <th>Destino</th>
+        <th class="numero">Alíquota</th>
+        <th>Especialização</th>
+        <th>Vigência</th>
+        <th class="numero">Prioridade</th>
+        <th>Situação</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for regra in regras %}
+      <tr>
+        <td>{{ regra.origin_state }}</td>
+        <td>{{ regra.destination_state }}</td>
+        <td class="numero">{{ regra.tax_rate }}%</td>
+        <td>
+          {%- if regra.customer_id %}cliente{% endif -%}
+          {%- if regra.product_id %} produto{% endif -%}
+          {%- if regra.family_id %} família{% endif -%}
+          {%- if not regra.customer_id and not regra.product_id and not regra.family_id -%}
+          <span class="vazio">par puro</span>
+          {%- endif -%}
+        </td>
+        <td>
+          {{ regra.valid_from.strftime('%d/%m/%Y') }}
+          {% if regra.valid_until %}até {{ regra.valid_until.strftime('%d/%m/%Y') }}{% endif %}
+        </td>
+        <td class="numero">{{ regra.priority }}</td>
+        <td>{% if regra.active %}ativa{% else %}<span class="vazio">inativa</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="rodape-tabela">{{ regras | length }} regra(s).</p>
+  {% else %}
+  <p class="vazio">
+    Nenhuma regra cadastrada. Enquanto a matriz estiver vazia, nenhuma lista de
+    preço convertida pode ser gerada.
+  </p>
+  {% endif %}
+</section>
+{% endblock %}

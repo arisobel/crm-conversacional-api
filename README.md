@@ -76,6 +76,15 @@ CRM_INTERNAL_HMAC_SECRET=segredo-longo-e-aleatorio
 CRM_RUN_MIGRATIONS_ON_STARTUP=true
 ```
 
+Variáveis opcionais que mudam comportamento de produção:
+
+| Variável | Padrão | Efeito |
+|---|---|---|
+| `CRM_SESSION_COOKIE_SECURE` | `true` | Mantenha `true`; só os testes desligam. |
+| `CRM_ICMS_CONVERSION_MODE` | `INSIDE` | `INSIDE` é o ICMS "por dentro"; `OUTSIDE` trata o imposto como acréscimo. Trocar não altera o banco. |
+| `CRM_INTERACTION_RETENTION_DAYS` | vazio | Sem valor, o expurgo de interações **recusa rodar** e nada é apagado. |
+| `CRM_EXPOSE_API_DOCS` | `false` | Liga `/docs`, `/redoc` e `/openapi.json`. Em produção, deixe desligado e leia `openapi/crm-api.yaml`. |
+
 Use `CRM_INTERNAL_HMAC_PREVIOUS_SECRET` somente durante rotação de chave. Nunca envie
 `.env`, senha de banco ou a tabela comercial real ao pacote de deploy. Para o primeiro
 deploy, mantenha uma única instância enquanto a migração é aplicada.

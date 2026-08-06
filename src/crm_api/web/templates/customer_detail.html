@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}{{ cliente.legal_name }}{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>{{ cliente.legal_name }}</h1>
+  <div class="acoes-cabecalho">
+    <a class="botao" href="/portal/customers/{{ cliente.id }}/price-list">Lista de preço</a>
+    <a class="link-voltar" href="/portal/customers">Voltar</a>
+  </div>
+</div>
+
+<section class="painel">
+  <h2>Cadastro</h2>
+  <form method="post" action="/portal/customers/{{ cliente.id }}" class="formulario">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <label for="legal_name">Razão social</label>
+    <input id="legal_name" name="legal_name" value="{{ cliente.legal_name }}" required>
+
+    <label for="trade_name">Nome fantasia</label>
+    <input id="trade_name" name="trade_name" value="{{ cliente.trade_name or '' }}">
+
+    <label for="document_number">Documento</label>
+    <input id="document_number" name="document_number" value="{{ cliente.document_number or '' }}">
+
+    <label for="state_code">UF fiscal</label>
+    <input id="state_code" name="state_code" maxlength="2" size="2"
+           value="{{ cliente.state_code }}" required>
+
+    <label class="inline">
+      <input type="checkbox" name="active" value="1" {% if cliente.active %}checked{% endif %}>
+      Cliente ativo
+    </label>
+
+    <button type="submit">Salvar</button>
+  </form>
+</section>
+
+<section class="painel">
+  <h2>Titular</h2>
+  <p>Atual: <strong>{% if titular %}{{ titular.full_name }}{% else %}sem titular{% endif %}</strong></p>
+  {% if pode_gerir %}
+  <form method="post" action="/portal/customers/{{ cliente.id }}/owner" class="formulario-linha">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <select name="owner_user_id">
+      <option value="">Remover titular</option>
+      {% for usuario in representantes %}
+      <option value="{{ usuario.id }}" {% if titular and usuario.id == titular.id %}selected{% endif %}>
+        {{ usuario.full_name }} ({{ usuario.role.value }})
+      </option>
+      {% endfor %}
+    </select>
+    <input type="text" name="reason" placeholder="Motivo (opcional)">
+    <button type="submit">Aplicar</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="painel">
+  <h2>Contatos</h2>
+  {% if contatos %}
+  <table>
+    <thead><tr><th>Nome</th><th>WhatsApp</th><th>Principal</th><th>Situação</th><th></th></tr></thead>
+    <tbody>
+      {% for contato in contatos %}
+      <tr>
+        <td>{{ contato.name }}</td>
+        <td>{{ contato.whatsapp_e164 }}</td>
+        <td>{% if contato.is_primary %}sim{% else %}—{% endif %}</td>
+        <td>{% if contato.active %}ativo{% else %}<span class="vazio">inativo</span>{% endif %}</td>
+        <td class="acoes">
+          <form method="post" action="/portal/customers/{{ cliente.id }}/contacts/{{ contato.id }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            {% if not contato.is_primary and contato.active %}
+            <button type="submit" name="acao" value="principal" class="link">tornar principal</button>
+            {% endif %}
+            {% if contato.active %}
+            <button type="submit" name="acao" value="desativar" class="link">desativar</button>
+            {% else %}
+            <button type="submit" name="acao" value="ativar" class="link">reativar</button>
+            {% endif %}
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="vazio">Nenhum contato cadastrado.</p>
+  {% endif %}
+
+  <form method="post" action="/portal/customers/{{ cliente.id }}/contacts" class="formulario-linha">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="text" name="name" placeholder="Nome do contato" required>
+    <input type="text" name="whatsapp_e164" placeholder="+55 11 99999-9999" required>
+    <label class="inline"><input type="checkbox" name="is_primary" value="1"> principal</label>
+    <button type="submit">Adicionar contato</button>
+  </form>
+</section>
+
+<section class="painel">
+  <h2>Localidades</h2>
+  <p class="dica">A UF da localidade padrão é a que determinará o ICMS do cliente.</p>
+  <table>
+    <thead><tr><th>Rótulo</th><th>UF</th><th>Cidade</th><th>Padrão</th><th>Situação</th><th></th></tr></thead>
+    <tbody>
+      {% for local in localidades %}
+      <tr>
+        <td>{{ local.label }}</td>
+        <td>{{ local.state_code }}</td>
+        <td>{{ local.city or '—' }}</td>
+        <td>{% if local.is_default %}sim{% else %}—{% endif %}</td>
+        <td>{% if local.active %}ativa{% else %}<span class="vazio">inativa</span>{% endif %}</td>
+        <td class="acoes">
+          {% if not local.is_default %}
+          <form method="post" action="/portal/customers/{{ cliente.id }}/locations/{{ local.id }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" name="acao" value="padrao" class="link">tornar padrão</button>
+            {% if local.active %}
+            <button type="submit" name="acao" value="desativar" class="link">desativar</button>
+            {% else %}
+            <button type="submit" name="acao" value="ativar" class="link">reativar</button>
+            {% endif %}
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <form method="post" action="/portal/customers/{{ cliente.id }}/locations" class="formulario-linha">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="text" name="label" placeholder="Rótulo (ex.: Filial Caxias)" required>
+    <input type="text" name="state_code" placeholder="UF" maxlength="2" size="2" required>
+    <input type="text" name="city" placeholder="Cidade">
+    <label class="inline"><input type="checkbox" name="is_default" value="1"> padrão</label>
+    <button type="submit">Adicionar localidade</button>
+  </form>
+</section>
+
+<section class="painel">
+  <h2>Produtos preferidos</h2>
+  <p class="dica">
+    A lista de preço do cliente traz estes produtos, nesta ordem. Sem nenhum
+    preferido, ela traz o catálogo inteiro.
+  </p>
+  {% if preferidos %}
+  <table>
+    <thead><tr><th>Produto</th><th>Família</th><th>Apelido do cliente</th><th>Situação</th><th></th></tr></thead>
+    <tbody>
+      {% for preferencia, produto, familia in preferidos %}
+      <tr>
+        <td>{{ produto.sku }} · {{ produto.commercial_name }}</td>
+        <td>{{ familia.name }}</td>
+        <td>{{ preferencia.customer_alias or '—' }}</td>
+        <td>{% if preferencia.active %}ativo{% else %}<span class="vazio">retirado</span>{% endif %}</td>
+        <td class="acoes">
+          <form method="post"
+                action="/portal/customers/{{ cliente.id }}/preferred/{{ preferencia.id }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            {% if preferencia.active %}
+            <button type="submit" name="acao" value="subir" class="link">↑</button>
+            <button type="submit" name="acao" value="descer" class="link">↓</button>
+            <button type="submit" name="acao" value="remover" class="link">retirar</button>
+            {% else %}
+            <button type="submit" name="acao" value="reincluir" class="link">reincluir</button>
+            {% endif %}
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="vazio">Nenhum produto preferido; a lista sai com o catálogo completo.</p>
+  {% endif %}
+
+  {% if catalogo %}
+  <form method="post" action="/portal/customers/{{ cliente.id }}/preferred" class="formulario-linha">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <select name="product_id" required>
+      {% for produto, familia in catalogo %}
+      <option value="{{ produto.id }}">{{ familia.name }} · {{ produto.commercial_name }} ({{ produto.sku }})</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="customer_alias" placeholder="Como o cliente chama (opcional)">
+    <button type="submit">Incluir preferido</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="painel">
+  <h2>Histórico de interações</h2>
+  {% if interacoes %}
+  <ul class="timeline">
+    {% for interacao in interacoes %}
+    <li class="{{ 'recebida' if interacao.direction.value == 'INBOUND' else 'enviada' }}">
+      <span class="quando">{{ interacao.occurred_at.strftime('%d/%m/%Y %H:%M') }}</span>
+      <span class="canal">
+        {{ interacao.channel }} ·
+        {{ 'recebida' if interacao.direction.value == 'INBOUND' else 'enviada' }}
+      </span>
+      <p>{{ interacao.summary or '—' }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="rodape-tabela">
+    {{ total_interacoes }} interação(ões).
+    {% if timeline_truncada %}Exibindo as {{ interacoes | length }} mais recentes.{% endif %}
+  </p>
+  {% else %}
+  <p class="vazio">
+    Nenhuma interação registrada. O histórico é alimentado pelo Gateway do
+    WhatsApp; o CRM não é dono da conversa.
+  </p>
+  {% endif %}
+</section>
+{% endblock %}

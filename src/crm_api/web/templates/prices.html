@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Tabelas de preço{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Tabelas de preço</h1>
+</div>
+
+<section class="painel">
+  <h2>Lotes de importação</h2>
+  <p class="dica">
+    O lote é o que se importa e revisa; a competência é o que fica valendo.
+    Publicar promove os valores do lote para a competência dele e registra uma
+    revisão por linha que mudou.
+  </p>
+  {% if lotes %}
+  <table>
+    <thead>
+      <tr>
+        <th>Lote</th>
+        <th>Competência</th>
+        <th>Situação</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for lote in lotes %}
+      <tr>
+        <td>{{ lote.name }}</td>
+        <td>{{ lote.reference_month.strftime('%m/%Y') }}</td>
+        <td>{{ lote.status.value }}</td>
+        <td class="acoes">
+          {% if lote.status.value not in ('CANCELLED', 'EXPIRED') %}
+          <form method="post" action="/portal/prices/publish">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="batch_id" value="{{ lote.id }}">
+            <button type="submit" class="link">
+              {% if lote.status.value == 'PUBLISHED' %}republicar{% else %}publicar{% endif %}
+            </button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="vazio">
+    Nenhum lote importado. A carga é feita por
+    <code>python -m crm_api.imports.price_table</code>.
+  </p>
+  {% endif %}
+</section>
+
+<section class="painel">
+  <h2>Competência</h2>
+  <form method="get" class="filtros">
+    <select name="mes">
+      {% for competencia in competencias %}
+      <option value="{{ competencia.strftime('%Y-%m') }}"
+              {% if selecionada == competencia %}selected{% endif %}>
+        {{ competencia.strftime('%m/%Y') }}
+      </option>
+      {% endfor %}
+    </select>
+    <button type="submit">Ver</button>
+  </form>
+
+  {% if itens %}
+  <table>
+    <thead>
+      <tr>
+        <th>SKU</th>
+        <th>Produto</th>
+        <th>Família</th>
+        <th>Disponibilidade</th>
+        <th class="numero">Preço-base</th>
+        <th class="numero">ICMS embutido</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entrada, produto, familia in itens %}
+      <tr>
+        <td>{{ produto.sku }}</td>
+        <td>{{ produto.commercial_name }}</td>
+        <td>{{ familia.name }}</td>
+        <td>{{ entrada.availability.value }}</td>
+        <td class="numero">{{ entrada.base_price }}</td>
+        <td class="numero">
+          {%- if entrada.base_tax_rate is not none -%}
+          {{ entrada.base_tax_rate }}%
+          {%- else -%}<span class="vazio">—</span>{%- endif -%}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="rodape-tabela">{{ itens | length }} item(ns) publicados.</p>
+  {% else %}
+  <p class="vazio">Nenhum preço publicado nesta competência.</p>
+  {% endif %}
+</section>
+
+<section class="painel">
+  <h2>Revisões</h2>
+  {% if revisoes %}
+  <table>
+    <thead>
+      <tr>
+        <th>Quando</th>
+        <th>Produto</th>
+        <th>De</th>
+        <th>Para</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for revisao, produto in revisoes %}
+      <tr>
+        <td>{{ revisao.changed_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td>{{ produto.sku }} · {{ produto.commercial_name }}</td>
+        <td>
+          {%- if revisao.previous -%}
+          {{ revisao.previous.base_price }} · {{ revisao.previous.availability }}
+          {%- else -%}<span class="vazio">primeira publicação</span>{%- endif -%}
+        </td>
+        <td>{{ revisao.current.base_price }} · {{ revisao.current.availability }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="vazio">Nenhuma revisão nesta competência.</p>
+  {% endif %}
+</section>
+{% endblock %}

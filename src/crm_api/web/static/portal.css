@@ -1,0 +1,218 @@
+:root {
+  --tinta: #1c1f23;
+  --tinta-fraca: #6b7280;
+  --linha: #e2e5ea;
+  --fundo: #f6f7f9;
+  --cartao: #ffffff;
+  --acento: #1f5f8b;
+  --erro: #9b1c1c;
+  --erro-fundo: #fdeaea;
+  --ok: #1c6b3f;
+  --ok-fundo: #e8f5ee;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--tinta);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main { max-width: 1040px; margin: 0 auto; padding: 24px 20px 64px; }
+
+/* ---------------------------------------------------------------- topo */
+
+.topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  background: var(--cartao);
+  border-bottom: 1px solid var(--linha);
+}
+
+.topo nav { display: flex; align-items: center; gap: 18px; }
+.topo a { color: var(--tinta); text-decoration: none; }
+.topo a:hover { color: var(--acento); }
+.topo .marca { font-weight: 700; letter-spacing: .04em; }
+
+.sessao { display: flex; align-items: center; gap: 14px; color: var(--tinta-fraca); font-size: 13px; }
+.sessao form { margin: 0; }
+
+/* ------------------------------------------------------------ conteúdo */
+
+.cabecalho {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+
+.painel {
+  background: var(--cartao);
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+.aviso { padding: 10px 14px; border-radius: 6px; margin: 0 0 18px; }
+.aviso.erro { background: var(--erro-fundo); color: var(--erro); }
+.aviso.ok { background: var(--ok-fundo); color: var(--ok); }
+
+.vazio { color: var(--tinta-fraca); }
+.dica { color: var(--tinta-fraca); font-size: 13px; margin: 4px 0 12px; }
+.rodape-tabela { color: var(--tinta-fraca); font-size: 13px; }
+.link-voltar { color: var(--acento); text-decoration: none; font-size: 14px; }
+
+/* -------------------------------------------------------------- tabela */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--cartao);
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--linha); }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--tinta-fraca); }
+tbody tr:last-child td { border-bottom: none; }
+td a { color: var(--acento); text-decoration: none; }
+td a:hover { text-decoration: underline; }
+
+.acoes form { display: flex; gap: 12px; margin: 0; }
+
+/* ---------------------------------------------------------- formulários */
+
+.filtros, .formulario-linha {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.formulario { display: flex; flex-direction: column; max-width: 460px; }
+.formulario label, .cartao-login label {
+  font-size: 13px;
+  color: var(--tinta-fraca);
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+.formulario label.inline, label.inline {
+  flex-direction: row;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tinta);
+}
+
+input[type="text"], input[type="email"], input[type="password"],
+input[type="search"], select {
+  padding: 8px 10px;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  font: inherit;
+  background: var(--cartao);
+  color: var(--tinta);
+}
+
+input:focus, select:focus, button:focus {
+  outline: 2px solid var(--acento);
+  outline-offset: 1px;
+}
+
+button, .botao {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--acento);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+button:hover, .botao:hover { filter: brightness(1.08); }
+
+button.link {
+  background: none;
+  color: var(--acento);
+  padding: 0;
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.formulario > button { margin-top: 18px; align-self: flex-start; }
+
+.acoes-cabecalho { display: flex; align-items: center; gap: 14px; }
+
+/* ------------------------------------------------------------- timeline */
+
+.timeline { list-style: none; margin: 0; padding: 0; }
+
+.timeline li {
+  border-left: 3px solid var(--linha);
+  padding: 2px 0 14px 14px;
+  margin-left: 4px;
+}
+
+/* A cor distingue quem falou. Ela não é o único sinal: o rótulo em .canal diz
+   "recebida" ou "enviada" por extenso, para quem não distingue as duas. */
+.timeline li.recebida { border-left-color: var(--acento); }
+.timeline li.enviada { border-left-color: var(--ok); }
+.timeline .quando { font-size: 13px; font-weight: 600; }
+.timeline .canal { font-size: 12px; color: var(--tinta-fraca); margin-left: 8px; }
+.timeline p { margin: 4px 0 0; white-space: pre-wrap; }
+
+/* ------------------------------------------------------- lista de preço */
+
+.numero { text-align: right; font-variant-numeric: tabular-nums; }
+tr.detalhe td { padding-top: 0; border-bottom: none; }
+tr.detalhe summary { color: var(--tinta-fraca); font-size: 12px; cursor: pointer; }
+tr.detalhe span { color: var(--tinta-fraca); font-size: 12px; }
+
+/* --------------------------------------------------------------- login */
+
+.cartao-login {
+  max-width: 340px;
+  margin: 64px auto;
+  background: var(--cartao);
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  padding: 28px;
+}
+
+.cartao-login h1 { margin: 0; letter-spacing: .06em; }
+.cartao-login .sub { color: var(--tinta-fraca); font-size: 13px; margin: 4px 0 20px; }
+.cartao-login form { display: flex; flex-direction: column; }
+.cartao-login button { margin-top: 20px; }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tinta: #e6e8eb;
+    --tinta-fraca: #9aa3af;
+    --linha: #2b3038;
+    --fundo: #16181c;
+    --cartao: #1e2126;
+    --acento: #6ba7d1;
+    --erro: #f2a3a3;
+    --erro-fundo: #3a1e1e;
+    --ok: #9fd8b8;
+    --ok-fundo: #1c3327;
+  }
+  button, .botao { color: #12171c; }
+}
