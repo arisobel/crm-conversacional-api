@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     # imposto como acréscimo sobre o líquido. Trocar aqui não altera o banco.
     icms_conversion_mode: str = "INSIDE"
 
+    # Se a tabela enviada pelo WhatsApp já vai convertida para a UF do cliente.
+    # Desligado por padrão, e o motivo é o alcance: no portal um representante
+    # confere o `trace` antes de cotar; no WhatsApp o número vai direto ao
+    # cliente. Sem este interruptor, carregar a matriz de ICMS para usar o
+    # portal mudaria, como efeito colateral, o que o cliente recebe.
+    whatsapp_icms_enabled: bool = False
+
     # Retenção do histórico de interações, em dias. Sem valor o expurgo recusa
     # rodar: por quanto tempo conteúdo de conversa pode ficar guardado é decisão
     # de LGPD (Q3), e um padrão embutido no código a tomaria em silêncio.

@@ -1,15 +1,18 @@
 # Progresso central
 
-Atualizado em: 2026-08-06
+Atualizado em: 2026-08-07
 
 ## Estado atual
 
-**Fase ativa:** F5 — portal do representante. **R0 a R6 implementados.**
-Verificado em produção até R2; as migrações `0006`, `0007` e `0008` ainda não
-foram implantadas.
+**Fase ativa:** F5 concluída. **R0 a R6 implementados e implantados.**
 
-O plano F5 está concluído do lado do CRM. O único item de R5 que permanece
-aberto vive em outro repositório: o push do Gateway.
+As migrações `0006`, `0007` e `0008` estão em produção, e o push de interações
+do Gateway também: em 2026-08-06 o log registrou
+`[CRM INTERACTION PUSH DELIVERED] ... attempt: 1`, o que prova a cadeia inteira
+— rede interna, HMAC, tenant e o endpoint criado pela `0008`.
+
+O que falta para a conversa entregar preço não é código, é dado e decisão
+fiscal: matriz de ICMS, UF de origem do tenant, competência publicada e Q1/Q2.
 
 **Mudança de direção em 2026-08-04:** o produto passa a ser um CRM operado por
 representantes comerciais; o WhatsApp vira canal, não interface primária. Ver
@@ -105,38 +108,43 @@ vier de `price_entries`.
   timeline e produtos preferidos na ficha. Cabeçalhos contra clickjacking em
   toda resposta e `/docs` desligado por padrão.
 
+- **Tabela do WhatsApp por cliente.** A rota consumida pelo Gateway passa a ter dois
+  regimes, escolhidos por `CRM_WHATSAPP_ICMS_ENABLED`. Desligado (padrão), o
+  comportamento é byte a byte o de hoje. Ligado, ela devolve **só os produtos
+  preferidos** do cliente, na ordem dele, com o preço **convertido para a UF onde ele
+  recebe** — delegando ao mesmo serviço que o portal usa — e com erros distinguíveis:
+  `404` só para contato desconhecido, `409` para regra de ICMS ausente ou ambígua,
+  `422` para falta de localidade, de UF de origem ou de competência.
+  Os campos `final_price`, `tax_rate`, `origin_state` e `destination_state` são
+  **aditivos**: um Gateway anterior continua lendo `base_price` e funcionando.
+
 ## Em andamento
 
 - Nada em implementação. O plano F5 está concluído do lado do CRM.
 
 ## Próximo baby-step
 
-Implantar `0006`, `0007` e `0008` em produção, com atenção ao backfill da
-`0006`, que interrompe se encontrar dois preços ativos para o mesmo produto e
-mês. As três sobem juntas na mesma transação: se a `0006` abortar, nenhuma é
-aplicada.
+Três coisas que dependem de decisão e de carga de dado, não de código:
 
-Depois disso, três coisas que dependem de decisão e não de código:
-
-1. **Confirmar Q1 e Q2** antes de qualquer preço convertido ir a um cliente. O
-   sistema não estima: sem matriz carregada ele falha. Mas com a matriz
-   carregada e a fórmula errada, ele produz números plausíveis e incorretos.
-2. **Confirmar Q3** e configurar `CRM_INTERACTION_RETENTION_DAYS`. Sem ela, nada
+1. **Confirmar Q1 e Q2**, carregar a matriz de ICMS e definir
+   `tenants.origin_state_code`. Só então ligar `CRM_WHATSAPP_ICMS_ENABLED`. O
+   sistema não estima: sem matriz ele falha. Mas com a matriz carregada e a
+   fórmula errada, ele produz números plausíveis e incorretos — e pelo WhatsApp
+   eles vão direto ao cliente, sem representante conferindo.
+2. **Publicar uma competência** em `/portal/prices` e cadastrar os produtos
+   preferidos dos clientes; sem eles a tabela sai como catálogo inteiro.
+3. **Confirmar Q3** e configurar `CRM_INTERACTION_RETENTION_DAYS`. Sem ela, nada
    é apagado — o que é seguro, mas não é uma política.
-3. **Implementar o push no Gateway.** Sem ele a timeline existe e fica vazia.
 
 ## Pendências abertas
 
-- As migrações `0006`, `0007` e `0008` **ainda não foram implantadas**. Nenhuma
-  migração é executada contra PostgreSQL no ambiente de desenvolvimento — não há
-  Docker nem banco aqui; a validação é a cadeia de revisões
-  (`0008_customer_interactions` é head) e o esquema equivalente sobre SQLite nos
-  testes.
-- O push do Gateway **não foi implementado**: ele vive em outro repositório. O
-  contrato está em
-  [F5_INTERACTION_PUSH_CONTRACT](../40_delivery/F5_INTERACTION_PUSH_CONTRACT.md).
-  Até ele existir, a timeline da ficha fica vazia — a tela funciona, os dados não
-  chegam.
+- Nenhuma migração é executada contra PostgreSQL no ambiente de
+  desenvolvimento — não há Docker nem banco aqui; a validação é a cadeia de
+  revisões (`0008_customer_interactions` é head) e o esquema equivalente sobre
+  SQLite nos testes. A verificação real é o log de produção.
+- Interação de contato não cadastrado volta como `REJECTED` e **não é
+  reenfileirada**: cadastrar o contato depois não traz de volta o que já foi
+  recusado. Só as mensagens seguintes entram na timeline.
 - `CRM_EXPOSE_API_DOCS` passou a valer `false` por padrão. Quem usava `/docs` em
   produção precisa ligá-lo explicitamente, ou passar a ler
   `openapi/crm-api.yaml`.
@@ -155,6 +163,12 @@ Depois disso, três coisas que dependem de decisão e não de código:
   `users.locked_until` é o controle que já atravessa réplicas.
 - Nenhum cliente de produção tem titular. A carteira só passa a existir quando
   um administrador designar os titulares pelo portal.
+
+- **`CRM_WHATSAPP_ICMS_ENABLED` está desligado e deve continuar assim** até Q1 e Q2
+  serem confirmadas. O interruptor existe porque o alcance é diferente do portal: lá um
+  representante confere o `trace` antes de cotar, aqui o número vai direto ao cliente.
+  Sem ele, carregar a matriz de ICMS para usar o portal mudaria, como efeito colateral,
+  o que o cliente recebe pelo WhatsApp.
 
 ## Evidências
 

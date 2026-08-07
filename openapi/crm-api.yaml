@@ -1003,6 +1003,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/Unprocessable"
 
@@ -1043,6 +1045,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/Unprocessable"
 
@@ -2140,6 +2144,19 @@ components:
             - $ref: "#/components/schemas/Money"
             - type: "null"
           description: Nulo quando não existe preço comercial atual para o item indisponível.
+        final_price:
+          oneOf:
+            - $ref: "#/components/schemas/Money"
+            - type: "null"
+          description: >
+            Preço convertido para a UF onde o cliente recebe. Nulo quando a conversão está
+            desligada (`CRM_WHATSAPP_ICMS_ENABLED`); nesse caso `base_price` é o valor a
+            exibir. Quando presente, é ele que deve ir ao cliente.
+        tax_rate:
+          oneOf:
+            - type: string
+            - type: "null"
+          description: Alíquota de destino aplicada, em porcentagem.
         expected_arrival_date:
           type: [string, "null"]
           format: date
@@ -2151,11 +2168,24 @@ components:
     CurrentPriceList:
       type: object
       required: [customer, price_list, items]
+      description: >
+        Tem dois regimes. Com a conversão desligada traz o catálogo da competência com
+        `base_price` e sem par de UFs — o formato que o Gateway consome desde F1. Ligada,
+        traz apenas os produtos preferidos do cliente, na ordem dele, com `final_price`
+        convertido para a UF da localidade padrão.
       properties:
         customer:
           $ref: "#/components/schemas/CustomerContact"
         price_list:
           $ref: "#/components/schemas/PriceListSummary"
+        origin_state:
+          type: [string, "null"]
+          pattern: "^[A-Z]{2}$"
+          description: UF do estabelecimento que fatura. Nulo com a conversão desligada.
+        destination_state:
+          type: [string, "null"]
+          pattern: "^[A-Z]{2}$"
+          description: UF da localidade padrão do cliente. Nulo com a conversão desligada.
         items:
           type: array
           items:

@@ -293,6 +293,10 @@ async def test_current_price_list_by_whatsapp_returns_structured_prices(client):
     body = response.json()
     assert body["customer"]["contact_id"]
     assert body["price_list"]["name"] == "Tabela especial"
+    # Com a conversão desligada a resposta não nomeia praça alguma, e o
+    # preço a exibir continua sendo `base_price`.
+    assert body["origin_state"] is None
+    assert body["destination_state"] is None
     assert body["items"] == [
         {
             "product_id": body["items"][0]["product_id"],
@@ -303,6 +307,8 @@ async def test_current_price_list_by_whatsapp_returns_structured_prices(client):
             "unit": "KG",
             "availability": "OUT_OF_STOCK",
             "base_price": None,
+            "final_price": None,
+            "tax_rate": None,
             "expected_arrival_date": None,
             "arrival_note": None,
             "notes": "PreÃ§o indisponÃ­vel na fonte",
@@ -316,6 +322,8 @@ async def test_current_price_list_by_whatsapp_returns_structured_prices(client):
             "unit": "KG",
             "availability": "AVAILABLE",
             "base_price": "12.0500",
+            "final_price": None,
+            "tax_rate": None,
             "expected_arrival_date": None,
             "arrival_note": None,
             "notes": None,

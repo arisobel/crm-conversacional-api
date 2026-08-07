@@ -95,6 +95,15 @@ houver decisão o sistema não apaga nada: o expurgo recusa rodar sem política.
 - [ ] Importação CSV pelo navegador, com prévia e divergências. Hoje a carga é
       por linha de comando, o que basta para uma pessoa carregando tabela.
 
+## Tabela do WhatsApp por cliente (implementada, desligada)
+
+- [x] Campos `final_price`, `tax_rate`, `origin_state` e `destination_state`, aditivos.
+- [x] Recorte por produtos preferidos e conversão de ICMS, reusando o serviço do R4.
+- [x] `409` e `422` distinguindo falha fiscal de contato desconhecido.
+- [x] Interruptor `CRM_WHATSAPP_ICMS_ENABLED`, padrão desligado.
+- [ ] Adaptar o formatador do Gateway para preferir `final_price` e tratar `409`/`422`.
+- [ ] **Ligar o interruptor só depois de Q1/Q2 confirmadas e da matriz carregada.**
+
 ## Pendências herdadas
 
 - [ ] Implementar idempotência por `event_id`.

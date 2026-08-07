@@ -30,3 +30,13 @@ class CustomerRepository:
     ) -> tuple[CustomerContact, Customer] | None:
         result = await self._session.execute(self._active_contact_query(tenant_slug, phone))
         return result.one_or_none()
+
+    async def get_tenant(self, tenant_slug: str) -> Tenant | None:
+        """Tenant ativo da implantação.
+
+        A conversão de ICMS precisa da UF de origem, que vive aqui; sem ela o
+        cálculo falha de propósito em vez de assumir uma praça.
+        """
+        return await self._session.scalar(
+            select(Tenant).where(Tenant.slug == tenant_slug, Tenant.active.is_(True))
+        )
