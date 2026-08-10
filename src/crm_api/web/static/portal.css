@@ -201,6 +201,76 @@ tr.detalhe span { color: var(--tinta-fraca); font-size: 12px; }
 .cartao-login form { display: flex; flex-direction: column; }
 .cartao-login button { margin-top: 20px; }
 
+/* ------------------------------------------------------------ combobox */
+
+.combobox { position: relative; display: inline-block; min-width: 320px; }
+.combobox select { width: 100%; }
+.combobox-entrada { width: 100%; }
+
+.combobox-lista {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--cartao);
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+}
+
+.combobox-item { padding: 8px 12px; cursor: pointer; font-size: 14px; }
+.combobox-item:hover, .combobox-item.destacado { background: var(--fundo); }
+.combobox-vazio { color: var(--tinta-fraca); cursor: default; }
+.combobox-criar {
+  border-top: 1px solid var(--linha);
+  margin-top: 4px;
+  color: var(--acento);
+  font-weight: 600;
+}
+
+.etiqueta {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--erro-fundo);
+  color: var(--erro);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* ---------------------------------------------------------------- modal */
+
+dialog.modal {
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  background: var(--cartao);
+  color: var(--tinta);
+  padding: 24px 28px;
+  width: min(520px, calc(100vw - 32px));
+}
+
+dialog.modal::backdrop { background: rgb(0 0 0 / 45%); }
+dialog.modal .formulario { max-width: none; }
+dialog.modal h2 { margin-top: 0; }
+dialog.modal .dica a { color: var(--acento); }
+
+.acoes-modal {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.acoes-modal button.link { margin: 0; }
+
 @media (prefers-color-scheme: dark) {
   :root {
     --tinta: #e6e8eb;

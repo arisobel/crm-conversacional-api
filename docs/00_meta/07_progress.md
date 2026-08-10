@@ -1,6 +1,6 @@
 # Progresso central
 
-Atualizado em: 2026-08-07
+Atualizado em: 2026-08-10
 
 ## Estado atual
 
@@ -117,6 +117,16 @@ vier de `price_entries`.
   `422` para falta de localidade, de UF de origem ou de competência.
   Os campos `final_price`, `tax_rate`, `origin_state` e `destination_state` são
   **aditivos**: um Gateway anterior continua lendo `base_price` e funcionando.
+
+- **R6c — cadastro de artigo pela ficha.** Sem migração. O `<select>` de
+  produtos preferidos virou um combobox com busca por nome, SKU e família,
+  insensível a acento, escrito sem dependência externa — a CSP é
+  `default-src 'self'` e nenhum CDN carregaria. Quando o artigo não aparece na
+  busca, a própria lista oferece cadastrá-lo: o produto entra no catálogo na
+  hora e o preço entra como item de um lote `DRAFT` da competência corrente,
+  que continua exigindo publicação (ADR-020). Restrito a `ADMIN` e `MANAGER`.
+  Sem JavaScript o `<select>` nativo continua funcionando e o formulário do
+  artigo aparece aberto na página.
 
 ## Em andamento
 

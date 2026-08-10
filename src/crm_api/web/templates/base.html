@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Portal{% endblock %} · CRM</title>
   <link rel="stylesheet" href="/portal/static/portal.css">
+  <!-- Sem JavaScript o modal não abre e o combobox não filtra. A folha abaixo
+       deixa o formulário do artigo aberto na página e o select nativo à mostra,
+       para que a tela continue inteira. Ela é um arquivo à parte porque a CSP
+       do portal não admite <style> embutido. -->
+  <noscript><link rel="stylesheet" href="/portal/static/portal-nojs.css"></noscript>
 </head>
 <body>
 {% if current_user %}
@@ -33,5 +38,6 @@
   {% if aviso %}<p class="aviso ok">{{ aviso }}</p>{% endif %}
   {% block conteudo %}{% endblock %}
 </main>
+<script src="/portal/static/portal.js" defer></script>
 </body>
 </html>

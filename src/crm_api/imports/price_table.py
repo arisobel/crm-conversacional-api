@@ -2,7 +2,7 @@ import argparse
 import asyncio
 import csv
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 
@@ -11,22 +11,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.core.config import get_settings
 from crm_api.core.database import create_session_factory
+from crm_api.core.numbers import parse_decimal as _decimal
 from crm_api.models.catalog import Product, ProductFamily
 from crm_api.models.customer import Tenant
-from crm_api.models.pricing import AvailabilityStatus, PriceList, PriceListItem, PriceListStatus
+from crm_api.models.pricing import (
+    NO_PRICE_AVAILABILITIES,
+    AvailabilityStatus,
+    PriceList,
+    PriceListItem,
+    PriceListStatus,
+)
 
-_AVAILABILITIES = {"AVAILABLE", "OUT_OF_STOCK", "SUSPENDED", "FUTURE_ARRIVAL", "CONSULT"}
-_NO_PRICE_AVAILABILITIES = {"OUT_OF_STOCK", "SUSPENDED", "CONSULT"}
-
-
-def _decimal(value: str, *, field: str) -> Decimal:
-    try:
-        normalized = value.strip()
-        if "," in normalized:
-            normalized = normalized.replace(".", "").replace(",", ".")
-        return Decimal(normalized)
-    except (AttributeError, InvalidOperation) as error:
-        raise ValueError(f"{field} must be a decimal") from error
+_AVAILABILITIES = {status.value for status in AvailabilityStatus}
+_NO_PRICE_AVAILABILITIES = {status.value for status in NO_PRICE_AVAILABILITIES}
 
 
 def _integer(value: str, *, field: str) -> int:

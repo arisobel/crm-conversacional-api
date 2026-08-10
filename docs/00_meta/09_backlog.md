@@ -95,6 +95,23 @@ houver decisão o sistema não apaga nada: o expurgo recusa rodar sem política.
 - [ ] Importação CSV pelo navegador, com prévia e divergências. Hoje a carga é
       por linha de comando, o que basta para uma pessoa carregando tabela.
 
+## R6c — Cadastro de artigo pela ficha (implementada)
+
+- [x] Combobox com busca por nome, SKU e família, insensível a acento, sem
+      dependência externa e degradando para o `<select>` nativo sem JavaScript.
+- [x] Modal de cadastro de artigo, restrito a `ADMIN` e `MANAGER`, aberto pela
+      própria busca quando o artigo não aparece.
+- [x] O artigo entra no catálogo e o preço entra como item de lote `DRAFT` da
+      competência corrente; publicar continua sendo um ato separado (ADR-020).
+- [x] Família nova ou existente, reaproveitada pelo nome.
+- [x] Marca "sem preço no mês" no preferido que ainda não tem entrada publicada.
+- [ ] Editar artigo já cadastrado — hoje só o cadastro existe; corrigir SKU ou
+      nome comercial ainda é SQL ou nova importação.
+- [ ] Corrigir o item do rascunho antes de publicar. Não há tela para isso nem
+      para cancelar o lote; um preço digitado errado hoje se corrige publicando
+      e republicando por cima, o que deixa a revisão registrada — funciona, mas
+      documenta um engano de digitação como mudança comercial.
+
 ## Tabela do WhatsApp por cliente (implementada, desligada)
 
 - [x] Campos `final_price`, `tax_rate`, `origin_state` e `destination_state`, aditivos.

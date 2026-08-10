@@ -44,6 +44,18 @@ class AvailabilityStatus(StrEnum):
     CONSULT = "CONSULT"
 
 
+# Disponibilidades em que o preço pode faltar: não há o que cotar, ou a cotação
+# é sob consulta. `FUTURE_ARRIVAL` fica de fora de propósito — mercadoria a
+# caminho é vendida, e vender sem preço é o que a regra evita.
+NO_PRICE_AVAILABILITIES = frozenset(
+    {
+        AvailabilityStatus.OUT_OF_STOCK,
+        AvailabilityStatus.SUSPENDED,
+        AvailabilityStatus.CONSULT,
+    }
+)
+
+
 class PriceList(Base):
     __tablename__ = "price_lists"
     __table_args__ = (UniqueConstraint("tenant_id", "name", "reference_month"),)

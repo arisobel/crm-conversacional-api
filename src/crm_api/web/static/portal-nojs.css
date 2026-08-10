@@ -1,0 +1,17 @@
+/* Carregada só dentro de <noscript>, no base.html.
+ *
+ * Sem JavaScript o `<dialog>` continua fechado — não há como chamar
+ * `showModal()` — e o botão que o abriria não faria nada. Aqui ele vira uma
+ * seção comum da página, aberta, para que cadastrar artigo continue possível.
+ * O combobox não precisa de nada: o `<select>` nativo já é o campo real, e é
+ * o JavaScript que o esconde. */
+
+dialog.modal {
+  display: block;
+  position: static;
+  width: auto;
+  margin: 18px 0 0;
+}
+
+/* O botão de abrir e o de cancelar não têm função sem o modal. */
+[data-abre], [data-fecha] { display: none; }

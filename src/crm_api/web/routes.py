@@ -19,11 +19,14 @@ from crm_api.api.authentication import CurrentUser, build_auth_service
 from crm_api.api.scoping import scope_for
 from crm_api.core.config import Settings
 from crm_api.core.database import get_session
+from crm_api.core.numbers import InvalidDecimal, parse_decimal
 from crm_api.core.passwords import WeakPassword
 from crm_api.core.states import InvalidStateCode, normalize_state_code
+from crm_api.models.pricing import AvailabilityStatus
 from crm_api.models.tax import IcmsRule
 from crm_api.models.user import User, UserRole
 from crm_api.repositories.audit import AuditRepository
+from crm_api.repositories.catalog import CatalogRepository
 from crm_api.repositories.customer_admin import CustomerAdminRepository
 from crm_api.repositories.icms import IcmsRuleRepository
 from crm_api.repositories.interactions import InteractionRepository
@@ -35,6 +38,15 @@ from crm_api.repositories.price_entries import PriceEntryRepository
 from crm_api.repositories.price_lists import PriceListRepository
 from crm_api.repositories.users import SessionRepository, UserRepository
 from crm_api.services.auth import AuthenticationFailed, normalize_email
+from crm_api.services.catalog import (
+    BasePriceRequired,
+    CatalogService,
+    DuplicateSku,
+    FamilyNotFound,
+    FamilyRequired,
+    IncompleteArticle,
+    InvalidBasePrice,
+)
 from crm_api.services.customer_admin import (
     ContactNotFound,
     CustomerAdminService,
@@ -102,6 +114,13 @@ _CODIGOS: list[tuple[type[Exception], str]] = [
     (UserNotFound, "nao-encontrado"),
     (PreferredProductNotFound, "nao-encontrado"),
     (BatchNotFound, "nao-encontrado"),
+    (FamilyNotFound, "nao-encontrado"),
+    (IncompleteArticle, "artigo-incompleto"),
+    (DuplicateSku, "sku-duplicado"),
+    (FamilyRequired, "familia-obrigatoria"),
+    (BasePriceRequired, "preco-obrigatorio"),
+    (InvalidBasePrice, "preco-invalido"),
+    (InvalidDecimal, "preco-invalido"),
     (InvalidStateCode, "uf-invalida"),
     (DuplicateDocument, "documento-duplicado"),
     (DuplicateWhatsapp, "telefone-duplicado"),
@@ -181,6 +200,10 @@ def _admin_service(request: Request, session: AsyncSession) -> CustomerAdminServ
         admin=CustomerAdminRepository(session),
         audit=AuditRepository(session),
     )
+
+
+def _catalog_service(session: AsyncSession) -> CatalogService:
+    return CatalogService(catalog=CatalogRepository(session), audit=AuditRepository(session))
 
 
 def _portfolio_service(session: AsyncSession) -> PortfolioService:
@@ -465,6 +488,25 @@ async def pagina_cliente(
     )
     preferidos = await servico.list_preferred_products(escopo, customer_id)
     ja_preferidos = {produto.id for _, produto, _ in preferidos}
+
+    # Um preferido sem preço na competência simplesmente não sai na lista, e
+    # sem aviso ninguém descobre por quê — é o que acontece com o artigo que
+    # acabou de ser cadastrado e cujo lote ainda não foi publicado.
+    entradas = PriceEntryRepository(session)
+    competencia = await entradas.latest_month(
+        current_user.tenant_id, at=datetime.now(UTC).date()
+    )
+    com_preco = (
+        {
+            entrada.product_id
+            for entrada, _, _ in await entradas.list_items_for_products(
+                current_user.tenant_id, competencia, list(ja_preferidos)
+            )
+        }
+        if competencia
+        else set()
+    )
+
     return _render(
         request,
         "customer_detail.html",
@@ -481,6 +523,11 @@ async def pagina_cliente(
                 )
                 if produto.id not in ja_preferidos
             ],
+            "familias": await CatalogRepository(session).list_families(current_user.tenant_id)
+            if pode_gerir
+            else [],
+            "competencia": competencia,
+            "sem_preco": ja_preferidos - com_preco,
             "interacoes": interacoes,
             "total_interacoes": total_interacoes,
             "timeline_truncada": total_interacoes > len(interacoes),
@@ -877,6 +924,79 @@ async def salvar_preferido(
 
     await session.commit()
     return _redirect(destino, "preferido-salvo")
+
+
+@router.post("/customers/{customer_id}/articles", include_in_schema=False)
+async def cadastrar_artigo(
+    request: Request,
+    customer_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    sku: Annotated[str, Form()],
+    commercial_name: Annotated[str, Form()],
+    availability: Annotated[str, Form()] = AvailabilityStatus.AVAILABLE.value,
+    family_id: _CustomerForm = None,
+    family_name: _CustomerForm = None,
+    specification: _CustomerForm = None,
+    unit: _CustomerForm = None,
+    base_price: _CustomerForm = None,
+    customer_alias: _CustomerForm = None,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    """Cria o artigo e o inclui entre os preferidos do cliente, na mesma transação.
+
+    As duas coisas andam juntas porque é uma operação só do ponto de vista de
+    quem está na tela: o artigo foi cadastrado *porque* faltava para este
+    cliente. Cadastrar sem incluir deixaria o usuário repetindo o passo que ele
+    já tinha começado.
+    """
+    destino = f"/portal/customers/{customer_id}"
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+    if current_user.role not in _MANAGEMENT_ROLES:
+        return _redirect(destino, "sem-permissao")
+
+    try:
+        preco = (
+            parse_decimal(base_price, field="base_price")
+            if base_price and base_price.strip()
+            else None
+        )
+        disponibilidade = AvailabilityStatus(availability)
+        familia = uuid.UUID(family_id) if family_id else None
+    except (InvalidDecimal, ValueError) as error:
+        await session.rollback()
+        return _redirect(
+            destino, "preco-invalido" if isinstance(error, InvalidDecimal) else "artigo-invalido"
+        )
+
+    try:
+        criado = await _catalog_service(session).create_article(
+            tenant_id=current_user.tenant_id,
+            actor_user_id=current_user.user_id,
+            sku=sku,
+            commercial_name=commercial_name,
+            family_id=familia,
+            family_name=family_name,
+            specification=specification,
+            unit=unit or "KG",
+            base_price=preco,
+            availability=disponibilidade,
+            request_id=request.headers.get("x-request-id"),
+        )
+        await _admin_service(request, session).add_preferred_product(
+            scope_for(current_user),
+            customer_id,
+            actor_user_id=current_user.user_id,
+            product_id=criado.product.id,
+            customer_alias=customer_alias,
+        )
+    except Exception as error:  # noqa: BLE001
+        await session.rollback()
+        return _redirect(destino, _codigo_do_erro(error))
+
+    await session.commit()
+    return _redirect(destino, "artigo-cadastrado")
 
 
 # ----------------------------------------------------- lista de preço

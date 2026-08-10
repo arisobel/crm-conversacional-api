@@ -23,6 +23,12 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
     "usuario-salvo": ("ok", "Usuário atualizado."),
     "preferido-adicionado": ("ok", "Produto incluído entre os preferidos."),
     "preferido-salvo": ("ok", "Preferências atualizadas."),
+    "artigo-cadastrado": (
+        "ok",
+        "Artigo cadastrado e incluído entre os preferidos. O preço entrou como "
+        "rascunho na tabela do mês: publique o lote em Tabelas para ele passar "
+        "a valer.",
+    ),
     "lote-publicado": ("ok", "Tabela publicada na competência."),
     "regra-criada": ("ok", "Regra de ICMS cadastrada."),
     # falhas de validação
@@ -51,6 +57,23 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
     ),
     "preferido-duplicado": ("erro", "Esse produto já está entre os preferidos."),
     "produto-inexistente": ("erro", "Produto não encontrado no catálogo."),
+    "artigo-incompleto": ("erro", "Informe o SKU e o nome comercial do artigo."),
+    "artigo-invalido": ("erro", "Dados do artigo inválidos. Refaça o cadastro pela tela."),
+    "sku-duplicado": (
+        "erro",
+        "Já existe um artigo com esse SKU. Procure-o na busca em vez de "
+        "cadastrar outro.",
+    ),
+    "familia-obrigatoria": (
+        "erro",
+        "Escolha uma família existente ou informe o nome de uma nova.",
+    ),
+    "preco-obrigatorio": (
+        "erro",
+        "Informe o preço-base, ou mude a disponibilidade para sem estoque, "
+        "suspenso ou sob consulta.",
+    ),
+    "preco-invalido": ("erro", "Preço inválido. Use números, como 12,34."),
     "lote-nao-publicavel": (
         "erro",
         "Este lote está cancelado ou expirado e não pode ser publicado.",

@@ -257,3 +257,34 @@ Junto com isso, todo resposta passa a carregar `Content-Security-Policy` com
 `Referrer-Policy: same-origin`. O portal não carrega script nem estilo de fora,
 então a política pode ser restritiva sem quebrar nada — e o dia em que alguém
 introduzir um CDN, a CSP vai avisar antes de o usuário descobrir.
+
+## ADR-020 — Artigo cadastrado pela tela entra como rascunho, não como preço vigente
+
+**Status:** aceita em 2026-08-10. Aplica o ADR-009 à ficha do cliente.
+
+A ficha do cliente passa a cadastrar artigo que não existe no catálogo. O
+produto entra em `products` na hora; o preço entra como `price_list_items` de um
+lote `DRAFT` da competência corrente, e **só vale depois que alguém publicar o
+lote** em `/portal/prices`.
+
+Gravar direto em `price_entries` seria um clique a menos e foi recusado por dois
+motivos concretos. O primeiro é alcance: `price_entries` é o que a rota consumida
+pelo Gateway lê, então um preço digitado numa caixa de texto passaria a ser
+servido no mesmo segundo, sem ninguém conferir. O segundo é rastreabilidade: a
+revisão de preço guarda `source_batch_id`, e uma entrada sem lote de origem
+deixaria a trilha do R3 com um buraco exatamente nas linhas criadas à mão.
+
+O lote tem nome fixo — `Inclusões pelo portal` — que, com a competência, forma a
+chave `(tenant, nome, competência)`. Assim o segundo artigo do mês cai no mesmo
+lote: publicar cinquenta lotes de uma linha cada não é revisão, é ruído. Quando
+o lote do mês já foi publicado, abre-se `Inclusões pelo portal (2)`, porque um
+lote publicado que recebe item novo passa a mentir sobre o próprio estado.
+
+Consequência aceita: entre cadastrar e publicar, o artigo é preferido do cliente
+e **não aparece** na lista de preço dele — `list_items_for_products` só devolve o
+que tem entrada na competência. Como a omissão é silenciosa por construção, a
+ficha marca esses preferidos com "sem preço no mês" em vez de deixar o usuário
+descobrir sozinho.
+
+Criar artigo é privilégio de `ADMIN` e `MANAGER`, os mesmos papéis que já
+transferem titular. O representante continua escolhendo entre o que existe.

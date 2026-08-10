@@ -152,7 +152,12 @@
     <tbody>
       {% for preferencia, produto, familia in preferidos %}
       <tr>
-        <td>{{ produto.sku }} · {{ produto.commercial_name }}</td>
+        <td>
+          {{ produto.sku }} · {{ produto.commercial_name }}
+          {% if competencia and preferencia.active and produto.id in sem_preco %}
+          <span class="etiqueta" title="Sem preço em {{ competencia.strftime('%m/%Y') }}: publique o lote da tabela do mês para ele entrar na lista.">sem preço no mês</span>
+          {% endif %}
+        </td>
         <td>{{ familia.name }}</td>
         <td>{{ preferencia.customer_alias or '—' }}</td>
         <td>{% if preferencia.active %}ativo{% else %}<span class="vazio">retirado</span>{% endif %}</td>
@@ -180,14 +185,84 @@
   {% if catalogo %}
   <form method="post" action="/portal/customers/{{ cliente.id }}/preferred" class="formulario-linha">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <select name="product_id" required>
-      {% for produto, familia in catalogo %}
-      <option value="{{ produto.id }}">{{ familia.name }} · {{ produto.commercial_name }} ({{ produto.sku }})</option>
-      {% endfor %}
-    </select>
+    <div class="combobox"
+         data-combobox
+         data-rotulo="Buscar artigo por nome ou SKU…"
+         {% if pode_gerir %}data-modal="modal-artigo" data-campo-nome="artigo-nome"{% endif %}>
+      <select name="product_id" required aria-label="Produto">
+        <option value="">Selecione um produto…</option>
+        {% for produto, familia in catalogo %}
+        <option value="{{ produto.id }}">{{ familia.name }} · {{ produto.commercial_name }} ({{ produto.sku }})</option>
+        {% endfor %}
+      </select>
+    </div>
     <input type="text" name="customer_alias" placeholder="Como o cliente chama (opcional)">
     <button type="submit">Incluir preferido</button>
   </form>
+  {% endif %}
+
+  {% if pode_gerir %}
+  <p class="dica">
+    Artigo que ainda não existe no catálogo?
+    <button type="button" class="link" data-abre="modal-artigo">Cadastrar artigo</button>
+  </p>
+
+  <dialog id="modal-artigo" class="modal">
+    <form method="post" action="/portal/customers/{{ cliente.id }}/articles" class="formulario">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h2>Cadastrar artigo</h2>
+      <p class="dica">
+        O artigo entra no catálogo agora e o preço entra como rascunho na
+        competência corrente. Ele só passa a valer depois que o lote for
+        publicado em <a href="/portal/prices">Tabelas</a> — nada chega ao
+        cliente antes disso.
+      </p>
+
+      <label for="artigo-nome">Nome comercial</label>
+      <input type="text" id="artigo-nome" name="commercial_name" required maxlength="200">
+
+      <label for="artigo-sku">SKU</label>
+      <input type="text" id="artigo-sku" name="sku" required maxlength="60">
+
+      <label for="artigo-familia">Família</label>
+      <select id="artigo-familia" name="family_id" data-alterna="artigo-familia-nova">
+        {% for familia in familias %}
+        <option value="{{ familia.id }}">{{ familia.name }}</option>
+        {% endfor %}
+        <option value="">— nova família —</option>
+      </select>
+      <input type="text" id="artigo-familia-nova" name="family_name"
+             placeholder="Nome da família nova" maxlength="120">
+
+      <label for="artigo-especificacao">Especificação (opcional)</label>
+      <input type="text" id="artigo-especificacao" name="specification" maxlength="200">
+
+      <label for="artigo-unidade">Unidade</label>
+      <input type="text" id="artigo-unidade" name="unit" value="KG" maxlength="10">
+
+      <label for="artigo-disponibilidade">Disponibilidade</label>
+      <select id="artigo-disponibilidade" name="availability">
+        <option value="AVAILABLE">disponível</option>
+        <option value="FUTURE_ARRIVAL">chegada prevista</option>
+        <option value="OUT_OF_STOCK">sem estoque</option>
+        <option value="SUSPENDED">suspenso</option>
+        <option value="CONSULT">sob consulta</option>
+      </select>
+
+      <label for="artigo-preco">Preço-base (R$)</label>
+      <input type="text" id="artigo-preco" name="base_price" inputmode="decimal"
+             placeholder="12,34">
+      <span class="dica">
+        Obrigatório, exceto quando a disponibilidade for sem estoque, suspenso
+        ou sob consulta.
+      </span>
+
+      <div class="acoes-modal">
+        <button type="submit">Cadastrar e incluir</button>
+        <button type="button" class="link" data-fecha="modal-artigo">Cancelar</button>
+      </div>
+    </form>
+  </dialog>
   {% endif %}
 </section>
 
