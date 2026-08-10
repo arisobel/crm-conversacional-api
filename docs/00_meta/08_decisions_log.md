@@ -288,3 +288,43 @@ descobrir sozinho.
 
 Criar artigo é privilégio de `ADMIN` e `MANAGER`, os mesmos papéis que já
 transferem titular. O representante continua escolhendo entre o que existe.
+
+## ADR-021 — O cadastro é dono do nome do artigo; a planilha do mês, do preço
+
+**Status:** aceita em 2026-08-10. Revisa o comportamento de importação do F1 e
+completa a Fase C do backlog administrativo.
+
+`/portal/products` passa a manter o catálogo: criar, editar e desativar artigo,
+e criar, renomear, reordenar e desativar família. Isso cria uma divisão que não
+existia enquanto o CSV era o único caminho de entrada — e ela precisa ser
+explícita, porque as duas fontes descrevem o mesmo artigo.
+
+**O cadastro é dono de nome comercial e especificação.** O importador deixa de
+abortar quando a planilha traz um nome diferente do gravado: ele mantém o do
+cadastro e lista as divergências no fim da execução. O comportamento anterior
+— `existing product conflicts with CSV` derrubando a importação inteira — só
+fazia sentido quando ninguém podia editar pela tela; com a tela, ele passaria a
+quebrar a carga mensal por causa de uma correção de redação. Sobrescrever com o
+valor do CSV foi recusado por ser a única das três opções que perde trabalho em
+silêncio.
+
+**A família continua abortando.** Ela não é redação. Um SKU que muda de família
+quase sempre é SKU reaproveitado para outro produto, e nesse caso todo o
+histórico de preço passaria a pertencer ao artigo errado.
+
+**O SKU trava no primeiro preço publicado.** Antes disso ele é editável, porque
+corrigir um SKU recém-digitado é comum. Depois, não: o SKU é a coluna pela qual
+a planilha reencontra o artigo, e trocá-lo faria a importação seguinte criar um
+segundo artigo com o SKU antigo — o catálogo duplicaria sem ninguém ver. A tela
+mostra o campo travado com o motivo, em vez de aceitar e falhar depois.
+
+**Desativar artigo não desfaz preferência de cliente.** `Product.active` é
+filtrado na tabela do mês e na lista do representante, então desativar tira o
+artigo da circulação; a preferência fica guardada e volta inteira na reativação.
+Como a consequência é invisível na ficha, ela passa a ser marcada lá — mesma
+decisão que produziu o aviso de "sem preço no mês" no ADR-020.
+
+Consequência aceita: nome comercial e especificação podem divergir entre o
+cadastro e a planilha indefinidamente, e só quem lê a saída da importação fica
+sabendo. A alternativa seria uma tela de conciliação, que não se justifica
+enquanto uma pessoa carrega a tabela.

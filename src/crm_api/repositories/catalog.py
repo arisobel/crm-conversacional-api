@@ -1,13 +1,48 @@
 """Catálogo de artigos e o lote de rascunho que recebe inclusões pelo portal."""
 
 import uuid
+from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from crm_api.models.catalog import Product, ProductFamily
-from crm_api.models.pricing import PriceList, PriceListItem, PriceListStatus
+from crm_api.models.catalog import CustomerPreferredProduct, Product, ProductFamily
+from crm_api.models.pricing import (
+    AvailabilityStatus,
+    PriceEntry,
+    PriceList,
+    PriceListItem,
+    PriceListStatus,
+)
+
+
+@dataclass(frozen=True)
+class ProductFilters:
+    """Recortes da tela de catálogo. Nenhum deles altera o escopo de tenant."""
+
+    search: str | None = None
+    family_id: uuid.UUID | None = None
+    # `None` traz ativos e inativos; a tela precisa dos dois para reativar.
+    active: bool | None = True
+    # Só artigos sem preço na competência — é como se acha o que ficou de fora
+    # da tabela do mês.
+    without_price: bool = False
+
+
+@dataclass(frozen=True)
+class ProductRow:
+    """Linha da lista: o artigo, sua família e o preço da competência."""
+
+    product: Product
+    family: ProductFamily
+    base_price: Decimal | None
+    availability: AvailabilityStatus | None
+    preferred_by: int
+    # Se alguma competência já publicou este artigo — em qualquer mês, não só no
+    # corrente. É o que trava o SKU na edição.
+    has_published_price: bool
 
 
 class CatalogRepository:
@@ -16,14 +51,35 @@ class CatalogRepository:
 
     # ------------------------------------------------------------- famílias
 
-    async def list_families(self, tenant_id: uuid.UUID) -> list[ProductFamily]:
+    async def list_families(
+        self, tenant_id: uuid.UUID, *, active: bool | None = True
+    ) -> list[ProductFamily]:
+        statement = select(ProductFamily).where(ProductFamily.tenant_id == tenant_id)
+        if active is not None:
+            statement = statement.where(ProductFamily.active.is_(active))
         return list(
             await self._session.scalars(
-                select(ProductFamily)
-                .where(ProductFamily.tenant_id == tenant_id, ProductFamily.active.is_(True))
-                .order_by(ProductFamily.display_order, ProductFamily.name)
+                statement.order_by(ProductFamily.display_order, ProductFamily.name)
             )
         )
+
+    async def count_products_by_family(self, tenant_id: uuid.UUID) -> dict[uuid.UUID, int]:
+        result = await self._session.execute(
+            select(Product.family_id, func.count(Product.id))
+            .where(Product.tenant_id == tenant_id, Product.active.is_(True))
+            .group_by(Product.family_id)
+        )
+        return {family_id: total for family_id, total in result.all()}
+
+    async def family_name_taken(
+        self, tenant_id: uuid.UUID, name: str, *, excluding: uuid.UUID | None = None
+    ) -> bool:
+        statement = select(ProductFamily.id).where(
+            ProductFamily.tenant_id == tenant_id, ProductFamily.name == name
+        )
+        if excluding is not None:
+            statement = statement.where(ProductFamily.id != excluding)
+        return await self._session.scalar(statement) is not None
 
     async def get_family(
         self, tenant_id: uuid.UUID, family_id: uuid.UUID
@@ -58,16 +114,115 @@ class CatalogRepository:
 
     # ------------------------------------------------------------- produtos
 
-    async def sku_exists(self, tenant_id: uuid.UUID, sku: str) -> bool:
+    async def sku_exists(
+        self, tenant_id: uuid.UUID, sku: str, *, excluding: uuid.UUID | None = None
+    ) -> bool:
         """Inclui o produto inativo: o SKU é único no banco por tenant.
 
         Um SKU desativado ainda ocupa a chave, e deixar a tela tentar gravar
         devolveria violação de índice no lugar de "já existe esse SKU".
         """
+        statement = select(Product.id).where(
+            Product.tenant_id == tenant_id, Product.sku == sku
+        )
+        if excluding is not None:
+            statement = statement.where(Product.id != excluding)
+        return await self._session.scalar(statement) is not None
+
+    async def get_product(self, tenant_id: uuid.UUID, product_id: uuid.UUID) -> Product | None:
+        return await self._session.scalar(
+            select(Product).where(Product.tenant_id == tenant_id, Product.id == product_id)
+        )
+
+    async def has_published_price(self, tenant_id: uuid.UUID, product_id: uuid.UUID) -> bool:
+        """Se o artigo já foi publicado alguma vez, o SKU virou chave externa.
+
+        Não é chave no sentido do banco: é a coluna pela qual a planilha do mês
+        reencontra o artigo. Trocá-la depois faria a próxima importação criar um
+        segundo artigo com o SKU antigo, e ninguém veria o catálogo duplicar.
+        """
         found = await self._session.scalar(
-            select(Product.id).where(Product.tenant_id == tenant_id, Product.sku == sku)
+            select(PriceEntry.id).where(
+                PriceEntry.tenant_id == tenant_id, PriceEntry.product_id == product_id
+            )
         )
         return found is not None
+
+    async def list_products(
+        self, tenant_id: uuid.UUID, filters: ProductFilters, *, month: date | None = None
+    ) -> list[ProductRow]:
+        """Artigos com família, preço da competência e quantos clientes os preferem.
+
+        O preço entra por `outerjoin`: artigo sem entrada na competência é
+        exatamente o caso que a tela precisa mostrar, não esconder.
+        """
+        preferidos = (
+            select(
+                CustomerPreferredProduct.product_id.label("product_id"),
+                func.count(CustomerPreferredProduct.id).label("total"),
+            )
+            .where(CustomerPreferredProduct.active.is_(True))
+            .group_by(CustomerPreferredProduct.product_id)
+            .subquery()
+        )
+
+        publicados = (
+            select(PriceEntry.product_id.label("product_id"))
+            .where(PriceEntry.tenant_id == tenant_id)
+            .group_by(PriceEntry.product_id)
+            .subquery()
+        )
+
+        statement = (
+            select(
+                Product,
+                ProductFamily,
+                PriceEntry.base_price,
+                PriceEntry.availability,
+                func.coalesce(preferidos.c.total, 0),
+                publicados.c.product_id.is_not(None),
+            )
+            .join(ProductFamily, ProductFamily.id == Product.family_id)
+            .outerjoin(
+                PriceEntry,
+                (PriceEntry.product_id == Product.id)
+                & (PriceEntry.reference_month == month)
+                & (PriceEntry.tenant_id == tenant_id),
+            )
+            .outerjoin(preferidos, preferidos.c.product_id == Product.id)
+            .outerjoin(publicados, publicados.c.product_id == Product.id)
+            .where(Product.tenant_id == tenant_id)
+            .order_by(ProductFamily.display_order, Product.commercial_name, Product.sku)
+        )
+
+        if filters.active is not None:
+            statement = statement.where(Product.active.is_(filters.active))
+        if filters.family_id is not None:
+            statement = statement.where(Product.family_id == filters.family_id)
+        if filters.without_price:
+            statement = statement.where(PriceEntry.id.is_(None))
+        if filters.search:
+            alvo = f"%{filters.search.strip().lower()}%"
+            statement = statement.where(
+                or_(
+                    func.lower(Product.sku).like(alvo),
+                    func.lower(Product.commercial_name).like(alvo),
+                    func.lower(func.coalesce(Product.specification, "")).like(alvo),
+                )
+            )
+
+        result = await self._session.execute(statement)
+        return [
+            ProductRow(
+                product=produto,
+                family=familia,
+                base_price=preco,
+                availability=disponibilidade,
+                preferred_by=total,
+                has_published_price=bool(publicado),
+            )
+            for produto, familia, preco, disponibilidade, total, publicado in result.tuples()
+        ]
 
     # ----------------------------------------------------- lote de rascunho
 

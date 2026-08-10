@@ -31,6 +31,26 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
     ),
     "lote-publicado": ("ok", "Tabela publicada na competência."),
     "regra-criada": ("ok", "Regra de ICMS cadastrada."),
+    "artigo-criado": (
+        "ok",
+        "Artigo cadastrado no catálogo. Ele ainda não tem preço: o preço chega "
+        "pela importação da tabela do mês, ou por aqui, informando a "
+        "disponibilidade.",
+    ),
+    "artigo-com-rascunho": (
+        "ok",
+        "Artigo cadastrado. O preço entrou como rascunho na tabela do mês: "
+        "publique o lote em Tabelas para ele passar a valer.",
+    ),
+    "artigo-salvo": ("ok", "Artigo atualizado."),
+    "artigo-ativado": ("ok", "Artigo reativado; ele volta à tabela do mês."),
+    "artigo-desativado": (
+        "ok",
+        "Artigo desativado. Ele sai da tabela do mês e da lista dos "
+        "representantes; as preferências dos clientes ficam guardadas.",
+    ),
+    "familia-criada": ("ok", "Família cadastrada."),
+    "familia-salva": ("ok", "Família atualizada."),
     # falhas de validação
     "uf-invalida": ("erro", "UF inválida. Use uma das 27 unidades federativas."),
     "documento-duplicado": ("erro", "Já existe um cliente com esse documento."),
@@ -74,6 +94,14 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
         "suspenso ou sob consulta.",
     ),
     "preco-invalido": ("erro", "Preço inválido. Use números, como 12,34."),
+    "familia-duplicada": ("erro", "Já existe uma família com esse nome."),
+    "ordem-invalida": ("erro", "A ordem de exibição precisa ser um número inteiro."),
+    "sku-travado": (
+        "erro",
+        "Este artigo já tem preço publicado, e o SKU é a coluna pela qual a "
+        "planilha do mês o reencontra: trocá-lo faria a próxima importação "
+        "criar um artigo duplicado. Desative este e cadastre outro.",
+    ),
     "lote-nao-publicavel": (
         "erro",
         "Este lote está cancelado ou expirado e não pode ser publicado.",

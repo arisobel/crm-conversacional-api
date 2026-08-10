@@ -128,6 +128,18 @@ vier de `price_entries`.
   Sem JavaScript o `<select>` nativo continua funcionando e o formulário do
   artigo aparece aberto na página.
 
+- **R6d — catálogo de produtos.** Sem migração. `/portal/products` passa a
+  manter o catálogo que antes só nascia por CSV: lista com filtros, cadastro
+  com preço opcional, edição de nome, especificação, unidade e família,
+  desativação lógica, e CRUD de famílias com a ordem que agrupa a tabela do
+  WhatsApp. Fecha a Fase C do backlog administrativo, pendente desde F1.
+
+  A decisão que essa tela força está no ADR-021: com duas fontes descrevendo o
+  mesmo artigo, **o cadastro é dono do nome** e a planilha do preço. O
+  importador deixa de abortar por nome divergente — mantém o do cadastro e
+  reporta as divergências — e o SKU trava no primeiro preço publicado, porque é
+  por ele que a planilha reencontra o artigo.
+
 ## Em andamento
 
 - Nada em implementação. O plano F5 está concluído do lado do CRM.

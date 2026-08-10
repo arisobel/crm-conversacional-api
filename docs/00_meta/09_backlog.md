@@ -105,12 +105,34 @@ houver decisão o sistema não apaga nada: o expurgo recusa rodar sem política.
       competência corrente; publicar continua sendo um ato separado (ADR-020).
 - [x] Família nova ou existente, reaproveitada pelo nome.
 - [x] Marca "sem preço no mês" no preferido que ainda não tem entrada publicada.
-- [ ] Editar artigo já cadastrado — hoje só o cadastro existe; corrigir SKU ou
-      nome comercial ainda é SQL ou nova importação.
+- [x] Editar artigo já cadastrado — entregue em R6d.
 - [ ] Corrigir o item do rascunho antes de publicar. Não há tela para isso nem
       para cancelar o lote; um preço digitado errado hoje se corrige publicando
       e republicando por cima, o que deixa a revisão registrada — funciona, mas
       documenta um engano de digitação como mudança comercial.
+
+## R6d — Catálogo de produtos (implementada)
+
+Fase C do [backlog administrativo](../40_delivery/ADMIN_INTERFACE_BACKLOG.md),
+que estava pendente desde F1. Sem migração.
+
+- [x] `/portal/products`: lista com SKU, nome, especificação, família, unidade,
+      preço da competência, quantos clientes preferem e situação.
+- [x] Filtros por busca textual, família, situação e "só sem preço no mês".
+- [x] Cadastro de artigo com preço **opcional** — diferente do modal da ficha,
+      aqui o artigo sem preço é caso normal.
+- [x] Edição de nome, especificação, unidade e família.
+- [x] SKU editável só enquanto não houver preço publicado (ADR-021).
+- [x] Ativação e desativação lógica, preservando as preferências dos clientes.
+- [x] CRUD de famílias com ordem de exibição, que é o agrupamento da tabela do
+      WhatsApp — antes só mudava por SQL.
+- [x] Importação de CSV deixa de abortar por nome divergente: mantém o cadastro
+      e reporta as divergências (ADR-021).
+- [x] Marca "artigo desativado" no preferido, na ficha do cliente.
+- [ ] Prévia da linguagem que o WhatsApp exibirá para cada produto — item da
+      Fase C que continua fora.
+- [ ] Reordenar artigo dentro da família pela tela; hoje a ordem do item vem do
+      `display_order` da planilha.
 
 ## Tabela do WhatsApp por cliente (implementada, desligada)
 

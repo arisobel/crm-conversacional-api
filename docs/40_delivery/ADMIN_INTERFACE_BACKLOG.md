@@ -47,10 +47,13 @@ idempotente e auditável do Gateway, sem acessar o MySQL diretamente.
 
 ## Fase C — Catálogo e preferências
 
-- CRUD de famílias e produtos com SKU único, especificação e unidade.
-- Ativação/desativação lógica de catálogo.
-- Produtos preferenciais, alias e ordem por cliente.
-- Prévia da linguagem que o WhatsApp exibirá para cada produto.
+> **Entregue em 2026-08-10 como R6c e R6d**, exceto a prévia da linguagem do
+> WhatsApp. Ver ADR-020 e ADR-021.
+
+- [x] CRUD de famílias e produtos com SKU único, especificação e unidade.
+- [x] Ativação/desativação lógica de catálogo.
+- [x] Produtos preferenciais, alias e ordem por cliente.
+- [ ] Prévia da linguagem que o WhatsApp exibirá para cada produto.
 
 ## Fase D — Tabelas de preço
 

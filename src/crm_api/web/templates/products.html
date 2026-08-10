@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}Produtos{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Produtos</h1>
+  <div class="acoes-cabecalho">
+    <button type="button" class="link" data-abre="modal-produto">Novo artigo</button>
+    <button type="button" class="link" data-abre="modal-familia">Nova família</button>
+  </div>
+</div>
+
+<section class="painel">
+  <h2>Catálogo</h2>
+  <p class="dica">
+    Este é o cadastro do artigo: SKU, nome, especificação e família. O preço não
+    mora aqui — ele pertence à
+    {% if competencia %}competência {{ competencia.strftime('%m/%Y') }}{% else %}tabela do mês{% endif %},
+    em <a href="/portal/prices">Tabelas</a>. A coluna de preço abaixo é leitura.
+  </p>
+
+  <form method="get" class="filtros">
+    <input type="search" name="busca" value="{{ busca }}" placeholder="SKU, nome ou especificação">
+    <select name="familia">
+      <option value="">Todas as famílias</option>
+      {% for f in familias %}
+      <option value="{{ f.id }}" {% if familia_escolhida == f.id|string %}selected{% endif %}>
+        {{ f.name }}{% if not f.active %} (inativa){% endif %}
+      </option>
+      {% endfor %}
+    </select>
+    <select name="situacao">
+      <option value="ativos" {% if situacao == 'ativos' %}selected{% endif %}>Ativos</option>
+      <option value="inativos" {% if situacao == 'inativos' %}selected{% endif %}>Inativos</option>
+      <option value="todos" {% if situacao == 'todos' %}selected{% endif %}>Todos</option>
+    </select>
+    <label class="inline">
+      <input type="checkbox" name="sem_preco" value="1" {% if sem_preco %}checked{% endif %}>
+      só sem preço no mês
+    </label>
+    <button type="submit">Filtrar</button>
+  </form>
+
+  {% if linhas %}
+  <table>
+    <thead>
+      <tr>
+        <th>SKU</th>
+        <th>Nome comercial</th>
+        <th>Família</th>
+        <th>Un.</th>
+        <th class="numero">Preço no mês</th>
+        <th class="numero">Preferido por</th>
+        <th>Situação</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for linha in linhas %}
+      {% set produto = linha.product %}
+      <tr>
+        <td>{{ produto.sku }}</td>
+        <td>
+          {{ produto.commercial_name }}
+          {% if produto.specification %}
+          <span class="especificacao">{{ produto.specification }}</span>
+          {% endif %}
+        </td>
+        <td>{{ linha.family.name }}</td>
+        <td>{{ produto.unit }}</td>
+        <td class="numero">
+          {%- if linha.base_price is not none -%}
+          {{ linha.base_price }}
+          {%- else -%}
+          <span class="etiqueta neutra">sem preço</span>
+          {%- endif -%}
+        </td>
+        <td class="numero">
+          {%- if linha.preferred_by -%}{{ linha.preferred_by }}{%- else -%}
+          <span class="vazio">—</span>{%- endif -%}
+        </td>
+        <td>{% if produto.active %}ativo{% else %}<span class="vazio">inativo</span>{% endif %}</td>
+        <td class="acoes">
+          <form method="post" action="/portal/products/{{ produto.id }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="busca" value="{{ busca }}">
+            <input type="hidden" name="familia" value="{{ familia_escolhida }}">
+            <input type="hidden" name="situacao" value="{{ situacao }}">
+            {% if produto.active %}
+            <button type="submit" name="acao" value="desativar" class="link">desativar</button>
+            {% else %}
+            <button type="submit" name="acao" value="ativar" class="link">reativar</button>
+            {% endif %}
+          </form>
+          <button type="button" class="link" data-abre="editar-{{ produto.id }}">editar</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="rodape-tabela">{{ linhas | length }} artigo(s).</p>
+  {% else %}
+  <p class="vazio">Nenhum artigo com esses filtros.</p>
+  {% endif %}
+</section>
+
+{% for linha in linhas %}
+{% set produto = linha.product %}
+<dialog id="editar-{{ produto.id }}" class="modal">
+  <form method="post" action="/portal/products/{{ produto.id }}" class="formulario">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="acao" value="salvar">
+    <input type="hidden" name="busca" value="{{ busca }}">
+    <input type="hidden" name="familia" value="{{ familia_escolhida }}">
+    <input type="hidden" name="situacao" value="{{ situacao }}">
+    <h2>Editar artigo</h2>
+
+    <label for="edit-nome-{{ produto.id }}">Nome comercial</label>
+    <input type="text" id="edit-nome-{{ produto.id }}" name="commercial_name"
+           value="{{ produto.commercial_name }}" required maxlength="200">
+
+    <label for="edit-sku-{{ produto.id }}">SKU</label>
+    {% if linha.has_published_price %}
+    <input type="text" id="edit-sku-{{ produto.id }}" value="{{ produto.sku }}" disabled>
+    <span class="dica">
+      Travado: este artigo já tem preço publicado, e o SKU é a coluna pela qual
+      a planilha do mês o reencontra. Trocá-lo faria a próxima importação criar
+      um artigo duplicado.
+    </span>
+    {% else %}
+    <input type="text" id="edit-sku-{{ produto.id }}" name="sku"
+           value="{{ produto.sku }}" maxlength="60">
+    {% endif %}
+
+    <label for="edit-familia-{{ produto.id }}">Família</label>
+    <select id="edit-familia-{{ produto.id }}" name="family_id">
+      {% for f in familias %}
+      <option value="{{ f.id }}" {% if f.id == produto.family_id %}selected{% endif %}>
+        {{ f.name }}
+      </option>
+      {% endfor %}
+    </select>
+
+    <label for="edit-espec-{{ produto.id }}">Especificação</label>
+    <input type="text" id="edit-espec-{{ produto.id }}" name="specification"
+           value="{{ produto.specification or '' }}" maxlength="200">
+
+    <label for="edit-unidade-{{ produto.id }}">Unidade</label>
+    <input type="text" id="edit-unidade-{{ produto.id }}" name="unit"
+           value="{{ produto.unit }}" maxlength="10">
+
+    <div class="acoes-modal">
+      <button type="submit">Salvar</button>
+      <button type="button" class="link" data-fecha="editar-{{ produto.id }}">Cancelar</button>
+    </div>
+  </form>
+</dialog>
+{% endfor %}
+
+<section class="painel">
+  <h2>Famílias</h2>
+  <p class="dica">
+    A ordem define o agrupamento da tabela que o cliente recebe pelo WhatsApp.
+    Desativar uma família tira os artigos dela da tabela do mês.
+  </p>
+  {% if familias %}
+  <table>
+    <thead>
+      <tr>
+        <th class="numero">Ordem</th>
+        <th>Nome</th>
+        <th class="numero">Artigos ativos</th>
+        <th>Situação</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in familias %}
+      <tr>
+        <td class="numero">{{ f.display_order }}</td>
+        <td>
+          <form method="post" action="/portal/families/{{ f.id }}" class="formulario-linha">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="acao" value="salvar">
+            <input type="text" name="name" value="{{ f.name }}" required maxlength="120">
+            <input type="number" name="display_order" value="{{ f.display_order }}"
+                   min="0" step="1" size="3" aria-label="Ordem de exibição">
+            <button type="submit" class="link">salvar</button>
+          </form>
+        </td>
+        <td class="numero">{{ contagem_por_familia.get(f.id, 0) }}</td>
+        <td>{% if f.active %}ativa{% else %}<span class="vazio">inativa</span>{% endif %}</td>
+        <td class="acoes">
+          <form method="post" action="/portal/families/{{ f.id }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            {% if f.active %}
+            <button type="submit" name="acao" value="desativar" class="link">desativar</button>
+            {% else %}
+            <button type="submit" name="acao" value="ativar" class="link">reativar</button>
+            {% endif %}
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="vazio">Nenhuma família cadastrada.</p>
+  {% endif %}
+</section>
+
+<dialog id="modal-produto" class="modal">
+  <form method="post" action="/portal/products" class="formulario">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Novo artigo</h2>
+    <p class="dica">
+      O preço é opcional aqui. Deixe a disponibilidade em branco para cadastrar
+      só o artigo — o preço chega na importação da tabela do mês.
+    </p>
+
+    <label for="novo-nome">Nome comercial</label>
+    <input type="text" id="novo-nome" name="commercial_name" required maxlength="200">
+
+    <label for="novo-sku">SKU</label>
+    <input type="text" id="novo-sku" name="sku" required maxlength="60">
+
+    <label for="novo-familia">Família</label>
+    <select id="novo-familia" name="family_id" data-alterna="novo-familia-nova">
+      {% for f in familias if f.active %}
+      <option value="{{ f.id }}">{{ f.name }}</option>
+      {% endfor %}
+      <option value="">— nova família —</option>
+    </select>
+    <input type="text" id="novo-familia-nova" name="family_name"
+           placeholder="Nome da família nova" maxlength="120">
+
+    <label for="novo-espec">Especificação (opcional)</label>
+    <input type="text" id="novo-espec" name="specification" maxlength="200">
+
+    <label for="novo-unidade">Unidade</label>
+    <input type="text" id="novo-unidade" name="unit" value="KG" maxlength="10">
+
+    <label for="novo-disponibilidade">Disponibilidade na tabela do mês</label>
+    <select id="novo-disponibilidade" name="availability">
+      <option value="">— não incluir na tabela do mês —</option>
+      <option value="AVAILABLE">disponível</option>
+      <option value="FUTURE_ARRIVAL">chegada prevista</option>
+      <option value="OUT_OF_STOCK">sem estoque</option>
+      <option value="SUSPENDED">suspenso</option>
+      <option value="CONSULT">sob consulta</option>
+    </select>
+
+    <label for="novo-preco">Preço-base (R$)</label>
+    <input type="text" id="novo-preco" name="base_price" inputmode="decimal" placeholder="12,34">
+    <span class="dica">
+      Só é lido quando há disponibilidade escolhida. Nesse caso é obrigatório,
+      exceto em sem estoque, suspenso e sob consulta.
+    </span>
+
+    <div class="acoes-modal">
+      <button type="submit">Cadastrar</button>
+      <button type="button" class="link" data-fecha="modal-produto">Cancelar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="modal-familia" class="modal">
+  <form method="post" action="/portal/families" class="formulario">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Nova família</h2>
+
+    <label for="familia-nome">Nome</label>
+    <input type="text" id="familia-nome" name="name" required maxlength="120">
+
+    <label for="familia-ordem">Ordem de exibição</label>
+    <input type="number" id="familia-ordem" name="display_order" min="0" step="1"
+           placeholder="deixe em branco para entrar no fim">
+
+    <div class="acoes-modal">
+      <button type="submit">Cadastrar</button>
+      <button type="button" class="link" data-fecha="modal-familia">Cancelar</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}

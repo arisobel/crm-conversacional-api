@@ -154,7 +154,9 @@
       <tr>
         <td>
           {{ produto.sku }} · {{ produto.commercial_name }}
-          {% if competencia and preferencia.active and produto.id in sem_preco %}
+          {% if not produto.active %}
+          <span class="etiqueta" title="O artigo foi desativado no catálogo: ele não sai na lista de preço nem na tabela do WhatsApp. A preferência continua guardada.">artigo desativado</span>
+          {% elif competencia and preferencia.active and produto.id in sem_preco %}
           <span class="etiqueta" title="Sem preço em {{ competencia.strftime('%m/%Y') }}: publique o lote da tabela do mês para ele entrar na lista.">sem preço no mês</span>
           {% endif %}
         </td>

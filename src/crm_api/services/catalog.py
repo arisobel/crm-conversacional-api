@@ -48,6 +48,22 @@ class FamilyNotFound(Exception):
     """Família inexistente neste tenant."""
 
 
+class DuplicateFamily(Exception):
+    """Já existe uma família com este nome no tenant."""
+
+
+class ArticleNotFound(Exception):
+    """Artigo inexistente neste tenant.
+
+    Nome próprio para não colidir com `ProductNotFound` de `customer_admin`,
+    que responde por outra pergunta: o produto que o cliente quer preferir.
+    """
+
+
+class SkuLocked(Exception):
+    """O artigo já tem preço publicado; o SKU deixou de ser editável."""
+
+
 class BasePriceRequired(Exception):
     """Disponibilidade que exige preço veio sem preço."""
 
@@ -82,7 +98,9 @@ class CatalogService:
         self._catalog = catalog
         self._audit = audit
 
-    async def create_article(
+    # ------------------------------------------------------- criar e alterar
+
+    async def create_product(
         self,
         *,
         tenant_id: uuid.UUID,
@@ -93,27 +111,21 @@ class CatalogService:
         family_name: str | None = None,
         specification: str | None = None,
         unit: str = "KG",
-        base_price: Decimal | None = None,
-        availability: AvailabilityStatus = AvailabilityStatus.AVAILABLE,
-        reference_month: date | None = None,
         request_id: str | None = None,
-    ) -> ArticleCreated:
+    ) -> tuple[Product, ProductFamily, bool]:
+        """Cria só o artigo no catálogo, sem preço nenhum.
+
+        Existe separado de `create_article` porque a tela de produtos cadastra
+        artigo que ainda não vai à tabela — o preço chega na importação do mês.
+        """
         sku = sku.strip()
         commercial_name = commercial_name.strip()
         if not sku or not commercial_name:
             raise IncompleteArticle
-
-        if base_price is None and availability not in NO_PRICE_AVAILABILITIES:
-            raise BasePriceRequired
-        if base_price is not None and base_price < 0:
-            raise InvalidBasePrice
-
         if await self._catalog.sku_exists(tenant_id, sku):
             raise DuplicateSku
 
         family, family_created = await self._family(tenant_id, family_id, family_name)
-        competencia = (reference_month or datetime.now(UTC).date()).replace(day=1)
-
         product = Product(
             id=uuid.uuid4(),
             tenant_id=tenant_id,
@@ -124,22 +136,6 @@ class CatalogService:
             unit=(unit or "KG").strip().upper(),
         )
         self._catalog.add(product)
-
-        batch = await self._draft_batch(tenant_id, competencia)
-        item = PriceListItem(
-            id=uuid.uuid4(),
-            tenant_id=tenant_id,
-            price_list_id=batch.id,
-            product_id=product.id,
-            # Sem preço a coluna não aceita nulo; o zero só existe nas
-            # disponibilidades que não cotam, e `availability` é o que a tela
-            # mostra. É a mesma convenção da importação por CSV.
-            base_price=base_price if base_price is not None else Decimal("0"),
-            availability=availability,
-            display_order=await self._catalog.count_batch_items(batch.id),
-        )
-        self._catalog.add(item)
-
         self._audit.record(
             action="PRODUCT_CREATED",
             entity="products",
@@ -155,6 +151,36 @@ class CatalogService:
             },
             request_id=request_id,
         )
+        await self._catalog.flush()
+        return product, family, family_created
+
+    async def add_draft_price(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        product: Product,
+        base_price: Decimal | None,
+        availability: AvailabilityStatus,
+        reference_month: date | None = None,
+        request_id: str | None = None,
+    ) -> tuple[PriceList, PriceListItem]:
+        self._validar_preco(base_price, availability)
+        competencia = (reference_month or datetime.now(UTC).date()).replace(day=1)
+        batch = await self._draft_batch(tenant_id, competencia)
+        item = PriceListItem(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            price_list_id=batch.id,
+            product_id=product.id,
+            # Sem preço a coluna não aceita nulo; o zero só existe nas
+            # disponibilidades que não cotam, e `availability` é o que a tela
+            # mostra. É a mesma convenção da importação por CSV.
+            base_price=base_price if base_price is not None else Decimal("0"),
+            availability=availability,
+            display_order=await self._catalog.count_batch_items(batch.id),
+        )
+        self._catalog.add(item)
         self._audit.record(
             action="PRICE_DRAFT_ITEM_CREATED",
             entity="price_list_items",
@@ -172,6 +198,49 @@ class CatalogService:
             request_id=request_id,
         )
         await self._catalog.flush()
+        return batch, item
+
+    async def create_article(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        sku: str,
+        commercial_name: str,
+        family_id: uuid.UUID | None = None,
+        family_name: str | None = None,
+        specification: str | None = None,
+        unit: str = "KG",
+        base_price: Decimal | None = None,
+        availability: AvailabilityStatus = AvailabilityStatus.AVAILABLE,
+        reference_month: date | None = None,
+        request_id: str | None = None,
+    ) -> ArticleCreated:
+        """Artigo e preço de rascunho na mesma transação — o caminho da ficha."""
+        # O preço é validado antes de o produto existir: recusar depois deixaria
+        # um artigo órfão no catálogo se a transação não fosse desfeita.
+        self._validar_preco(base_price, availability)
+
+        product, family, family_created = await self.create_product(
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            sku=sku,
+            commercial_name=commercial_name,
+            family_id=family_id,
+            family_name=family_name,
+            specification=specification,
+            unit=unit,
+            request_id=request_id,
+        )
+        batch, item = await self.add_draft_price(
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            product=product,
+            base_price=base_price,
+            availability=availability,
+            reference_month=reference_month,
+            request_id=request_id,
+        )
         return ArticleCreated(
             product=product,
             family=family,
@@ -179,6 +248,207 @@ class CatalogService:
             item=item,
             family_created=family_created,
         )
+
+    async def update_product(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        product_id: uuid.UUID,
+        commercial_name: str,
+        family_id: uuid.UUID | None = None,
+        family_name: str | None = None,
+        sku: str | None = None,
+        specification: str | None = None,
+        unit: str | None = None,
+        request_id: str | None = None,
+    ) -> Product:
+        product = await self._catalog.get_product(tenant_id, product_id)
+        if product is None:
+            raise ArticleNotFound
+
+        commercial_name = commercial_name.strip()
+        if not commercial_name:
+            raise IncompleteArticle
+
+        antes = {
+            "sku": product.sku,
+            "commercial_name": product.commercial_name,
+            "specification": product.specification,
+            "unit": product.unit,
+            "family_id": str(product.family_id),
+        }
+
+        novo_sku = (sku or "").strip()
+        if novo_sku and novo_sku != product.sku:
+            # A trava é o preço publicado, não a existência do artigo: enquanto
+            # nenhuma competência o carregou, o SKU ainda é rascunho de quem
+            # digitou.
+            if await self._catalog.has_published_price(tenant_id, product_id):
+                raise SkuLocked
+            if await self._catalog.sku_exists(tenant_id, novo_sku, excluding=product_id):
+                raise DuplicateSku
+            product.sku = novo_sku
+
+        family, _ = await self._family(tenant_id, family_id, family_name)
+        product.family_id = family.id
+        product.commercial_name = commercial_name
+        product.specification = (specification or "").strip() or None
+        product.unit = (unit or product.unit).strip().upper()
+
+        self._audit.record(
+            action="PRODUCT_UPDATED",
+            entity="products",
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=product.id,
+            before=antes,
+            after={
+                "sku": product.sku,
+                "commercial_name": product.commercial_name,
+                "specification": product.specification,
+                "unit": product.unit,
+                "family_id": str(product.family_id),
+            },
+            request_id=request_id,
+        )
+        await self._catalog.flush()
+        return product
+
+    async def set_product_active(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        product_id: uuid.UUID,
+        active: bool,
+        request_id: str | None = None,
+    ) -> Product:
+        """Ativa ou desativa o artigo.
+
+        Desativar não apaga nem desfaz preferência de cliente: o artigo apenas
+        deixa de sair na tabela do mês e na lista do representante, que é o que
+        `Product.active` filtra. A preferência continua registrada, e reativar o
+        artigo a traz de volta inteira.
+        """
+        product = await self._catalog.get_product(tenant_id, product_id)
+        if product is None:
+            raise ArticleNotFound
+
+        antes = product.active
+        product.active = active
+        self._audit.record(
+            action="PRODUCT_ACTIVATED" if active else "PRODUCT_DEACTIVATED",
+            entity="products",
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=product.id,
+            before={"active": antes},
+            after={"active": active, "sku": product.sku},
+            request_id=request_id,
+        )
+        await self._catalog.flush()
+        return product
+
+    # ------------------------------------------------------------- famílias
+
+    async def create_family(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        name: str,
+        display_order: int | None = None,
+        request_id: str | None = None,
+    ) -> ProductFamily:
+        nome = name.strip()
+        if not nome:
+            raise FamilyRequired
+        if await self._catalog.family_name_taken(tenant_id, nome):
+            raise DuplicateFamily
+
+        family = ProductFamily(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            name=nome,
+            display_order=(
+                display_order
+                if display_order is not None
+                else await self._catalog.next_family_order(tenant_id)
+            ),
+        )
+        self._catalog.add(family)
+        self._audit.record(
+            action="PRODUCT_FAMILY_CREATED",
+            entity="product_families",
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=family.id,
+            after={"name": family.name, "display_order": family.display_order},
+            request_id=request_id,
+        )
+        await self._catalog.flush()
+        return family
+
+    async def update_family(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        family_id: uuid.UUID,
+        name: str | None = None,
+        display_order: int | None = None,
+        active: bool | None = None,
+        request_id: str | None = None,
+    ) -> ProductFamily:
+        family = await self._catalog.get_family(tenant_id, family_id)
+        if family is None:
+            raise FamilyNotFound
+
+        antes = {
+            "name": family.name,
+            "display_order": family.display_order,
+            "active": family.active,
+        }
+
+        if name is not None:
+            nome = name.strip()
+            if not nome:
+                raise FamilyRequired
+            if await self._catalog.family_name_taken(tenant_id, nome, excluding=family_id):
+                raise DuplicateFamily
+            family.name = nome
+        if display_order is not None:
+            family.display_order = display_order
+        if active is not None:
+            family.active = active
+
+        self._audit.record(
+            action="PRODUCT_FAMILY_UPDATED",
+            entity="product_families",
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=family.id,
+            before=antes,
+            after={
+                "name": family.name,
+                "display_order": family.display_order,
+                "active": family.active,
+            },
+            request_id=request_id,
+        )
+        await self._catalog.flush()
+        return family
+
+    # ---------------------------------------------------------------- apoio
+
+    def _validar_preco(
+        self, base_price: Decimal | None, availability: AvailabilityStatus
+    ) -> None:
+        if base_price is None and availability not in NO_PRICE_AVAILABILITIES:
+            raise BasePriceRequired
+        if base_price is not None and base_price < 0:
+            raise InvalidBasePrice
 
     async def _family(
         self, tenant_id: uuid.UUID, family_id: uuid.UUID | None, family_name: str | None

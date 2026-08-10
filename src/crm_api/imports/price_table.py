@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import csv
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -89,17 +90,35 @@ async def _get_or_create_family(
 
 
 async def _get_or_create_product(
-    session: AsyncSession, tenant_id: UUID, family: ProductFamily, row: dict[str, str]
+    session: AsyncSession,
+    tenant_id: UUID,
+    family: ProductFamily,
+    row: dict[str, str],
+    divergences: list[str],
 ) -> Product:
+    """Encontra o artigo pelo SKU, ou o cria.
+
+    Desde que o portal edita o catálogo (ADR-021), **o cadastro é o dono** do
+    nome comercial e da especificação: divergência com a planilha é registrada e
+    o valor do cadastro é mantido, em vez de derrubar a importação inteira ou
+    sobrescrever em silêncio a correção que alguém fez pela tela.
+
+    A família continua abortando. Ela não é redação: um SKU que muda de família
+    quase sempre é SKU reaproveitado para outro produto, e nesse caso o
+    histórico de preço passaria a pertencer ao artigo errado.
+    """
     product = await session.scalar(
         select(Product).where(Product.tenant_id == tenant_id, Product.sku == row["sku"].strip())
     )
     if product is not None:
-        if (
-            product.family_id != family.id
-            or product.commercial_name != row["commercial_name"].strip()
-        ):
+        if product.family_id != family.id:
             raise ValueError(f"existing product conflicts with CSV: {product.sku}")
+        csv_name = row["commercial_name"].strip()
+        if product.commercial_name != csv_name:
+            divergences.append(
+                f'  {product.sku}  CSV "{csv_name}"\n'
+                f'{" " * (len(product.sku) + 2)}  cadastro "{product.commercial_name}"'
+            )
         return product
     product = Product(
         tenant_id=tenant_id,
@@ -113,6 +132,20 @@ async def _get_or_create_product(
     return product
 
 
+@dataclass
+class ImportResult:
+    """O lote importado e o que a planilha disse de diferente do cadastro.
+
+    As divergências não são erro: elas existem porque o portal passou a editar
+    nome comercial e especificação, e o cadastro ganhou a última palavra. Quem
+    roda a importação precisa vê-las mesmo assim — uma delas pode ser a planilha
+    certa e a tela errada.
+    """
+
+    price_list: PriceList
+    divergences: list[str]
+
+
 async def import_price_table(
     session: AsyncSession,
     *,
@@ -122,7 +155,7 @@ async def import_price_table(
     reference_month: date,
     valid_from: datetime,
     valid_until: datetime | None,
-) -> PriceList:
+) -> ImportResult:
     if reference_month.day != 1:
         raise ValueError("reference_month must be the first day of the month")
     if valid_until is not None and valid_until <= valid_from:
@@ -152,6 +185,7 @@ async def import_price_table(
     await session.flush()
 
     seen_skus: set[str] = set()
+    divergences: list[str] = []
     for row in rows:
         sku = row["sku"].strip()
         availability = row["availability"].strip()
@@ -167,7 +201,7 @@ async def import_price_table(
             )
 
         family = await _get_or_create_family(session, tenant.id, row)
-        product = await _get_or_create_product(session, tenant.id, family, row)
+        product = await _get_or_create_product(session, tenant.id, family, row, divergences)
         session.add(
             PriceListItem(
                 tenant_id=tenant.id,
@@ -186,7 +220,7 @@ async def import_price_table(
             )
         )
         seen_skus.add(sku)
-    return price_list
+    return ImportResult(price_list=price_list, divergences=divergences)
 
 
 async def activate_price_list(
@@ -235,6 +269,7 @@ async def _main() -> None:
     args = _arguments()
     settings = get_settings()
     engine, session_factory = create_session_factory(settings)
+    divergences: list[str] = []
     try:
         async with session_factory() as session:
             async with session.begin():
@@ -259,7 +294,7 @@ async def _main() -> None:
                         raise ValueError("file, name, reference_month and valid_from are required")
                     if not args.file.is_file():
                         raise ValueError(f"CSV file not found: {args.file}")
-                    price_list = await import_price_table(
+                    resultado = await import_price_table(
                         session,
                         tenant_slug=settings.tenant_slug,
                         source_path=args.file,
@@ -268,8 +303,17 @@ async def _main() -> None:
                         valid_from=args.valid_from,
                         valid_until=args.valid_until,
                     )
+                    price_list = resultado.price_list
+                    divergences = resultado.divergences
                     action = "Imported"
         print(f"{action} {price_list.id} as {price_list.status.value}.")
+        if divergences:
+            print(
+                f"\n{len(divergences)} divergência(s) de nome mantidas como estão no "
+                f"cadastro:"
+            )
+            for linha in divergences:
+                print(linha)
     finally:
         await engine.dispose()
 

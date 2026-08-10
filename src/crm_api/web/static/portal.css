@@ -246,6 +246,20 @@ tr.detalhe span { color: var(--tinta-fraca); font-size: 12px; }
   cursor: help;
 }
 
+/* Estado normal, não problema: artigo de catálogo ainda sem preço no mês. */
+.etiqueta.neutra {
+  background: transparent;
+  border: 1px solid var(--linha);
+  color: var(--tinta-fraca);
+  cursor: default;
+}
+
+.especificacao {
+  display: block;
+  color: var(--tinta-fraca);
+  font-size: 12px;
+}
+
 /* ---------------------------------------------------------------- modal */
 
 dialog.modal {

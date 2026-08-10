@@ -26,7 +26,7 @@ from crm_api.models.pricing import AvailabilityStatus
 from crm_api.models.tax import IcmsRule
 from crm_api.models.user import User, UserRole
 from crm_api.repositories.audit import AuditRepository
-from crm_api.repositories.catalog import CatalogRepository
+from crm_api.repositories.catalog import CatalogRepository, ProductFilters
 from crm_api.repositories.customer_admin import CustomerAdminRepository
 from crm_api.repositories.icms import IcmsRuleRepository
 from crm_api.repositories.interactions import InteractionRepository
@@ -39,13 +39,16 @@ from crm_api.repositories.price_lists import PriceListRepository
 from crm_api.repositories.users import SessionRepository, UserRepository
 from crm_api.services.auth import AuthenticationFailed, normalize_email
 from crm_api.services.catalog import (
+    ArticleNotFound,
     BasePriceRequired,
     CatalogService,
+    DuplicateFamily,
     DuplicateSku,
     FamilyNotFound,
     FamilyRequired,
     IncompleteArticle,
     InvalidBasePrice,
+    SkuLocked,
 )
 from crm_api.services.customer_admin import (
     ContactNotFound,
@@ -115,8 +118,11 @@ _CODIGOS: list[tuple[type[Exception], str]] = [
     (PreferredProductNotFound, "nao-encontrado"),
     (BatchNotFound, "nao-encontrado"),
     (FamilyNotFound, "nao-encontrado"),
+    (ArticleNotFound, "nao-encontrado"),
     (IncompleteArticle, "artigo-incompleto"),
     (DuplicateSku, "sku-duplicado"),
+    (DuplicateFamily, "familia-duplicada"),
+    (SkuLocked, "sku-travado"),
     (FamilyRequired, "familia-obrigatoria"),
     (BasePriceRequired, "preco-obrigatorio"),
     (InvalidBasePrice, "preco-invalido"),
@@ -1212,6 +1218,279 @@ async def criar_regra_icms(
     )
     await session.commit()
     return _redirect("/portal/icms-rules", "regra-criada")
+
+
+# --------------------------------------------------------------- catálogo
+
+
+_SITUACOES_DO_ARTIGO = {"ativos": True, "inativos": False, "todos": None}
+
+
+@router.get("/products", include_in_schema=False)
+async def pagina_produtos(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    busca: Annotated[str | None, Query()] = None,
+    familia: Annotated[str | None, Query()] = None,
+    situacao: Annotated[str, Query()] = "ativos",
+    sem_preco: Annotated[str | None, Query()] = None,
+    editar: Annotated[str | None, Query()] = None,
+    m: Annotated[str | None, Query()] = None,
+) -> Response:
+    if current_user.role not in _MANAGEMENT_ROLES:
+        return _redirect("/portal/customers", "sem-permissao")
+
+    catalogo = CatalogRepository(session)
+    competencia = await PriceEntryRepository(session).latest_month(
+        current_user.tenant_id, at=datetime.now(UTC).date()
+    )
+    filtros = ProductFilters(
+        search=busca or None,
+        family_id=uuid.UUID(familia) if familia else None,
+        active=_SITUACOES_DO_ARTIGO.get(situacao, True),
+        without_price=bool(sem_preco),
+    )
+
+    return _render(
+        request,
+        "products.html",
+        {
+            "linhas": await catalogo.list_products(
+                current_user.tenant_id, filtros, month=competencia
+            ),
+            "familias": await catalogo.list_families(current_user.tenant_id, active=None),
+            "contagem_por_familia": await catalogo.count_products_by_family(
+                current_user.tenant_id
+            ),
+            "competencia": competencia,
+            "busca": busca or "",
+            "familia_escolhida": familia or "",
+            "situacao": situacao,
+            "sem_preco": bool(sem_preco),
+            # Qual linha abre já em modo de edição, depois do redirecionamento.
+            "editando": editar or "",
+        },
+        current_user=current_user,
+        mensagem=m,
+    )
+
+
+def _filtros_na_volta(busca: str | None, familia: str | None, situacao: str | None) -> str:
+    """Preserva os filtros no redirecionamento do POST.
+
+    Sem isso, salvar um artigo encontrado por busca joga o usuário de volta na
+    lista inteira, e ele perde o lugar onde estava trabalhando.
+    """
+    partes = [
+        f"{chave}={valor}"
+        for chave, valor in (("busca", busca), ("familia", familia), ("situacao", situacao))
+        if valor
+    ]
+    return "/portal/products" + ("?" + "&".join(partes) if partes else "")
+
+
+@router.post("/products", include_in_schema=False)
+async def criar_produto(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    sku: Annotated[str, Form()],
+    commercial_name: Annotated[str, Form()],
+    family_id: _CustomerForm = None,
+    family_name: _CustomerForm = None,
+    specification: _CustomerForm = None,
+    unit: _CustomerForm = None,
+    availability: _CustomerForm = None,
+    base_price: _CustomerForm = None,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    """Cadastra o artigo; o preço do mês é opcional aqui.
+
+    Diferente do modal da ficha, esta tela é o catálogo: cadastrar artigo que
+    ainda não tem preço é caso normal, porque o preço costuma chegar na
+    importação da tabela do mês.
+    """
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/products", "csrf")
+    if current_user.role not in _MANAGEMENT_ROLES:
+        return _redirect("/portal/customers", "sem-permissao")
+
+    try:
+        preco = (
+            parse_decimal(base_price, field="base_price")
+            if base_price and base_price.strip()
+            else None
+        )
+        disponibilidade = AvailabilityStatus(availability) if availability else None
+        familia = uuid.UUID(family_id) if family_id else None
+    except (InvalidDecimal, ValueError) as error:
+        await session.rollback()
+        return _redirect(
+            "/portal/products",
+            "preco-invalido" if isinstance(error, InvalidDecimal) else "artigo-invalido",
+        )
+
+    servico = _catalog_service(session)
+    try:
+        produto, _, _ = await servico.create_product(
+            tenant_id=current_user.tenant_id,
+            actor_user_id=current_user.user_id,
+            sku=sku,
+            commercial_name=commercial_name,
+            family_id=familia,
+            family_name=family_name,
+            specification=specification,
+            unit=unit or "KG",
+            request_id=request.headers.get("x-request-id"),
+        )
+        if disponibilidade is not None:
+            await servico.add_draft_price(
+                tenant_id=current_user.tenant_id,
+                actor_user_id=current_user.user_id,
+                product=produto,
+                base_price=preco,
+                availability=disponibilidade,
+                request_id=request.headers.get("x-request-id"),
+            )
+    except Exception as error:  # noqa: BLE001
+        await session.rollback()
+        return _redirect("/portal/products", _codigo_do_erro(error))
+
+    await session.commit()
+    return _redirect(
+        "/portal/products", "artigo-com-rascunho" if disponibilidade else "artigo-criado"
+    )
+
+
+@router.post("/products/{product_id}", include_in_schema=False)
+async def salvar_produto(
+    request: Request,
+    product_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    acao: Annotated[str, Form()] = "salvar",
+    commercial_name: _CustomerForm = None,
+    sku: _CustomerForm = None,
+    family_id: _CustomerForm = None,
+    specification: _CustomerForm = None,
+    unit: _CustomerForm = None,
+    busca: _CustomerForm = None,
+    familia: _CustomerForm = None,
+    situacao: _CustomerForm = None,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    destino = _filtros_na_volta(busca, familia, situacao)
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+    if current_user.role not in _MANAGEMENT_ROLES:
+        return _redirect("/portal/customers", "sem-permissao")
+
+    servico = _catalog_service(session)
+    try:
+        if acao in {"ativar", "desativar"}:
+            await servico.set_product_active(
+                tenant_id=current_user.tenant_id,
+                actor_user_id=current_user.user_id,
+                product_id=product_id,
+                active=acao == "ativar",
+                request_id=request.headers.get("x-request-id"),
+            )
+            codigo = "artigo-ativado" if acao == "ativar" else "artigo-desativado"
+        else:
+            await servico.update_product(
+                tenant_id=current_user.tenant_id,
+                actor_user_id=current_user.user_id,
+                product_id=product_id,
+                commercial_name=commercial_name or "",
+                family_id=uuid.UUID(family_id) if family_id else None,
+                sku=sku,
+                specification=specification,
+                unit=unit,
+                request_id=request.headers.get("x-request-id"),
+            )
+            codigo = "artigo-salvo"
+    except Exception as error:  # noqa: BLE001
+        await session.rollback()
+        return _redirect(destino, _codigo_do_erro(error))
+
+    await session.commit()
+    return _redirect(destino, codigo)
+
+
+@router.post("/families", include_in_schema=False)
+async def criar_familia(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    name: Annotated[str, Form()],
+    display_order: _CustomerForm = None,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/products", "csrf")
+    if current_user.role not in _MANAGEMENT_ROLES:
+        return _redirect("/portal/customers", "sem-permissao")
+
+    try:
+        await _catalog_service(session).create_family(
+            tenant_id=current_user.tenant_id,
+            actor_user_id=current_user.user_id,
+            name=name,
+            display_order=int(display_order) if display_order else None,
+            request_id=request.headers.get("x-request-id"),
+        )
+    except ValueError:
+        await session.rollback()
+        return _redirect("/portal/products", "ordem-invalida")
+    except Exception as error:  # noqa: BLE001
+        await session.rollback()
+        return _redirect("/portal/products", _codigo_do_erro(error))
+
+    await session.commit()
+    return _redirect("/portal/products", "familia-criada")
+
+
+@router.post("/families/{family_id}", include_in_schema=False)
+async def salvar_familia(
+    request: Request,
+    family_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    acao: Annotated[str, Form()] = "salvar",
+    name: _CustomerForm = None,
+    display_order: _CustomerForm = None,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/products", "csrf")
+    if current_user.role not in _MANAGEMENT_ROLES:
+        return _redirect("/portal/customers", "sem-permissao")
+
+    try:
+        argumentos: dict = {
+            "ativar": {"active": True},
+            "desativar": {"active": False},
+        }.get(
+            acao,
+            {"name": name, "display_order": int(display_order) if display_order else None},
+        )
+        await _catalog_service(session).update_family(
+            tenant_id=current_user.tenant_id,
+            actor_user_id=current_user.user_id,
+            family_id=family_id,
+            request_id=request.headers.get("x-request-id"),
+            **argumentos,
+        )
+    except ValueError:
+        await session.rollback()
+        return _redirect("/portal/products", "ordem-invalida")
+    except Exception as error:  # noqa: BLE001
+        await session.rollback()
+        return _redirect("/portal/products", _codigo_do_erro(error))
+
+    await session.commit()
+    return _redirect("/portal/products", "familia-salva")
 
 
 # ------------------------------------------------------- tabela do mês
