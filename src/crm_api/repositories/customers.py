@@ -31,6 +31,26 @@ class CustomerRepository:
         result = await self._session.execute(self._active_contact_query(tenant_slug, phone))
         return result.one_or_none()
 
+    async def list_active_whatsapp(self, tenant_slug: str) -> list[str]:
+        """Telefones que podem conversar pelo WhatsApp, em ordem estável.
+
+        Só o telefone: o Gateway precisa decidir se atende, não saber de quem é.
+        A ordenação é o que torna o `etag` comparável entre duas leituras.
+        """
+        result = await self._session.scalars(
+            select(CustomerContact.whatsapp_e164)
+            .join(Customer, Customer.id == CustomerContact.customer_id)
+            .join(Tenant, Tenant.id == CustomerContact.tenant_id)
+            .where(
+                Tenant.slug == tenant_slug,
+                Tenant.active.is_(True),
+                CustomerContact.active.is_(True),
+                Customer.active.is_(True),
+            )
+            .order_by(CustomerContact.whatsapp_e164)
+        )
+        return list(result)
+
     async def get_tenant(self, tenant_slug: str) -> Tenant | None:
         """Tenant ativo da implantação.
 
