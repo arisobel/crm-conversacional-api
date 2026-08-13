@@ -126,3 +126,35 @@ async def test_roster_exige_hmac_valido(world):
 
     assert sem_assinatura.status_code == 401
     assert assinatura_errada.status_code == 401
+
+
+# ------------------------------------------------------------ forma canônica
+
+
+@pytest.mark.parametrize(
+    ("entrada", "esperado"),
+    [
+        ("+5511988887777", "+5511988887777"),
+        ("+55 (11) 98888-7777", "+5511988887777"),
+        # Celular na forma anterior à renumeração: mesma pessoa, outra grafia.
+        ("+551188887777", "+5511988887777"),
+        # Fixo permanece com oito dígitos — WhatsApp Business pode usar linha fixa.
+        ("+551133334444", "+551133334444"),
+        # Fora do Brasil a regra não se aplica, mesmo com a mesma contagem.
+        ("+3519123456789", "+3519123456789"),
+    ],
+)
+def test_canoniza_telefone_para_uma_forma_unica(entrada, esperado):
+    from crm_api.services.customers import normalize_whatsapp_e164
+
+    assert normalize_whatsapp_e164(entrada) == esperado
+
+
+def test_recusa_numero_sem_codigo_de_pais():
+    from crm_api.services.customers import (
+        InvalidWhatsappNumber,
+        normalize_whatsapp_e164,
+    )
+
+    with pytest.raises(InvalidWhatsappNumber):
+        normalize_whatsapp_e164("11988887777")
