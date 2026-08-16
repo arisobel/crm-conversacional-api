@@ -175,12 +175,23 @@ Verificada por `tests/test_whatsapp_actor_identity.py` (13 testes).
 - [ ] `kind` só passa a ter efeito com o `GW-021`, aberto. Até lá, declará-lo não
       muda resolução nenhuma — considerar na W6.
 
-### W3 — Resolução de ator e manifesto canônico
+### W3 — Resolução de ator e manifesto canônico (implementada em 2026-08-16)
 
-- [ ] `resolve_whatsapp_actor`, com `409` na colisão.
-- [ ] `POST /api/integrations/whatsapp/v1/capabilities/manifest`.
-- [ ] `GET /internal/interaction-capabilities` permanece intocado até a flag
-      virar no Gateway.
+Sem migração. `POST /api/integrations/whatsapp/v1/capabilities/manifest`,
+`WhatsappActorResolver` e o `GET` legado intocado.
+
+Verificada por `tests/test_capability_manifest.py` (16 testes), dois deles
+validando a resposta contra o schema do Gateway campo a campo.
+
+**O representante recebe `capabilities: []`.** Não é lacuna: os dois executores
+de hoje resolvem a tabela pelo telefone de quem escreveu, procurando um cliente,
+e falhariam para ele. Anunciar ação sem executor faria a allowlist do Gateway
+recusar o manifesto **inteiro** e deixar o contato sem resposta. As capacidades
+dele entram na W6, junto com os executores.
+
+- [ ] Publicar antes de o Gateway ligar a flag — o CRM precisa estar no ar
+      primeiro, como foi no piloto do manifesto legado.
+- [ ] Quando a flag virar lá, congelar o `GET /internal/interaction-capabilities`.
 
 ### W4 — Interação de representante (implementada em 2026-08-16)
 

@@ -6,6 +6,7 @@ from crm_api.api.routes import (
     admin_prices,
     admin_users,
     auth,
+    capability_manifest,
     customers,
     health,
     interaction_capabilities,
@@ -16,6 +17,7 @@ from crm_api.api.routes import (
 api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(interaction_capabilities.router)
+api_router.include_router(capability_manifest.router)
 api_router.include_router(interactions.router)
 api_router.include_router(customers.router)
 api_router.include_router(price_lists.router)
