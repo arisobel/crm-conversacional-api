@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from crm_api.api.authentication import CurrentUser, require_roles
 from crm_api.core.database import get_session
 from crm_api.core.passwords import WeakPassword
+from crm_api.core.phone import InvalidWhatsappNumber
 from crm_api.models.user import User, UserRole
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.users import SessionRepository, UserRepository
@@ -22,6 +23,7 @@ from crm_api.services.users import (
     UnsafeUserChange,
     UserNotFound,
     UserService,
+    WhatsappAlreadyUsed,
 )
 
 router = APIRouter(prefix="/admin/users", tags=["Portal Users"])
@@ -90,6 +92,10 @@ async def create_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="email already used"
         ) from error
+    except WhatsappAlreadyUsed as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    except InvalidWhatsappNumber as error:
+        raise _unprocessable(str(error)) from error
     except WeakPassword as error:
         raise _unprocessable(str(error)) from error
 
@@ -168,6 +174,10 @@ async def update_user(
         )
     except UserNotFound as error:
         raise _not_found() from error
+    except WhatsappAlreadyUsed as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    except InvalidWhatsappNumber as error:
+        raise _unprocessable(str(error)) from error
     except UnsafeUserChange as error:
         raise _unprocessable(str(error)) from error
 

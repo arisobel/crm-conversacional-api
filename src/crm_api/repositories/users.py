@@ -5,6 +5,7 @@ from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.models.customer import Tenant
+from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.user import User, UserRole, UserSession
 
 
@@ -43,6 +44,62 @@ class UserRepository:
             select(User.id).where(User.tenant_id == tenant_id, User.email == email)
         )
         return found is not None
+
+    async def whatsapp_exists(
+        self, tenant_id: uuid.UUID, phone: str, *, excluding: uuid.UUID | None = None
+    ) -> bool:
+        statement = select(User.id).where(
+            User.tenant_id == tenant_id, User.whatsapp_e164 == phone
+        )
+        if excluding is not None:
+            statement = statement.where(User.id != excluding)
+        return await self._session.scalar(statement) is not None
+
+    async def whatsapp_belongs_to_contact(self, tenant_id: uuid.UUID, phone: str) -> bool:
+        """O mesmo telefone já é contato de cliente neste tenant?
+
+        A invariante atravessa duas tabelas, e nenhum índice a alcança — daí a
+        consulta explícita, mais o `check-whatsapp-identities` do `admin_cli`
+        para provar periodicamente que ela continua valendo.
+        """
+        found = await self._session.scalar(
+            select(CustomerContact.id).where(
+                CustomerContact.tenant_id == tenant_id,
+                CustomerContact.whatsapp_e164 == phone,
+            )
+        )
+        return found is not None
+
+    async def list_active_without_whatsapp(
+        self, tenant_id: uuid.UUID
+    ) -> list[tuple[str, str]]:
+        """Usuários ativos sem telefone — invisíveis para a resolução de ator."""
+        rows = await self._session.execute(
+            select(User.full_name, User.email)
+            .where(
+                User.tenant_id == tenant_id,
+                User.active.is_(True),
+                User.whatsapp_e164.is_(None),
+            )
+            .order_by(User.full_name)
+        )
+        return [(name, email) for name, email in rows]
+
+    async def list_whatsapp_collisions(self, tenant_id: uuid.UUID) -> list[str]:
+        """Telefones que são, ao mesmo tempo, usuário e contato de cliente."""
+        contacts = select(CustomerContact.whatsapp_e164).where(
+            CustomerContact.tenant_id == tenant_id
+        )
+        rows = await self._session.scalars(
+            select(User.whatsapp_e164)
+            .where(
+                User.tenant_id == tenant_id,
+                User.whatsapp_e164.is_not(None),
+                User.whatsapp_e164.in_(contacts),
+            )
+            .order_by(User.whatsapp_e164)
+        )
+        return list(rows)
 
     def _listing(
         self, tenant_id: uuid.UUID, *, role: UserRole | None, active: bool | None

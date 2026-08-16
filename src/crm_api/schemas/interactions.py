@@ -62,7 +62,10 @@ class InteractionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     interaction_id: UUID
-    customer_id: UUID
+    # Exatamente um dos dois vem preenchido: a conversa é de um cliente ou de um
+    # usuário do portal, nunca das duas coisas nem de nenhuma (ADR-022).
+    customer_id: UUID | None
+    actor_user_id: UUID | None = None
     contact_id: UUID | None
     channel: str
     direction: InteractionDirection

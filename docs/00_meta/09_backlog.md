@@ -143,6 +143,81 @@ que estava pendente desde F1. Sem migração.
 - [ ] Adaptar o formatador do Gateway para preferir `final_price` e tratar `409`/`422`.
 - [ ] **Ligar o interruptor só depois de Q1/Q2 confirmadas e da matriz carregada.**
 
+## W — Manifesto por ator no WhatsApp
+
+Desenho em [WHATSAPP_ACTOR_MANIFEST.md](../30_architecture/WHATSAPP_ACTOR_MANIFEST.md),
+decisões nos ADR-022 a ADR-024.
+
+### W1 — Identidade do ator (implementada em 2026-08-16)
+
+**Migração `0009`.** Canoniza `users.whatsapp_e164`, cria o índice parcial de
+unicidade e acrescenta `public_ref` a `users` e `customer_contacts`.
+
+Verificada por `tests/test_whatsapp_actor_identity.py` (13 testes).
+
+- [ ] Aplicar a `0009` contra PostgreSQL. **A migração para se encontrar um
+      telefone que seja usuário do portal e contato de cliente ao mesmo tempo** —
+      resolver a colisão é decisão comercial, não do script.
+- [ ] Agendar `python -m crm_api.admin_cli check-whatsapp-identities`.
+
+### W2 — Bloqueio no Gateway, antes de tudo
+
+- [x] Estender o `business-capability-manifest/v1` com `vocabulary` e `slots`
+      por capacidade, e generalizar o validador por provider (`GW-010`).
+      Entregue no Gateway em `e122bb6`, com fixture companheira e a mínima
+      intocada. Limites acordados espelhados no desenho.
+- [x] Registrar no Gateway o tipo de slot `product_code` (ADR-025, DEC-046 de
+      lá). Regex extraída byte a byte; suíte de lá em 87 verde.
+- [ ] **Dívida do Gateway, não bloqueia:** `actor.id` valida contra
+      `^[a-f0-9]{24}$`, que é forma de `ObjectId` do Mongo escrita como se fosse
+      regra genérica do envelope. O `public_ref` casa por construção; a terceira
+      aplicação é que vai esbarrar.
+- [ ] `kind` só passa a ter efeito com o `GW-021`, aberto. Até lá, declará-lo não
+      muda resolução nenhuma — considerar na W6.
+
+### W3 — Resolução de ator e manifesto canônico
+
+- [ ] `resolve_whatsapp_actor`, com `409` na colisão.
+- [ ] `POST /api/integrations/whatsapp/v1/capabilities/manifest`.
+- [ ] `GET /internal/interaction-capabilities` permanece intocado até a flag
+      virar no Gateway.
+
+### W4 — Interação de representante (implementada em 2026-08-16)
+
+**Migração `0010`.** `customer_id` vira nulável, entra `actor_user_id` e o
+`CHECK` de exatamente um dono. Nenhuma linha existente muda.
+
+Verificada por `tests/test_representative_interactions.py` (12 testes), e
+`tests/test_interactions.py` passa sem nenhuma alteração — que é a prova de que
+o caminho do cliente, hoje em produção, não mudou de comportamento.
+
+- [ ] Aplicar a `0010` contra PostgreSQL.
+- [ ] **Já pode autorizar o primeiro número de representante no painel do
+      Gateway.** Era esta etapa que faltava.
+- [ ] A reversão da `0010` **falha de propósito** se já houver conversa de
+      representante gravada: voltar `customer_id` a `NOT NULL` apagaria o dono
+      dessas linhas em silêncio.
+- [ ] Q3 agora alcança conteúdo de conversa ligado a **usuário identificado**,
+      não só a contato de cliente. O expurgo já cobre as duas, mas o prazo
+      continua indefinido.
+
+### W5 — Telas de operação
+
+- [ ] `/portal/whatsapp` — roster, colisões e usuários sem telefone.
+- [ ] `/portal/whatsapp/nao-entendidas` — o dado já chega hoje no `payload`.
+- [ ] `/portal/whatsapp/vocabulario` — editar aliases e exemplos.
+
+### W6 — Leituras do representante
+
+- [ ] Busca de artigo em preço-base, localizar cliente da carteira e tabela de
+      cliente da carteira. Três executores novos no Gateway.
+
+### W7 — Pré-cadastro de cliente pelo WhatsApp
+
+- [ ] Tabela `customer_intakes`, endpoint de escrita e fila `/portal/intake`.
+- [ ] **Depende da máquina de confirmação do Gateway** (`GW-040` a `GW-045`,
+      todos abertos). É a última etapa a funcionar, não a primeira.
+
 ## Pendências herdadas
 
 - [ ] Implementar idempotência por `event_id`.

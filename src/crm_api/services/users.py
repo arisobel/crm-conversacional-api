@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 from crm_api.core.config import Settings
 from crm_api.core.passwords import hash_password, validate_password_policy
+from crm_api.core.phone import normalize_whatsapp_e164
 from crm_api.models.user import User, UserRole
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.users import SessionRepository, UserRepository
@@ -17,6 +18,16 @@ class UserNotFound(Exception):
 
 class EmailAlreadyUsed(Exception):
     """Já existe um usuário com este e-mail no tenant."""
+
+
+class WhatsappAlreadyUsed(Exception):
+    """O telefone já pertence a outro usuário ou a um contato de cliente.
+
+    A colisão entre as duas tabelas é recusada aqui porque é a rota de escalação
+    mais barata do desenho: um telefone que fosse contato de cliente e usuário
+    do portal receberia capacidades de representante por um cadastro
+    descuidado.
+    """
 
 
 class UnsafeUserChange(Exception):
@@ -50,6 +61,25 @@ class UserService:
             raise UserNotFound
         return user
 
+    async def _canonical_whatsapp(
+        self,
+        tenant_id: uuid.UUID,
+        raw: str,
+        *,
+        excluding: uuid.UUID | None = None,
+    ) -> str:
+        """Canoniza e recusa colisão, dentro de `users` e contra os contatos.
+
+        Propaga `InvalidWhatsappNumber` quando o número não é E.164; a rota
+        traduz para `422`, como já faz no cadastro de contato.
+        """
+        phone = normalize_whatsapp_e164(raw)
+        if await self._users.whatsapp_exists(tenant_id, phone, excluding=excluding):
+            raise WhatsappAlreadyUsed("phone already belongs to another portal user")
+        if await self._users.whatsapp_belongs_to_contact(tenant_id, phone):
+            raise WhatsappAlreadyUsed("phone already belongs to a customer contact")
+        return phone
+
     async def _guard_last_admin(self, user: User) -> None:
         if user.role is not UserRole.ADMIN or not user.active:
             return
@@ -73,6 +103,9 @@ class UserService:
             raise EmailAlreadyUsed
 
         password_hash = self._check_password(password, email=normalized_email)
+        phone = (
+            await self._canonical_whatsapp(tenant_id, whatsapp_e164) if whatsapp_e164 else None
+        )
         user = User(
             id=uuid.uuid4(),
             tenant_id=tenant_id,
@@ -80,7 +113,7 @@ class UserService:
             email=normalized_email,
             password_hash=password_hash,
             role=role,
-            whatsapp_e164=whatsapp_e164,
+            whatsapp_e164=phone,
         )
         self._users.add(user)
         self._audit.record(
@@ -136,7 +169,11 @@ class UserService:
         if full_name is not None:
             user.full_name = full_name
         if whatsapp_e164 is not None:
-            user.whatsapp_e164 = whatsapp_e164 or None
+            user.whatsapp_e164 = (
+                await self._canonical_whatsapp(tenant_id, whatsapp_e164, excluding=user.id)
+                if whatsapp_e164
+                else None
+            )
         user.updated_at = datetime.now(UTC)
 
         self._audit.record(

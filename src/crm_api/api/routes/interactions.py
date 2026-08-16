@@ -14,6 +14,7 @@ from crm_api.api.authentication import CurrentUser, get_current_user
 from crm_api.api.scoping import scope_for
 from crm_api.api.security import verify_internal_request
 from crm_api.core.database import get_session
+from crm_api.models.user import UserRole
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.interactions import InteractionRepository
 from crm_api.repositories.portfolio import CustomerPortfolioRepository
@@ -120,11 +121,50 @@ async def customer_timeline(
             status_code=status.HTTP_404_NOT_FOUND, detail="customer not found"
         ) from error
 
+    return _page(interacoes, total=total, limit=limit, offset=offset)
+
+
+@router.get(
+    "/admin/users/{user_id}/interactions",
+    response_model=InteractionPage,
+    responses={
+        403: {"description": "Reading someone else's conversation requires ADMIN"},
+        404: {"description": "User not found"},
+    },
+)
+async def user_timeline(
+    user_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> InteractionPage:
+    """Conversa de um usuário do portal pelo WhatsApp.
+
+    Cada um lê a sua; ler a de outro exige `ADMIN`. Não é escopo de carteira —
+    é conteúdo de conversa de uma pessoa identificada, e o `MANAGER` que
+    administra carteiras não tem motivo para lê-la.
+    """
+    if user_id != current_user.user_id and current_user.role is not UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="insufficient role"
+        )
+    if await UserRepository(session).get_in_tenant(current_user.tenant_id, user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+
+    interacoes, total = await _service(session).actor_timeline(
+        current_user.tenant_id, user_id, limit=limit, offset=offset
+    )
+    return _page(interacoes, total=total, limit=limit, offset=offset)
+
+
+def _page(interacoes, *, total: int, limit: int, offset: int) -> InteractionPage:
     return InteractionPage(
         items=[
             InteractionResponse(
                 interaction_id=interacao.id,
                 customer_id=interacao.customer_id,
+                actor_user_id=interacao.actor_user_id,
                 contact_id=interacao.contact_id,
                 channel=interacao.channel,
                 direction=interacao.direction,

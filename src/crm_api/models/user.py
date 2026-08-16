@@ -9,15 +9,18 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    String,
     Text,
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+from crm_api.core.identifiers import new_public_ref
 from crm_api.models.base import Base
 
 _JSON_COLUMN = JSON().with_variant(JSONB(), "postgresql")
@@ -38,7 +41,21 @@ class User(Base):
     """
 
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("tenant_id", "email", name="ux_users_tenant_email"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "email", name="ux_users_tenant_email"),
+        UniqueConstraint("public_ref", name="ux_users_public_ref"),
+        # Parcial: só um telefone preenchido precisa ser único. Vários usuários
+        # sem WhatsApp são o caso normal, e um `UNIQUE` comum recusaria o
+        # segundo nulo em alguns bancos.
+        Index(
+            "ux_users_tenant_whatsapp",
+            "tenant_id",
+            "whatsapp_e164",
+            unique=True,
+            sqlite_where=text("whatsapp_e164 IS NOT NULL"),
+            postgresql_where=text("whatsapp_e164 IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
@@ -47,6 +64,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(Text)
     role: Mapped[UserRole] = mapped_column(SqlEnum(UserRole, name="user_role"))
     whatsapp_e164: Mapped[str | None] = mapped_column(Text, nullable=True)
+    public_ref: Mapped[str] = mapped_column(String(24), default=new_public_ref)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

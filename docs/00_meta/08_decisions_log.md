@@ -328,3 +328,143 @@ Consequência aceita: nome comercial e especificação podem divergir entre o
 cadastro e a planilha indefinidamente, e só quem lê a saída da importação fica
 sabendo. A alternativa seria uma tela de conciliação, que não se justifica
 enquanto uma pessoa carrega a tabela.
+
+## ADR-022 — Manifesto por ator no envelope canônico do Gateway
+
+**Status:** aceita em 2026-08-16. Revisa o ADR-012 e completa o ADR-013 no canal
+WhatsApp. Desenho completo em
+[WHATSAPP_ACTOR_MANIFEST.md](../30_architecture/WHATSAPP_ACTOR_MANIFEST.md).
+
+Representante e cliente conversam pela mesma linha e o mesmo fluxo, e recebem
+capacidades diferentes. A diferença vive no manifesto, nunca no roteamento: dois
+fluxos com o mesmo telefone na mesma linha fazem o Gateway registrar
+`CONTROL ROUTE AMBIGUOUS` e calar, em vez de escolher.
+
+O CRM passa a publicar `POST /api/integrations/whatsapp/v1/capabilities/manifest`
+no envelope `business-capability-manifest/v1`, que já carrega `actor { id, role }`.
+A opção de evoluir `/internal/interaction-capabilities` foi recusada: seria
+mexer num contrato de produção para criar um formato que só o CRM fala, e que o
+`GW-015` do Gateway já prevê migrar de qualquer maneira.
+
+**O TTL do manifesto cai de 30 para 15 minutos.** Não é escolha: o validador do
+Gateway recusa `expires_in_seconds` acima de 900. O ADR-012 fixava 30 minutos;
+esta é a parte dele que fica revogada. O efeito prático é o dobro de chamadas de
+manifesto, irrelevante no volume atual.
+
+**A migração é condicionada a estender o v1** com `vocabulary` e `slots` por
+capacidade. Sem isso, o Gateway perde a resolução determinística: hoje ele lê
+`intents[].aliases`, e o v1 mínimo não tem onde guardá-los. Adotar o envelope
+literal entregaria toda a classificação à LLM, o oposto do que o ADR-012
+estabelece.
+
+**Quem o Gateway atende continua sendo decidido em dois lugares diferentes.** O
+roster automático (`/internal/authorized-contacts`) permanece só de clientes; o
+telefone do representante é autorizado à mão no painel do Gateway, como origem
+`MANUAL`. Consequência aceita explicitamente: desativar o representante no
+portal **não** tira o acesso dele ao canal, e o número passa a ser digitado em
+dois sistemas. As mitigações são a tela `/portal/whatsapp` e o
+`check-whatsapp-identities`, não automação.
+
+**O papel nunca é decidido pela LLM.** Ela classifica intenção e extrai slots
+declarados. `ADMIN` e `MANAGER` falando pelo WhatsApp recebem o manifesto de
+representante: um canal cuja identidade é um número de telefone não carrega
+alçada administrativa.
+
+## ADR-023 — Apelido público sorteado, não derivado de segredo
+
+**Status:** aceita em 2026-08-16.
+
+O `actor.id` do manifesto é um `public_ref` sorteado e guardado em `users` e
+`customer_contacts`, com 12 bytes em hexadecimal — o formato `^[a-f0-9]{24}$`
+que o validador do Gateway impõe.
+
+Derivá-lo por HMAC do UUID dispensaria as duas colunas, e foi recusado: um
+segredo existe para ser rotacionado — o contrato interno já tem
+`CRM_INTERNAL_HMAC_PREVIOUS_SECRET` para isso — e girar a chave mudaria todos os
+identificadores de ator de uma vez, invalidando o cache do Gateway e partindo em
+dois o histórico de observação que ele persiste por contexto. Identidade estável
+não pode depender de um valor projetado para mudar.
+
+Consequência: nenhum segredo novo entra em produção por causa do manifesto.
+
+## ADR-024 — Vocabulário no banco, editável pelo portal
+
+**Status:** aceita em 2026-08-16.
+
+Aliases e exemplos das capacidades saem do código e passam a viver no banco,
+editáveis por `ADMIN`, alimentados por um relatório das mensagens que o robô não
+classificou.
+
+O que motiva é operacional: com o vocabulário literal em
+`services/interaction_capabilities.py`, acrescentar uma palavra é alterar
+arquivo, testar e publicar o serviço — uma tarefa de programador por palavra,
+incompatível com ajustar a compreensão conforme o uso.
+
+O relatório vem primeiro, e a ordem é a decisão: sem ele, escolher a próxima
+palavra é chute. O dado necessário **já chega hoje** — o Gateway empurra
+`intent_id: "UNKNOWN"` e `outcome: "FALLBACK"` no `payload` da interação, e o
+CRM já o persiste. Falta apenas a leitura.
+
+## ADR-025 — Identificador de produto por tipo de slot, nunca por padrão transportado
+
+**Status:** aceita em 2026-08-16. Complementa o ADR-022 e responde a uma lacuna
+que só apareceu quando o Gateway implementou a extensão do envelope
+(`e122bb6`).
+
+`vocabulary` devolve ao CRM a lista de sinônimos, mas não o reconhecimento de
+identificador: `75/36` é casado hoje por uma expressão regular escrita dentro do
+Gateway, e nenhum campo de texto declarativo expressa isso.
+
+Transportar a expressão no manifesto foi recusado, e a recusa é correta —
+expressão regular de origem remota é ReDoS e superfície de injeção, e o contrato
+já proíbe transportar código, template ou função.
+
+Um slot passa a declarar `kind`, e o Gateway guarda localmente o casador de cada
+tipo registrado. O CRM declara **qual** tipo, nunca o padrão; tipo desconhecido é
+recusado como qualquer ação desconhecida.
+
+Consequência aceita: a forma `NN/NN` do código têxtil continua morando no
+Gateway, contra a letra do ADR-012. A diferença é de natureza, não de grau —
+hoje é uma regex solta no meio de uma função, invisível a qualquer revisão; passa
+a ser um tipo nomeado e registrado, que uma segunda aplicação reusa ou recusa
+explicitamente.
+
+Alternativa guardada para quando existir um segundo formato: descrição
+declarativa de dígitos e separadores, compilada localmente com quantificadores
+limitados — dados, não padrão. Não se justifica para um formato só.
+
+## ADR-026 — O Gateway é dono do registro de tipos de slot
+
+**Status:** aceita em 2026-08-16. Fecha a governança que o ADR-025 deixou aberta,
+espelhando o DEC-046 do Gateway.
+
+O enum de `kind` pertence ao **Gateway**, não ao CRM. O motivo é que a posse
+segue o casador: um tipo sem casador local não significa nada, e o casador é
+código que várias aplicações compartilham. É a assimetria em relação à allowlist
+de ações — que é por aplicativo, porque ação pertence a quem a executa — e ela
+parece descuido se ninguém escrever o porquê.
+
+O CRM **pede** um tipo; não o declara unilateralmente. O preço é explícito: cada
+tipo novo custa um deploy do Gateway mais a atualização coordenada do enum no
+JSON Schema compartilhado, que um teste de contrato compara com o registro.
+
+Daí a regra de uso, que é o que evita esse preço virar rotina: **`vocabulary`
+primeiro, `kind` por exceção.** Alias e exemplo custam zero e, pelo ADR-024, são
+editáveis no portal sem publicar nada. `kind` só se justifica para o que alias
+nenhum expressa — identificador com estrutura, como `75/36`. Hoje existe um tipo
+registrado, `product_code`, e não há um segundo à vista.
+
+Três consequências herdadas do DEC-046:
+
+- **`kind` é opcional.** A maioria dos slots deste desenho não declara nenhum.
+- **`kind` ainda é inerte.** Quem vai lê-lo na resolução de intenção é o
+  `GW-021`, que segue aberto. Declará-lo agora não muda comportamento nenhum, e
+  o planejamento da W6 precisa contar com isso.
+- **A regex têxtil foi extraída byte a byte**, não reescrita, e os testes do
+  manifesto legado passaram sem alteração — que é a prova de que o caminho hoje
+  em produção não mudou.
+
+Para os próximos pedidos ao Gateway, isso vira critério de aceite permanente:
+**comportamento do manifesto legado do CRM inalterado, provado pelos testes
+existentes sem nenhuma modificação neles.** É o único jeito de uma alteração
+dessas quebrar produção em silêncio.

@@ -27,6 +27,7 @@ from crm_api.models.user import User, UserRole
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.interactions import InteractionRepository
 from crm_api.repositories.portfolio import CustomerPortfolioRepository
+from crm_api.repositories.users import UserRepository
 from crm_api.services.auth import normalize_email
 from crm_api.services.interactions import InteractionService, RetentionNotConfigured
 
@@ -138,6 +139,46 @@ async def _purge_interactions(days: int | None, dry_run: bool) -> None:
         await engine.dispose()
 
 
+async def _check_whatsapp_identities() -> int:
+    """Prova que um telefone não é usuário e contato de cliente ao mesmo tempo.
+
+    A invariante atravessa duas tabelas e nenhum índice a alcança. Os serviços
+    de escrita a garantem no cadastro; este comando é o que a verifica depois,
+    contra o que já está gravado — inclusive o que entrou antes da `0009`.
+
+    Reporta também os usuários sem telefone: com a autorização do representante
+    digitada no painel do Gateway, um cadastro sem número aqui produz um
+    representante que o Gateway atende e o CRM não reconhece.
+    """
+    settings = get_settings()
+    engine, session_factory = create_session_factory(settings)
+    try:
+        async with session_factory() as session:
+            tenant = await session.scalar(
+                select(Tenant).where(Tenant.slug == settings.tenant_slug)
+            )
+            if tenant is None:
+                raise SystemExit(f"tenant '{settings.tenant_slug}' não encontrado")
+
+            users = UserRepository(session)
+            colisoes = await users.list_whatsapp_collisions(tenant.id)
+            sem_telefone = await users.list_active_without_whatsapp(tenant.id)
+
+            for telefone in colisoes:
+                print(f"COLISÃO {telefone} é usuário do portal e contato de cliente")
+            for nome, email in sem_telefone:
+                print(f"SEM WHATSAPP {nome} <{email}> não será reconhecido pelo CRM")
+
+            if not colisoes and not sem_telefone:
+                print("nenhuma divergência de identidade de WhatsApp")
+                return 0
+            # Colisão é erro; ausência de telefone é aviso. Só a primeira
+            # justifica falhar um agendamento.
+            return 1 if colisoes else 0
+    finally:
+        await engine.dispose()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="crm-admin")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -157,10 +198,17 @@ def main(argv: list[str] | None = None) -> int:
     purge.add_argument("--days", type=int, default=None)
     purge.add_argument("--dry-run", action="store_true")
 
+    subparsers.add_parser(
+        "check-whatsapp-identities",
+        help="verifica colisões de telefone entre usuários e contatos de cliente",
+    )
+
     arguments = parser.parse_args(argv)
     if arguments.command == "purge-interactions":
         asyncio.run(_purge_interactions(arguments.days, arguments.dry_run))
         return 0
+    if arguments.command == "check-whatsapp-identities":
+        return asyncio.run(_check_whatsapp_identities())
 
     asyncio.run(_create_user(arguments.email, arguments.name, UserRole(arguments.role)))
     return 0

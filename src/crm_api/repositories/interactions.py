@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from crm_api.models.customer import Customer
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.interaction import CustomerInteraction
+from crm_api.models.user import User
 
 
 class InteractionRepository:
@@ -23,6 +24,18 @@ class InteractionRepository:
 
     def add(self, interaction: CustomerInteraction) -> None:
         self._session.add(interaction)
+
+    async def resolve_portal_user(self, tenant_id: uuid.UUID, phone: str) -> User | None:
+        """Localiza o usuário do portal dono deste telefone, ativo ou não.
+
+        Mesma razão de `resolve_contact` aceitar contato desativado: desligar um
+        representante encerra o atendimento, mas não deve fazer o CRM perder o
+        registro do que passou por ele — inclusive porque a autorização no
+        painel do Gateway sobrevive à desativação aqui (ADR-022).
+        """
+        return await self._session.scalar(
+            select(User).where(User.tenant_id == tenant_id, User.whatsapp_e164 == phone)
+        )
 
     async def resolve_contact(
         self, tenant_id: uuid.UUID, phone: str
@@ -77,6 +90,29 @@ class InteractionRepository:
             self._timeline(tenant_id, customer_id)
             # `id` desempata: dois eventos no mesmo instante existem, e sem o
             # segundo critério a paginação repetiria ou puliria linhas.
+            .order_by(CustomerInteraction.occurred_at.desc(), CustomerInteraction.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(await self._session.scalars(statement))
+
+    def _actor_timeline(self, tenant_id: uuid.UUID, user_id: uuid.UUID) -> Select:
+        return select(CustomerInteraction).where(
+            CustomerInteraction.tenant_id == tenant_id,
+            CustomerInteraction.actor_user_id == user_id,
+        )
+
+    async def count_actor_timeline(self, tenant_id: uuid.UUID, user_id: uuid.UUID) -> int:
+        statement = self._actor_timeline(tenant_id, user_id).with_only_columns(
+            func.count(CustomerInteraction.id)
+        )
+        return await self._session.scalar(statement.order_by(None)) or 0
+
+    async def list_actor_timeline(
+        self, tenant_id: uuid.UUID, user_id: uuid.UUID, *, limit: int, offset: int
+    ) -> list[CustomerInteraction]:
+        statement = (
+            self._actor_timeline(tenant_id, user_id)
             .order_by(CustomerInteraction.occurred_at.desc(), CustomerInteraction.id.desc())
             .limit(limit)
             .offset(offset)

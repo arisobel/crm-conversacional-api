@@ -5,9 +5,10 @@ este módulo:
 
 1. **Reentrância.** O Gateway não pode perder eventos por causa de uma falha de
    rede, então ele reenvia; reenviar não pode duplicar a linha do tempo.
-2. **Nada órfão.** Um evento cujo contato não corresponde a nenhum cliente é
-   recusado com motivo, não gravado sem dono. Um registro sem cliente não
-   apareceria em ficha alguma e ainda assim guardaria conteúdo de conversa.
+2. **Nada órfão.** Um evento cujo telefone não corresponde a cliente nem a
+   usuário do portal é recusado com motivo, não gravado sem dono. Um registro
+   sem dono não apareceria em tela alguma e ainda assim guardaria conteúdo de
+   conversa.
 3. **Um item ruim não derruba o lote.** Cada evento é gravado em um savepoint
    próprio; o lote responde item a item.
 """
@@ -129,7 +130,7 @@ class InteractionService:
                 continue
 
             try:
-                cliente_id, contato_id = await self._resolver(tenant_id, evento)
+                dono = await self._resolver(tenant_id, evento)
             except _ResolutionFailed as falha:
                 resultados.append(
                     IngestOutcome(evento.external_ref, Outcome.REJECTED, reason=str(falha))
@@ -139,8 +140,9 @@ class InteractionService:
             interacao = CustomerInteraction(
                 id=uuid.uuid4(),
                 tenant_id=tenant_id,
-                customer_id=cliente_id,
-                contact_id=contato_id,
+                customer_id=dono.customer_id,
+                actor_user_id=dono.actor_user_id,
+                contact_id=dono.contact_id,
                 channel=evento.channel,
                 direction=evento.direction,
                 source=evento.source,
@@ -169,13 +171,13 @@ class InteractionService:
 
     async def _resolver(
         self, tenant_id: uuid.UUID, evento: IncomingInteraction
-    ) -> tuple[uuid.UUID, uuid.UUID | None]:
+    ) -> "_Owner":
         if evento.customer_id is not None:
             escopo = PortfolioScope(tenant_id=tenant_id, owner_user_id=None)
             encontrado = await self._portfolio.get_customer(escopo, evento.customer_id)
             if encontrado is None:
                 raise _ResolutionFailed("customer not found in tenant")
-            return evento.customer_id, None
+            return _Owner(customer_id=evento.customer_id)
 
         if not evento.whatsapp_e164:
             raise _ResolutionFailed("either customer_id or whatsapp_e164 is required")
@@ -185,10 +187,18 @@ class InteractionService:
             raise _ResolutionFailed(str(error)) from error
 
         par = await self._interactions.resolve_contact(tenant_id, telefone)
-        if par is None:
-            raise _ResolutionFailed("no customer contact matches this phone")
-        contato, cliente = par
-        return cliente.id, contato.id
+        if par is not None:
+            contato, cliente = par
+            return _Owner(customer_id=cliente.id, contact_id=contato.id)
+
+        # Só depois de o contato falhar. A ordem importa: um telefone não pode
+        # ser os dois — o cadastro recusa a colisão (ADR-022) —, mas se um dia
+        # escapar, tratar como cliente é a leitura de menor alçada.
+        usuario = await self._interactions.resolve_portal_user(tenant_id, telefone)
+        if usuario is not None:
+            return _Owner(actor_user_id=usuario.id)
+
+        raise _ResolutionFailed("no customer contact or portal user matches this phone")
 
     # --------------------------------------------------------------- leitura
 
@@ -202,6 +212,21 @@ class InteractionService:
                 scope.tenant_id, customer_id, limit=limit, offset=offset
             ),
             await self._interactions.count_timeline(scope.tenant_id, customer_id),
+        )
+
+    async def actor_timeline(
+        self, tenant_id: uuid.UUID, user_id: uuid.UUID, *, limit: int, offset: int
+    ) -> tuple[list[CustomerInteraction], int]:
+        """Conversa de um usuário do portal pelo WhatsApp.
+
+        Sem escopo de carteira porque não há carteira envolvida: o dono do
+        histórico é o próprio usuário. Quem pode alcançá-lo é decidido na rota.
+        """
+        return (
+            await self._interactions.list_actor_timeline(
+                tenant_id, user_id, limit=limit, offset=offset
+            ),
+            await self._interactions.count_actor_timeline(tenant_id, user_id),
         )
 
     async def last_interactions(
@@ -246,5 +271,14 @@ class InteractionService:
         return removidas
 
 
+@dataclass(frozen=True)
+class _Owner:
+    """A quem o evento pertence — exatamente um dos dois, como o `CHECK` exige."""
+
+    customer_id: uuid.UUID | None = None
+    actor_user_id: uuid.UUID | None = None
+    contact_id: uuid.UUID | None = None
+
+
 class _ResolutionFailed(Exception):
-    """Falha ao ligar o evento a um cliente. Interna: vira motivo na resposta."""
+    """Falha ao ligar o evento a um dono. Interna: vira motivo na resposta."""
