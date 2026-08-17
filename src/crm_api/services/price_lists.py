@@ -1,5 +1,3 @@
-import re
-import unicodedata
 import uuid
 from calendar import monthrange
 from datetime import UTC, date, datetime, time
@@ -17,32 +15,14 @@ from crm_api.schemas.price_lists import (
     PriceListSummaryResponse,
 )
 from crm_api.services.customer_price_list import CustomerPriceListService
+from crm_api.services.product_search import matches_search_terms, search_tokens
 
 _NO_CURRENT_PRICE = {
     AvailabilityStatus.OUT_OF_STOCK,
     AvailabilityStatus.SUSPENDED,
     AvailabilityStatus.CONSULT,
 }
-_SEARCH_SEPARATOR = re.compile(r"[^a-z0-9]+")
 _MESES_NAMESPACE = uuid.UUID("6f9619ff-8b86-d011-b42d-00c04fc964ff")
-
-
-def _search_tokens(value: str) -> list[str]:
-    normalized = unicodedata.normalize("NFKD", value)
-    ascii_value = "".join(
-        character for character in normalized if not unicodedata.combining(character)
-    )
-    return [token for token in _SEARCH_SEPARATOR.split(ascii_value.casefold()) if token]
-
-
-def _matches_search_terms(item: CurrentPriceListItemResponse, terms: list[str]) -> bool:
-    searchable_value = " ".join(
-        part
-        for part in (item.sku, item.display_name, item.specification, item.family_name)
-        if part
-    )
-    searchable_tokens = set(_search_tokens(searchable_value))
-    return all(term in searchable_tokens for term in terms)
 
 
 class CurrentPriceListService:
@@ -237,12 +217,10 @@ class CurrentPriceListService:
         if current_price_list is None:
             return None
 
-        search_terms = _search_tokens(query)
+        search_terms = search_tokens(query)
         if not search_terms:
             return current_price_list.model_copy(update={"items": []})
         matching_items = [
-            item
-            for item in current_price_list.items
-            if _matches_search_terms(item, search_terms)
+            item for item in current_price_list.items if matches_search_terms(item, search_terms)
         ]
         return current_price_list.model_copy(update={"items": matching_items})

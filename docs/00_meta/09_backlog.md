@@ -174,6 +174,17 @@ Verificada por `tests/test_whatsapp_actor_identity.py` (13 testes).
       aplicação é que vai esbarrar.
 - [ ] `kind` só passa a ter efeito com o `GW-021`, aberto. Até lá, declará-lo não
       muda resolução nenhuma — considerar na W6.
+- [ ] **Bug do Gateway, medido em 2026-08-16 com o manifesto real.** Dentro do
+      `resolveBusinessCapabilityIntentByRules`, o casamento de alias é insensível
+      a acento e o preenchimento de slot por prefixo é sensível. `"preço do PUE
+      20"` resolve; `"preco do PUE 20"` não resolve nada — o alias casa, o slot
+      obrigatório fica faltando e a mensagem cai na LLM. Digitar sem acento é o
+      caso comum no WhatsApp.
+- [ ] **Registrar os IDs de slot esperados por ação**, do mesmo jeito que `kind`
+      é registrado. `server.js` lê `resolution.slots.product_query` por nome
+      literal; um manifesto com outro nome passa pela validação inteira e chega
+      ao executor com o campo vazio.
+- [ ] Observabilidade: o painel (`GW-081`) não cobre o provider `crm_api`.
 
 ### W3 — Resolução de ator e manifesto canônico (implementada em 2026-08-16)
 
@@ -220,8 +231,48 @@ o caminho do cliente, hoje em produção, não mudou de comportamento.
 
 ### W6 — Leituras do representante
 
-- [ ] Busca de artigo em preço-base, localizar cliente da carteira e tabela de
-      cliente da carteira. Três executores novos no Gateway.
+Sem migração. Rotas em `/internal/representative/by-whatsapp/{phone}/...`,
+verificadas por `tests/test_representative_whatsapp.py` (14 testes).
+
+- [x] **Lado do CRM.** As três leituras: artigo em preço-base, clientes da
+      carteira e tabela convertida de um cliente da carteira.
+- [x] **Lado do Gateway, pedido 1:** adaptador `crm_api` do manifesto canônico,
+      cache por ator e resolução determinística genérica (`GW-010`, `GW-012`,
+      `GW-013`, `GW-021`). Entregue com as quatro flags desligadas, suíte de lá
+      em 96 verde e a baseline de 87 intacta. Os dois manifestos de produção do
+      CRM passam pelo `isValidBusinessCapabilityManifest` com o adaptador
+      `crm_api` — conferido rodando o validador deles, não por leitura.
+- [x] Aliases `produto` e `artigo` de volta ao manifesto do cliente. Não são
+      sinônimo de conveniência: eram o comando que o Gateway reconhecia **por
+      código** no caminho legado, e no envelope canônico nada fora do manifesto
+      reconhece esses termos. Sem eles, `"produto PUE 20"` deixava de resolver por
+      regra e passava a depender da LLM.
+- [ ] Ligar `CRM_CAPABILITY_MANIFEST_ENABLED` sozinha primeiro, conferir os logs
+      `[CRM CAPABILITY MANIFEST DECISION]`, e só então a flag de intenção.
+- [ ] **Lado do Gateway, pedido 2:** os três executores, contra as rotas acima.
+- [ ] Acrescentar as três capacidades ao manifesto do representante — **só
+      depois** de a allowlist do Gateway conhecer as ações, senão o manifesto é
+      recusado inteiro.
+- [ ] **No mesmo dia disso, `legacyAllowed: false` no `UNAVAILABLE` passa a ser
+      obrigatório no Gateway.** Hoje o fallback não vaza nada: os dois executores
+      resolvem a tabela pelo telefone de quem escreveu procurando cliente, e o
+      telefone do representante não é contato de cliente — dá `404` e ele recebe
+      "não encontrei tabela para seu cadastro". O prejuízo é mensagem enganosa.
+      Com executores próprios, o fallback trocaria o conjunto de autorização dele
+      pelo de cliente, e aí há o que perder.
+
+Duas decisões de alcance tomadas aqui, mais restritivas que o portal:
+
+- **A carteira é sempre a de quem escreveu, qualquer que seja o papel.** `ADMIN`
+  e `MANAGER` veem o tenant inteiro no portal e apenas a própria carteira aqui:
+  o canal autentica por número de telefone, prova mais fraca que uma sessão.
+- **`whatsapp_icms_enabled` não é consultado** na tabela de um cliente. O
+  interruptor existe porque, na tabela do cliente, o número convertido vai direto
+  a quem compra; aqui o destinatário é o representante, que é exatamente quem o
+  interruptor descreve como capaz de conferir o cálculo. É o caso do portal, em
+  outro canal.
+- O `calculation_trace` **não** vai na resposta: ele existe para ser conferido
+  item a item numa tela.
 
 ### W7 — Pré-cadastro de cliente pelo WhatsApp
 

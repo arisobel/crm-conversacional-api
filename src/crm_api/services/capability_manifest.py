@@ -88,7 +88,23 @@ _CAPACIDADES_CLIENTE = [
             "tabela vigente."
         ),
         vocabulary=Vocabulary(
-            aliases=["preço do", "quanto está", "tem"],
+            # `produto` e `artigo` não são sinônimo de conveniência: eram o
+            # comando explícito que o Gateway reconhecia por código no caminho
+            # legado. No envelope canônico, nada fora deste manifesto reconhece
+            # esses termos — sem eles, "produto PUE 20" deixa de resolver por
+            # regra e passa a depender da LLM.
+            aliases=[
+                "produto",
+                "artigo",
+                "preço do",
+                "preço de",
+                "valor do",
+                "valor de",
+                "quanto está",
+                "quanto custa",
+                "quando chega",
+                "tem",
+            ],
             examples=[
                 "75/36",
                 "tem 75/36 urdume?",

@@ -165,6 +165,23 @@ Os identificadores de slot deste desenho — `product_query`, `customer_query`,
 `customer_legal_name`, `customer_state_code`, `customer_whatsapp` e
 `preferred_products_text` — já obedecem ao formato.
 
+**O nome do slot é contrato, e o validador não o cobre.** O executor do Gateway
+lê `resolution.slots.product_query` por nome literal; um manifesto que chamasse o
+mesmo slot de `produto` passa por toda a validação e chega ao executor com o
+campo vazio. É a única regra load-bearing sem guarda automática dos dois lados —
+registrada aqui para não ser redescoberta por acidente, e listada como pedido ao
+Gateway (registrar os IDs de slot esperados por ação, do mesmo jeito que `kind` é
+registrado).
+
+**O ruído gramatical é problema de quem recebe, não só de quem extrai.** O
+resolvedor genérico preenche o slot com o resto da mensagem, artigo incluso:
+`"quanto está o PUE 20"` produz `o PUE 20`. Como o casamento exige **todos** os
+termos, aquele `o` fazia a busca não encontrar um artigo que existe. O
+`search_tokens` descarta artigos e preposições — e só quando sobra algo, para que
+uma mensagem que seja apenas `"de"` não vire busca vazia casando com o catálogo
+inteiro. A defesa fica no CRM de propósito: vale para qualquer versão do Gateway
+e para qualquer consumidor futuro do contrato.
+
 ## Resolução do ator
 
 Um serviço único, `resolve_whatsapp_actor(tenant, phone)`, sobre o telefone já

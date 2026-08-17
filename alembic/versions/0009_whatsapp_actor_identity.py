@@ -5,11 +5,15 @@ Primeira etapa do [manifesto por ator](../../docs/30_architecture/WHATSAPP_ACTOR
 Duas coisas, pelo mesmo motivo — as duas são pré-requisito para o CRM
 reconhecer quem está falando:
 
-**`users.whatsapp_e164` passa a ser canônico.** Ele existia desde a `0003`,
-validado apenas por formato: `+551188887777` era aceito e jamais casaria com o
-`+5511988887777` que chega da Meta. O `UPDATE` abaixo aplica o nono dígito no
-que já está gravado, e o índice parcial impede que dois usuários do mesmo tenant
-fiquem com o mesmo número.
+**Os telefones passam a ser canônicos.** `users.whatsapp_e164` existia desde a
+`0003`, validado apenas por formato: `+551188887777` era aceito e jamais casaria
+com o `+5511988887777` que chega da Meta. `customer_contacts.whatsapp_e164` é
+normalizado na borda desde a R2, mas **nunca foi corrigido para trás** — linha
+criada antes dela pode estar em qualquer das duas grafias, e nesse caso já não
+casa com mensagem nenhuma hoje.
+
+Os `UPDATE` abaixo aplicam o nono dígito nas duas tabelas, e o índice parcial
+impede que dois usuários do mesmo tenant fiquem com o mesmo número.
 
 **`public_ref`** é o identificador opaco que o Gateway exige no `actor.id`, com
 o formato `^[a-f0-9]{24}$` que o validador dele impõe. É sorteado e guardado,
@@ -36,13 +40,56 @@ depends_on = None
 # O nono dígito só vale para celular brasileiro: `+55`, DDD de 11 a 99 e oito
 # dígitos começando em 6-9. Fixo começa em 2-5 e fica intacto; fora do `+55`
 # nada é inferido.
-_CANONICALIZE_USERS = """
-UPDATE users
-   SET whatsapp_e164 = '+55' || substring(whatsapp_e164 from 4 for 2)
-                            || '9'
-                            || substring(whatsapp_e164 from 6)
- WHERE whatsapp_e164 ~ '^\\+55[1-9][0-9][6-9][0-9]{7}$'
-"""
+_ANTIGO = "^\\+55[1-9][0-9][6-9][0-9]{7}$"
+_COM_NONO = (
+    "'+55' || substring({t}.whatsapp_e164 from 4 for 2) || '9'"
+    " || substring({t}.whatsapp_e164 from 6)"
+)
+
+
+def _canonicalize(table: str) -> str:
+    return f"""
+    UPDATE {table}
+       SET whatsapp_e164 = {_COM_NONO.format(t=table)}
+     WHERE whatsapp_e164 ~ '{_ANTIGO}'
+    """
+
+
+def _assert_no_self_collision(table: str, label: str) -> str:
+    """Duas linhas da mesma tabela que viram o mesmo número ao canonizar.
+
+    Sem esta checagem, o `UPDATE` seguinte estouraria a unicidade com o erro
+    cru do banco, sem dizer quais linhas nem por quê. São o mesmo assinante
+    cadastrado duas vezes, e fundir os dois cadastros é decisão comercial.
+    """
+    return f"""
+    DO $$
+    DECLARE
+      duplicados text;
+    BEGIN
+      -- Duas camadas de agregação de propósito: a de dentro acha cada grupo
+      -- repetido, a de fora junta todos numa mensagem só. Reportar um por vez
+      -- faria quem corrige descobrir o próximo a cada nova tentativa de deploy.
+      SELECT string_agg(canonico, ', ') INTO duplicados
+        FROM (
+          SELECT canonico
+            FROM (
+              SELECT tenant_id,
+                     CASE WHEN whatsapp_e164 ~ '{_ANTIGO}'
+                          THEN {_COM_NONO.format(t=table)}
+                          ELSE whatsapp_e164 END AS canonico
+                FROM {table}
+               WHERE whatsapp_e164 IS NOT NULL
+            ) AS normalizado
+           GROUP BY tenant_id, canonico
+          HAVING count(*) > 1
+        ) AS repetidos;
+      IF duplicados IS NOT NULL THEN
+        RAISE EXCEPTION
+          'mesmo assinante cadastrado duas vezes em {label}: %', duplicados;
+      END IF;
+    END $$
+    """
 
 _ASSERT_NO_COLLISION = """
 DO $$
@@ -63,7 +110,14 @@ END $$
 """
 
 _UPGRADE = (
-    _CANONICALIZE_USERS,
+    # A ordem é a checagem: canonizar as duas tabelas **antes** de comparar uma
+    # com a outra. Um contato gravado sem o nono dígito e um usuário com ele são
+    # o mesmo assinante, e comparar as grafias cruas deixaria a colisão passar —
+    # para depois o resolvedor tratar aquele cliente como representante.
+    _assert_no_self_collision("customer_contacts", "customer_contacts"),
+    _assert_no_self_collision("users", "users"),
+    _canonicalize("customer_contacts"),
+    _canonicalize("users"),
     _ASSERT_NO_COLLISION,
     "CREATE UNIQUE INDEX ux_users_tenant_whatsapp ON users(tenant_id, whatsapp_e164) "
     "WHERE whatsapp_e164 IS NOT NULL",
