@@ -276,9 +276,36 @@ Duas decisões de alcance tomadas aqui, mais restritivas que o portal:
 
 ### W7 — Pré-cadastro de cliente pelo WhatsApp
 
-- [ ] Tabela `customer_intakes`, endpoint de escrita e fila `/portal/intake`.
+**Migração `0011`.** Tabela nova, nada existente é alterado. Verificada por
+`tests/test_customer_intake.py` (22 testes).
+
+- [x] Tabela `customer_intakes`, com duas guardas no banco: unicidade de
+      `(tenant_id, idempotency_key)` — o `wamid` — e o `CHECK` de resolução, que
+      amarra cada estado aos seus campos. Aceito tem cliente e não tem motivo;
+      rejeitado tem motivo e não tem cliente; pendente não tem nem um nem outro.
+- [x] `POST /internal/representative/by-whatsapp/{phone}/customer-intakes`.
+      Idempotente: a reentrega devolve `201` com `created: false`.
+- [x] Aceitar e rejeitar no serviço, delegando a criação do cliente ao
+      `CustomerAdminService` — o mesmo do portal, para que localidade padrão,
+      titularidade e auditoria não ganhem uma segunda implementação.
+- [ ] Aplicar a `0011` contra PostgreSQL.
+- [ ] `/portal/intake` — a fila. O serviço já a serve (`queue`), falta a tela.
 - [ ] **Depende da máquina de confirmação do Gateway** (`GW-040` a `GW-045`,
-      todos abertos). É a última etapa a funcionar, não a primeira.
+      todos abertos) para ser alcançável pelo WhatsApp. Até lá o endpoint existe,
+      testado, e o manifesto do representante **não** anuncia a ação — anunciar
+      antes do executor faria a allowlist recusar o manifesto inteiro.
+
+Três invariantes desenhadas de propósito, cada uma com teste que falha se alguém
+as afrouxar:
+
+- **Abrir não cria cliente nem autoriza telefone.** O contato só nasce na
+  aceitação, no portal. Se a mensagem gravasse o contato direto, uma frase no
+  WhatsApp autorizaria um telefone qualquer a conversar com o CRM.
+- **O titular é quem abriu, não quem aceitou.** Um `ADMIN` resolvendo a fila no
+  escritório não se torna dono da conta.
+- **O telefone é revalidado na aceitação.** Entre abrir e aceitar pode passar uma
+  semana; sem revalidar, a aceitação criaria a colisão que o manifesto recusa com
+  `409` — e o número pararia de ser atendido sem ninguém saber por quê.
 
 ## Pendências herdadas
 
