@@ -15,6 +15,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from sqlalchemy.exc import IntegrityError
+
 from crm_api.core.phone import normalize_whatsapp_e164
 from crm_api.core.states import normalize_state_code
 from crm_api.models.customer_contact import CustomerContact
@@ -139,7 +141,64 @@ class CustomerIntakeService:
         if existente is not None:
             return OpenedIntake(intake=existente, created=False)
 
-        intake = CustomerIntake(
+        intake = self._novo(
+            tenant_id,
+            autor,
+            idempotency_key=idempotency_key,
+            legal_name=legal_name,
+            state_code=state_code,
+            whatsapp_e164=await self._telefone_livre(tenant_id, whatsapp_e164)
+            if whatsapp_e164
+            else None,
+            preferred_products_text=preferred_products_text,
+        )
+
+        # A checagem acima é ler-depois-escrever, e entre a leitura e a gravação
+        # cabe outra requisição com a mesma chave — o Gateway reentrega webhook, e
+        # duas entregas simultâneas da mesma mensagem são o caso normal, não o
+        # excepcional. Quem decide é a unicidade do banco; aqui só recuperamos.
+        try:
+            async with self._intakes.savepoint():
+                self._intakes.add(intake)
+                self._audit.record(
+                    action="CUSTOMER_INTAKE_OPENED",
+                    entity="customer_intakes",
+                    tenant_id=tenant_id,
+                    actor_user_id=autor,
+                    entity_id=intake.id,
+                    after={
+                        "legal_name": intake.legal_name,
+                        "state_code": intake.state_code,
+                        "has_whatsapp": intake.whatsapp_e164 is not None,
+                        "source": intake.source,
+                    },
+                    request_id=request_id,
+                )
+                await self._intakes.flush()
+        except IntegrityError:
+            # Perdemos a corrida. O `SAVEPOINT` desfez a inserção e a auditoria
+            # junto — não houve abertura a auditar —, e a sessão continua viva
+            # para reler a linha que venceu.
+            vencedor = await self._intakes.by_idempotency_key(tenant_id, idempotency_key)
+            if vencedor is None:
+                # A violação foi de outra restrição; não é nossa para tratar.
+                raise
+            return OpenedIntake(intake=vencedor, created=False)
+
+        return OpenedIntake(intake=intake, created=True)
+
+    def _novo(
+        self,
+        tenant_id: uuid.UUID,
+        autor: uuid.UUID,
+        *,
+        idempotency_key: str,
+        legal_name: str,
+        state_code: str,
+        whatsapp_e164: str | None,
+        preferred_products_text: str | None,
+    ) -> CustomerIntake:
+        return CustomerIntake(
             id=uuid.uuid4(),
             tenant_id=tenant_id,
             created_by_user_id=autor,
@@ -147,9 +206,7 @@ class CustomerIntakeService:
             idempotency_key=idempotency_key,
             legal_name=self._texto(legal_name, campo="razão social", maximo=MAX_RAZAO_SOCIAL),
             state_code=normalize_state_code(state_code),
-            whatsapp_e164=(
-                await self._telefone_livre(tenant_id, whatsapp_e164) if whatsapp_e164 else None
-            ),
+            whatsapp_e164=whatsapp_e164,
             preferred_products_text=(
                 preferred_products_text.strip()[:MAX_PREFERENCIA]
                 if preferred_products_text and preferred_products_text.strip()
@@ -157,23 +214,6 @@ class CustomerIntakeService:
             ),
             status=IntakeStatus.PENDING,
         )
-        self._intakes.add(intake)
-        self._audit.record(
-            action="CUSTOMER_INTAKE_OPENED",
-            entity="customer_intakes",
-            tenant_id=tenant_id,
-            actor_user_id=autor,
-            entity_id=intake.id,
-            after={
-                "legal_name": intake.legal_name,
-                "state_code": intake.state_code,
-                "has_whatsapp": intake.whatsapp_e164 is not None,
-                "source": intake.source,
-            },
-            request_id=request_id,
-        )
-        await self._intakes.flush()
-        return OpenedIntake(intake=intake, created=True)
 
     # ------------------------------------------------------------- resolução
 

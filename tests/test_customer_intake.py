@@ -24,7 +24,7 @@ from conftest import build_portal_world
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 
-from crm_api.models.customer import Customer
+from crm_api.models.customer import Customer, Tenant
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.customer_intake import CustomerIntake, IntakeStatus
 from crm_api.models.user import User, UserRole
@@ -39,6 +39,7 @@ from crm_api.services.customer_intake import (
     IntakeAlreadyResolved,
     IntakeNotFound,
 )
+from crm_api.services.whatsapp_actor import ActorRole, WhatsappActor
 
 BASE = "/internal/representative/by-whatsapp"
 TELEFONE_A = "+5511987654321"  # representante A
@@ -201,6 +202,50 @@ async def test_reentrega_do_webhook_nao_duplica(world):
 
 
 @pytest.mark.asyncio
+async def test_corrida_de_reentrega_e_resolvida_pelo_banco(world, monkeypatch):
+    """Duas entregas simultâneas do mesmo `wamid`.
+
+    A checagem prévia é ler-depois-escrever, e entre a leitura e a gravação cabe
+    outra requisição — o Gateway reentrega webhook, e duas entregas simultâneas
+    da mesma mensagem são o caso normal. Aqui a primeira leitura é cegada de
+    propósito, para exercitar o caminho em que **o banco** decide: a unicidade
+    recusa a segunda inserção e o serviço devolve o pré-cadastro vencedor em vez
+    de estourar.
+    """
+    chave = "wamid.CORRIDA00000000000001"
+    await _abrir(world, TELEFONE_A, _corpo(idempotency_key=chave, whatsapp_e164=None))
+
+    original = CustomerIntakeRepository.by_idempotency_key
+    chamadas = {"n": 0}
+
+    async def cego(self, tenant_id, idempotency_key):
+        chamadas["n"] += 1
+        # A primeira leitura é a que aconteceu antes de o vencedor commitar.
+        if chamadas["n"] == 1:
+            return None
+        return await original(self, tenant_id, idempotency_key)
+
+    monkeypatch.setattr(CustomerIntakeRepository, "by_idempotency_key", cego)
+
+    async with world.app.state.session_factory() as session:
+        resultado = await _service(session).open(
+            WhatsappActor(
+                role=ActorRole.REPRESENTATIVE,
+                public_ref="a1b2c3d4e5f6a1b2c3d4e5f6",
+                user_id=world.representative_a_id,
+            ),
+            world.tenant_id,
+            idempotency_key=chave,
+            legal_name="Malhas Silva Ltda",
+            state_code="SP",
+        )
+        await session.commit()
+
+        assert resultado.created is False
+        assert await session.scalar(select(func.count()).select_from(CustomerIntake)) == 1
+
+
+@pytest.mark.asyncio
 async def test_mensagem_diferente_abre_outro_pre_cadastro(world):
     await _abrir(world, TELEFONE_A, _corpo())
     outra = await _abrir(
@@ -280,6 +325,44 @@ async def test_telefone_de_usuario_do_portal_responde_409(world):
 @pytest.mark.asyncio
 async def test_razao_social_em_branco_recusa(world):
     resposta = await _abrir(world, TELEFONE_A, _corpo(legal_name="   "))
+    assert resposta.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_telefone_desconhecido_responde_404(world):
+    """Ninguém neste tenant atende por este número."""
+    resposta = await _abrir(world, "+5511900000000", _corpo())
+    assert resposta.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_representante_desativado_nao_abre_pre_cadastro(world):
+    """O resolvedor só enxerga usuário ativo; desativado deixa de ser ator."""
+    async with world.app.state.session_factory() as session:
+        usuario = await session.get(User, world.representative_a_id)
+        usuario.active = False
+        await session.commit()
+
+    resposta = await _abrir(world, TELEFONE_A, _corpo())
+    assert resposta.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_telefone_do_caminho_invalido_responde_422(world):
+    resposta = await _abrir(world, "+55119", _corpo())
+    assert resposta.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_corpo_com_campo_desconhecido_recusa(world):
+    """`extra="forbid"`: o Gateway não escolhe o representante.
+
+    Se um `user_id` no corpo fosse aceito e ignorado, a próxima versão poderia
+    passar a lê-lo sem que ninguém percebesse a mudança de autoridade.
+    """
+    resposta = await _abrir(
+        world, TELEFONE_A, _corpo() | {"created_by_user_id": str(uuid4())}
+    )
     assert resposta.status_code == 422
 
 
@@ -395,6 +478,30 @@ async def test_representante_nao_alcanca_pre_cadastro_de_outro(world):
                 intake.id,
                 actor_user_id=world.representative_b_id,
                 actor_role=UserRole.REPRESENTATIVE,
+            )
+
+
+@pytest.mark.asyncio
+async def test_intake_de_outro_tenant_nao_e_alcancavel(world):
+    """O `tenant_id` entra em toda consulta, não só na porta.
+
+    A porta hoje já isola — o HMAC exige o slug configurado —, mas o isolamento
+    não pode depender só dela: o serviço é chamado também pelo portal.
+    """
+    await _abrir(world, TELEFONE_A, _corpo())
+
+    async with world.app.state.session_factory() as session:
+        outro = Tenant(id=uuid4(), name="Outra empresa", slug="outra-empresa")
+        session.add(outro)
+        await session.commit()
+
+        intake = await session.scalar(select(CustomerIntake))
+        with pytest.raises(IntakeNotFound):
+            await _service(session).accept(
+                outro.id,
+                intake.id,
+                actor_user_id=world.admin_id,
+                actor_role=UserRole.ADMIN,
             )
 
 

@@ -33,6 +33,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from crm_api.models.base import Base
 
+# Importados pelas chaves estrangeiras, não pelo uso direto: sem as tabelas
+# referenciadas no `MetaData`, o tipo das colunas `tenant_id`, `created_by_user_id`
+# e `customer_id` não resolve e o DDL falha. Hoje funciona por ordem de import de
+# outro módulo, o que é acidente — este `import` o torna garantia.
+from crm_api.models.customer import Customer, Tenant  # noqa: F401
+from crm_api.models.user import User  # noqa: F401
+
 
 class IntakeStatus(StrEnum):
     """Enum no banco, e não texto com `CHECK`.

@@ -6,6 +6,7 @@ deixaria a próxima rota livre para esquecer.
 """
 
 import uuid
+from contextlib import AbstractAsyncContextManager
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,14 @@ class CustomerIntakeRepository:
 
     async def flush(self) -> None:
         await self._session.flush()
+
+    def savepoint(self) -> AbstractAsyncContextManager:
+        """`SAVEPOINT` para isolar uma inserção que pode colidir.
+
+        Sem ele, a violação de unicidade aborta a transação inteira e não sobra
+        sessão utilizável para reler a linha que venceu a corrida.
+        """
+        return self._session.begin_nested()
 
     async def by_idempotency_key(
         self, tenant_id: uuid.UUID, idempotency_key: str
