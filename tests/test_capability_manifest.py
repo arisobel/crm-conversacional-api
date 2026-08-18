@@ -50,7 +50,23 @@ _CAPACIDADE = {
     "vocabulary",
     "slots",
 }
-_ACOES_REGISTRADAS = {"GET_CURRENT_PRICE_LIST", "SEARCH_CURRENT_PRICE_LIST_ITEMS"}
+# Allowlist do Gateway (`CRM_ACTION_EXECUTORS`, commit 7491723). Uma ação fora
+# desta lista faz o Gateway recusar o manifesto inteiro.
+_ACOES_CLIENTE = {"GET_CURRENT_PRICE_LIST", "SEARCH_CURRENT_PRICE_LIST_ITEMS"}
+_ACOES_REPRESENTANTE = {
+    "CRM_REP_SEARCH_PRICE_ITEMS",
+    "CRM_REP_LOOKUP_CUSTOMER",
+    "CRM_REP_GET_CUSTOMER_PRICE_LIST",
+}
+_ACOES_REGISTRADAS = _ACOES_CLIENTE | _ACOES_REPRESENTANTE
+# Espelho de `CRM_ACTION_REQUIRED_SLOTS`: o Gateway lê estes nomes literalmente.
+_SLOTS_ESPERADOS = {
+    "GET_CURRENT_PRICE_LIST": set(),
+    "SEARCH_CURRENT_PRICE_LIST_ITEMS": {"product_query"},
+    "CRM_REP_SEARCH_PRICE_ITEMS": {"product_query"},
+    "CRM_REP_LOOKUP_CUSTOMER": {"customer_query"},
+    "CRM_REP_GET_CUSTOMER_PRICE_LIST": {"customer_query"},
+}
 _TIPOS_REGISTRADOS = {"product_code"}
 
 
@@ -107,7 +123,11 @@ def valida_como_o_gateway(manifesto: dict) -> None:
             for slot in slots:
                 assert set(slot) <= {"id", "required", "kind"}
                 assert isinstance(slot["required"], bool)
-                if slot.get("kind") is not None:
+                # O Gateway aceita `kind` **ausente ou registrado**:
+                # `slot.kind === undefined || KINDS.has(slot.kind)`. `null` não é
+                # nenhum dos dois e reprova o manifesto inteiro. A versão
+                # anterior deste espelho tolerava `null` e por isso não pegou.
+                if "kind" in slot:
                     assert slot["kind"] in _TIPOS_REGISTRADOS
 
         ids.append(capacidade["id"])
@@ -197,17 +217,102 @@ async def test_cliente_recebe_as_duas_capacidades_de_hoje(world):
 
 
 @pytest.mark.asyncio
-async def test_representante_nao_recebe_capacidade_de_cliente(world):
-    """O ponto inteiro do trabalho.
-
-    Antes disto, o representante receberia as capacidades do cliente e os
-    executores responderiam que não há tabela para o cadastro dele.
-    """
+async def test_representante_recebe_exatamente_as_tres_leituras(world):
     corpo = (await _pedir(world, TELEFONE_REPRESENTANTE)).json()
 
     assert corpo["actor"]["role"] == "representante"
-    assert corpo["capabilities"] == []
-    assert "portal" in corpo["help_message"]
+    assert [c["action"] for c in corpo["capabilities"]] == [
+        "CRM_REP_SEARCH_PRICE_ITEMS",
+        "CRM_REP_LOOKUP_CUSTOMER",
+        "CRM_REP_GET_CUSTOMER_PRICE_LIST",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_os_dois_papeis_nao_compartilham_nenhuma_acao(world):
+    """O ponto inteiro do trabalho: alçadas separadas, não herdadas.
+
+    Os executores de cliente resolvem a tabela pelo telefone de quem escreveu
+    procurando um cliente; servidos a um representante, responderiam que não há
+    tabela para o cadastro dele. Os de representante resolvem pela carteira.
+    Nenhuma lista serve ao outro papel.
+    """
+    cliente = (await _pedir(world, TELEFONE_CLIENTE)).json()
+    representante = (await _pedir(world, TELEFONE_REPRESENTANTE)).json()
+    do_cliente = {c["action"] for c in cliente["capabilities"]}
+    do_rep = {c["action"] for c in representante["capabilities"]}
+
+    assert do_cliente == _ACOES_CLIENTE
+    assert do_rep == _ACOES_REPRESENTANTE
+    assert do_cliente & do_rep == set()
+
+
+@pytest.mark.asyncio
+async def test_nenhum_ator_recebe_capacidade_de_escrita(world):
+    """`CRM_REP_CREATE_CUSTOMER_INTAKE` existe no CRM e **não** entra aqui.
+
+    O Gateway ainda não tem executor nem máquina de confirmação ligada a ela.
+    Anunciar ação sem executor faz a allowlist recusar o manifesto inteiro.
+    """
+    for telefone in (TELEFONE_CLIENTE, TELEFONE_REPRESENTANTE):
+        corpo = (await _pedir(world, telefone)).json()
+        for capacidade in corpo["capabilities"]:
+            assert capacidade["mode"] == "read"
+            assert capacidade["requires_confirmation"] is False
+            assert capacidade["idempotency"] == "none"
+        assert "CRM_REP_CREATE_CUSTOMER_INTAKE" not in json.dumps(corpo)
+
+
+@pytest.mark.asyncio
+async def test_os_slots_usam_os_nomes_que_o_gateway_le(world):
+    """Espelho de `CRM_ACTION_REQUIRED_SLOTS`.
+
+    O Gateway lê `slots.product_query` e `slots.customer_query` por nome
+    literal. Um manifesto que chamasse o slot de outra coisa passa por toda a
+    validação estrutural e chega ao executor vazio — é a regra load-bearing que
+    o validador não cobre sozinho.
+    """
+    for telefone in (TELEFONE_CLIENTE, TELEFONE_REPRESENTANTE):
+        for capacidade in (await _pedir(world, telefone)).json()["capabilities"]:
+            slots = capacidade.get("slots") or []
+            obrigatorios = {s["id"] for s in slots if s["required"]}
+            assert obrigatorios == _SLOTS_ESPERADOS[capacidade["action"]]
+
+
+@pytest.mark.asyncio
+async def test_apenas_o_slot_de_produto_declara_tipo(world):
+    """`product_code` é o único tipo registrado no Gateway (ADR-025).
+
+    E o slot sem tipo **omite a chave** em vez de mandar `null`: o validador
+    aceita ausente ou registrado, e `null` reprova o manifesto inteiro.
+    """
+    corpo = (await _pedir(world, TELEFONE_REPRESENTANTE)).json()
+    por_acao = {c["action"]: c for c in corpo["capabilities"]}
+
+    produto = por_acao["CRM_REP_SEARCH_PRICE_ITEMS"]["slots"][0]
+    assert produto == {"id": "product_query", "required": True, "kind": "product_code"}
+
+    for acao in ("CRM_REP_LOOKUP_CUSTOMER", "CRM_REP_GET_CUSTOMER_PRICE_LIST"):
+        cliente_slot = por_acao[acao]["slots"][0]
+        assert cliente_slot == {"id": "customer_query", "required": True}
+        assert "kind" not in cliente_slot
+
+
+@pytest.mark.asyncio
+async def test_a_ajuda_do_representante_promete_apenas_o_que_anuncia(world):
+    """Prometer o que o manifesto não declara é a pior falha do canal.
+
+    O representante pede, nada resolve, e ele conclui que o sistema quebrou.
+    """
+    corpo = (await _pedir(world, TELEFONE_REPRESENTANTE)).json()
+    ajuda = corpo["help_message"].lower()
+
+    assert "artigo" in ajuda
+    assert "carteira" in ajuda
+    assert "tabela" in ajuda
+    # A promessa antiga deixou de ser verdade quando os executores existiram.
+    assert "ainda não está disponível" not in ajuda
+    assert "cadastr" not in ajuda.replace("cadastrado como representante", "")
 
 
 @pytest.mark.asyncio

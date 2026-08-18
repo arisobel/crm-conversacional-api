@@ -13,7 +13,7 @@ Fonte: `arisobel/whatsapp-webhook-caprover`, `docs/04_technical/`, commit
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 SCHEMA_VERSION = "business-capability-manifest/v1"
 PROVIDER = "crm_api"
@@ -88,6 +88,22 @@ class Slot(BaseModel):
     # Explícito de propósito: o contrato não admite obrigatoriedade implícita.
     required: bool
     kind: SlotKind | None = None
+
+    @model_serializer(mode="wrap")
+    def _kind_ausente_nunca_nulo(self, handler):
+        """Slot sem tipo omite a chave, em vez de mandar `null`.
+
+        O validador do Gateway aceita `kind` **ausente ou registrado**:
+        `slot.kind === undefined || BUSINESS_CAPABILITY_SLOT_KINDS.has(slot.kind)`.
+        `null` não é nenhum dos dois, e reprova o manifesto **inteiro** — não a
+        capacidade, o manifesto. A regra mora aqui, e não numa opção de
+        serialização da rota, porque é do contrato: uma rota nova não teria como
+        esquecê-la.
+        """
+        dados = handler(self)
+        if dados.get("kind") is None:
+            dados.pop("kind", None)
+        return dados
 
 
 class Capability(BaseModel):
