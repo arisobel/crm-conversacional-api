@@ -50,13 +50,14 @@ _CAPACIDADE = {
     "vocabulary",
     "slots",
 }
-# Allowlist do Gateway (`CRM_ACTION_EXECUTORS`, commit 7491723). Uma ação fora
+# Allowlist do Gateway (`CRM_ACTION_EXECUTORS`, commit 206c6bf). Uma ação fora
 # desta lista faz o Gateway recusar o manifesto inteiro.
 _ACOES_CLIENTE = {"GET_CURRENT_PRICE_LIST", "SEARCH_CURRENT_PRICE_LIST_ITEMS"}
 _ACOES_REPRESENTANTE = {
     "CRM_REP_SEARCH_PRICE_ITEMS",
     "CRM_REP_LOOKUP_CUSTOMER",
     "CRM_REP_GET_CUSTOMER_PRICE_LIST",
+    "CRM_REP_CREATE_CUSTOMER_INTAKE",
 }
 _ACOES_REGISTRADAS = _ACOES_CLIENTE | _ACOES_REPRESENTANTE
 # Espelho de `CRM_ACTION_REQUIRED_SLOTS`: o Gateway lê estes nomes literalmente.
@@ -66,12 +67,20 @@ _SLOTS_ESPERADOS = {
     "CRM_REP_SEARCH_PRICE_ITEMS": {"product_query"},
     "CRM_REP_LOOKUP_CUSTOMER": {"customer_query"},
     "CRM_REP_GET_CUSTOMER_PRICE_LIST": {"customer_query"},
+    "CRM_REP_CREATE_CUSTOMER_INTAKE": {
+        "customer_legal_name",
+        "customer_state_code",
+    },
 }
 _TIPOS_REGISTRADOS = {"product_code"}
 
 
-def valida_como_o_gateway(manifesto: dict) -> None:
-    """Reproduz `isValidCkjCapabilityManifest`, generalizada por provider."""
+def valida_como_o_gateway_206c6bf(manifesto: dict) -> None:
+    """Contrato de `isValidBusinessCapabilityManifest` no Gateway 206c6bf.
+
+    A fonte de verdade foi revalidada diretamente no worktree do Gateway neste
+    commit: allowlist, vocabulário, slots, escrita confirmável e idempotência.
+    """
     assert set(manifesto) <= _TOPO
     assert set(manifesto) == _TOPO, "todo campo do topo é obrigatório"
     assert manifesto["schema_version"] == "business-capability-manifest/v1"
@@ -192,14 +201,14 @@ async def _pedir(world, telefone: str, *, secret: bytes = b"test-secret"):
 async def test_manifesto_do_cliente_passa_no_validador_do_gateway(world):
     resposta = await _pedir(world, TELEFONE_CLIENTE)
     assert resposta.status_code == 200
-    valida_como_o_gateway(resposta.json())
+    valida_como_o_gateway_206c6bf(resposta.json())
 
 
 @pytest.mark.asyncio
 async def test_manifesto_do_representante_passa_no_validador_do_gateway(world):
     resposta = await _pedir(world, TELEFONE_REPRESENTANTE)
     assert resposta.status_code == 200
-    valida_como_o_gateway(resposta.json())
+    valida_como_o_gateway_206c6bf(resposta.json())
 
 
 # --------------------------------------------------------------- por ator
@@ -217,7 +226,7 @@ async def test_cliente_recebe_as_duas_capacidades_de_hoje(world):
 
 
 @pytest.mark.asyncio
-async def test_representante_recebe_exatamente_as_tres_leituras(world):
+async def test_representante_recebe_tres_leituras_e_um_pre_cadastro(world):
     corpo = (await _pedir(world, TELEFONE_REPRESENTANTE)).json()
 
     assert corpo["actor"]["role"] == "representante"
@@ -225,7 +234,15 @@ async def test_representante_recebe_exatamente_as_tres_leituras(world):
         "CRM_REP_SEARCH_PRICE_ITEMS",
         "CRM_REP_LOOKUP_CUSTOMER",
         "CRM_REP_GET_CUSTOMER_PRICE_LIST",
+        "CRM_REP_CREATE_CUSTOMER_INTAKE",
     ]
+    assert len(corpo["capabilities"]) == 4
+
+    pre_cadastro = corpo["capabilities"][3]
+    assert pre_cadastro["id"] == pre_cadastro["action"] == "CRM_REP_CREATE_CUSTOMER_INTAKE"
+    assert pre_cadastro["mode"] == "write"
+    assert pre_cadastro["requires_confirmation"] is True
+    assert pre_cadastro["idempotency"] == "required"
 
 
 @pytest.mark.asyncio
@@ -248,19 +265,18 @@ async def test_os_dois_papeis_nao_compartilham_nenhuma_acao(world):
 
 
 @pytest.mark.asyncio
-async def test_nenhum_ator_recebe_capacidade_de_escrita(world):
-    """`CRM_REP_CREATE_CUSTOMER_INTAKE` existe no CRM e **não** entra aqui.
+async def test_cliente_nao_recebe_escrita_nem_capacidade_de_representante(world):
+    corpo = (await _pedir(world, TELEFONE_CLIENTE)).json()
 
-    O Gateway ainda não tem executor nem máquina de confirmação ligada a ela.
-    Anunciar ação sem executor faz a allowlist recusar o manifesto inteiro.
-    """
-    for telefone in (TELEFONE_CLIENTE, TELEFONE_REPRESENTANTE):
-        corpo = (await _pedir(world, telefone)).json()
-        for capacidade in corpo["capabilities"]:
-            assert capacidade["mode"] == "read"
-            assert capacidade["requires_confirmation"] is False
-            assert capacidade["idempotency"] == "none"
-        assert "CRM_REP_CREATE_CUSTOMER_INTAKE" not in json.dumps(corpo)
+    assert all(capacidade["mode"] == "read" for capacidade in corpo["capabilities"])
+    assert all(capacidade["requires_confirmation"] is False for capacidade in corpo["capabilities"])
+    assert all(capacidade["idempotency"] == "none" for capacidade in corpo["capabilities"])
+    assert not {
+        "CRM_REP_SEARCH_PRICE_ITEMS",
+        "CRM_REP_LOOKUP_CUSTOMER",
+        "CRM_REP_GET_CUSTOMER_PRICE_LIST",
+        "CRM_REP_CREATE_CUSTOMER_INTAKE",
+    } & {capacidade["action"] for capacidade in corpo["capabilities"]}
 
 
 @pytest.mark.asyncio
@@ -297,6 +313,14 @@ async def test_apenas_o_slot_de_produto_declara_tipo(world):
         assert cliente_slot == {"id": "customer_query", "required": True}
         assert "kind" not in cliente_slot
 
+    pre_cadastro_slots = por_acao["CRM_REP_CREATE_CUSTOMER_INTAKE"]["slots"]
+    assert pre_cadastro_slots == [
+        {"id": "customer_legal_name", "required": True},
+        {"id": "customer_state_code", "required": True},
+        {"id": "customer_whatsapp", "required": False},
+        {"id": "preferred_products_text", "required": False},
+    ]
+
 
 @pytest.mark.asyncio
 async def test_a_ajuda_do_representante_promete_apenas_o_que_anuncia(world):
@@ -310,9 +334,55 @@ async def test_a_ajuda_do_representante_promete_apenas_o_que_anuncia(world):
     assert "artigo" in ajuda
     assert "carteira" in ajuda
     assert "tabela" in ajuda
-    # A promessa antiga deixou de ser verdade quando os executores existiram.
-    assert "ainda não está disponível" not in ajuda
-    assert "cadastr" not in ajuda.replace("cadastrado como representante", "")
+    assert "pré-cadastro" in ajuda
+    assert "whatsapp" in ajuda
+    assert "aprova" in ajuda
+
+
+def _resolve_alias_como_gateway_206c6bf(manifesto: dict, texto: str) -> str | None:
+    """Trecho determinístico de `resolveBusinessCapabilityIntentByRules`."""
+
+    def normaliza(valor: str) -> str:
+        import unicodedata
+
+        decomposed = unicodedata.normalize("NFD", valor)
+        sem_marcas = "".join(
+            caractere
+            for caractere in decomposed
+            if unicodedata.category(caractere) != "Mn"
+        )
+        return " ".join(
+            "".join(
+                caractere if caractere.isalnum() or caractere == "/" else " "
+                for caractere in sem_marcas
+            )
+            .lower()
+            .split()
+        )
+
+    normalizado = normaliza(texto)
+    melhor: tuple[int, str] | None = None
+    ambiguo = False
+    for capacidade in manifesto["capabilities"]:
+        for alias in capacidade.get("vocabulary", {}).get("aliases", []):
+            alias_normalizado = normaliza(alias)
+            if alias_normalizado and alias_normalizado in normalizado:
+                candidato = (len(alias_normalizado), capacidade["action"])
+                if melhor is None or candidato[0] > melhor[0]:
+                    melhor, ambiguo = candidato, False
+                elif candidato[0] == melhor[0] and candidato[1] != melhor[1]:
+                    ambiguo = True
+    return None if melhor is None or ambiguo else melhor[1]
+
+
+@pytest.mark.asyncio
+async def test_alias_do_pre_cadastro_resolve_exatamente_no_gateway_206c6bf(world):
+    corpo = (await _pedir(world, TELEFONE_REPRESENTANTE)).json()
+
+    assert _resolve_alias_como_gateway_206c6bf(corpo, "cadastrar cliente") == (
+        "CRM_REP_CREATE_CUSTOMER_INTAKE"
+    )
+    assert _resolve_alias_como_gateway_206c6bf(corpo, "bom dia") is None
 
 
 @pytest.mark.asyncio

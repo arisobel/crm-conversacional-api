@@ -14,10 +14,10 @@ servidos a um representante, responderiam que não há tabela para o cadastro
 dele. Os três de representante resolvem pela carteira. Não há caso em que uma
 lista sirva ao outro papel.
 
-A escrita continua fora: `CRM_REP_CREATE_CUSTOMER_INTAKE` existe no CRM desde a
-W7, com endpoint e testes, mas o Gateway ainda não tem executor nem máquina de
-confirmação ligada a ele — e anunciar ação sem executor faz a allowlist recusar
-o manifesto inteiro.
+O pré-cadastro é a única escrita de representante anunciada: o Gateway tem o
+executor e a máquina de confirmação para
+`CRM_REP_CREATE_CUSTOMER_INTAKE`. Ele abre uma solicitação pendente; não cria
+nem autoriza um cliente diretamente.
 """
 
 from crm_api.schemas.capability_manifest import (
@@ -43,14 +43,16 @@ _AJUDA_CLIENTE = (
     "Exemplos: “lista de preços” ou “75/36 urdume”."
 )
 
-# Derivável apenas do que é anunciado logo abaixo: três leituras, nesta ordem.
+# Derivável apenas do que é anunciado logo abaixo: três leituras e um
+# pré-cadastro sujeito a aprovação, nesta ordem.
 # Prometer aqui o que o manifesto não declara produz a pior falha do canal — o
 # representante pede, nada resolve, e ele conclui que o sistema está quebrado.
 _AJUDA_REPRESENTANTE = (
     "Este número está cadastrado como representante. Posso consultar artigo em "
     "preço-base, localizar cliente da sua carteira e enviar a tabela de um "
     "cliente dela. Exemplos: “preço do PUE 20”, “buscar cliente Malhas Silva” "
-    "ou “tabela do cliente Malhas Silva”."
+    "ou “tabela do cliente Malhas Silva”. Também posso abrir pelo WhatsApp o "
+    "pré-cadastro de um novo cliente, sujeito a aprovação."
 )
 
 _CAPACIDADES_CLIENTE = [
@@ -220,6 +222,43 @@ _CAPACIDADES_REPRESENTANTE = [
             ],
         ),
         slots=[Slot(id="customer_query", required=True)],
+    ),
+    Capability(
+        id="CRM_REP_CREATE_CUSTOMER_INTAKE",
+        action="CRM_REP_CREATE_CUSTOMER_INTAKE",
+        mode=CapabilityMode.WRITE,
+        requires_confirmation=True,
+        # O Gateway substitui a chave pelo wamid da confirmação e a repassa ao
+        # endpoint do CRM. `required` é, portanto, parte da garantia contra
+        # reentrega da confirmação, não apenas uma convenção do manifesto.
+        idempotency=Idempotency.REQUIRED,
+        title="Pré-cadastrar cliente",
+        description=(
+            "Abre um pré-cadastro de cliente para aprovação no CRM; não ativa "
+            "o cliente nem autoriza seu telefone no WhatsApp."
+        ),
+        vocabulary=Vocabulary(
+            aliases=[
+                "cadastrar cliente",
+                "novo cliente",
+                "incluir cliente",
+                "criar cliente",
+                "pré-cadastrar cliente",
+            ],
+            examples=[
+                "cadastrar cliente Malhas Silva Ltda",
+                "quero pré-cadastrar um novo cliente",
+            ],
+        ),
+        # Os dois primeiros são o contrato de execução. Os demais são
+        # coletados opcionalmente pela mesma conversa do Gateway e enviados ao
+        # endpoint quando informados.
+        slots=[
+            Slot(id="customer_legal_name", required=True),
+            Slot(id="customer_state_code", required=True),
+            Slot(id="customer_whatsapp", required=False),
+            Slot(id="preferred_products_text", required=False),
+        ],
     ),
 ]
 
