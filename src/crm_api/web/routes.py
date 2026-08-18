@@ -86,6 +86,7 @@ from crm_api.services.users import (
     UnsafeUserChange,
     UserNotFound,
     UserService,
+    WhatsappAlreadyUsed,
 )
 from crm_api.web import messages
 from crm_api.web.csrf import (
@@ -134,6 +135,10 @@ _CODIGOS: list[tuple[type[Exception], str]] = [
     (DefaultLocationRequired, "padrao-obrigatoria"),
     (InvalidOwner, "titular-invalido"),
     (EmailAlreadyUsed, "email-duplicado"),
+    # A colisão que atravessa `users` e `customer_contacts`. A API interna já a
+    # traduzia para 409; o portal não a conhecia e caía no `raise` final de
+    # `_codigo_do_erro`, virando 500 numa recusa de negócio correta.
+    (WhatsappAlreadyUsed, "telefone-em-uso"),
     (WeakPassword, "senha-fraca"),
     (UnsafeUserChange, "alteracao-insegura"),
     (ProductNotFound, "produto-inexistente"),

@@ -55,6 +55,16 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
     "uf-invalida": ("erro", "UF inválida. Use uma das 27 unidades federativas."),
     "documento-duplicado": ("erro", "Já existe um cliente com esse documento."),
     "telefone-duplicado": ("erro", "Esse WhatsApp já pertence a outro contato."),
+    # Distinto de `telefone-duplicado`, que é contato colidindo com contato. Este
+    # é o telefone de um **usuário do portal** colidindo com qualquer um dos dois
+    # cadastros — e a mensagem nomeia os dois porque o serviço levanta a mesma
+    # exceção nos dois casos, e mandar procurar no lugar errado custa mais que
+    # uma frase um pouco mais longa.
+    "telefone-em-uso": (
+        "erro",
+        "Esse WhatsApp já está em uso: pertence a outro usuário do portal ou a "
+        "um contato de cliente. Um mesmo número não pode ser os dois.",
+    ),
     "telefone-invalido": (
         "erro",
         "Telefone inválido. Use o formato internacional, como +55 11 99999-9999.",

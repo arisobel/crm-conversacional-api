@@ -1,5 +1,6 @@
 import re
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
@@ -357,6 +358,157 @@ async def test_admin_cria_representante_pelo_portal(world, admin):
     async with world.app.state.session_factory() as session:
         criada = await session.scalar(select(User).where(User.email == "nova@teste.com.br"))
     assert criada.role.value == "REPRESENTATIVE"
+
+
+@pytest.mark.asyncio
+async def test_admin_cria_representante_com_whatsapp_livre(world, admin):
+    pagina = await admin.get("/portal/users")
+    resposta = await admin.post(
+        "/portal/users",
+        data={
+            "csrf_token": _token(pagina.text),
+            "full_name": "Vendedora Com Zap",
+            "email": "comzap@teste.com.br",
+            "password": "OutraSenhaBoa2026",
+            "role": "REPRESENTATIVE",
+            "whatsapp_e164": "+551188887777",
+        },
+    )
+
+    assert resposta.status_code == 200
+    assert "Usuário criado." in resposta.text
+
+    async with world.app.state.session_factory() as session:
+        criada = await session.scalar(select(User).where(User.email == "comzap@teste.com.br"))
+    # Canonizado na borda: o nono dígito entra no cadastro, não na consulta.
+    assert criada.whatsapp_e164 == "+5511988887777"
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_de_contato_de_cliente_nao_vira_500(world, admin):
+    """A recusa é correta; o 500 era só a ausência de tradução.
+
+    `_codigo_do_erro` relança o que não conhece, e `WhatsappAlreadyUsed` não
+    estava na tabela — uma regra de negócio funcionando virava erro de servidor.
+    """
+    ocupado = "+5511975714368"
+    async with world.app.state.session_factory() as session:
+        session.add(
+            CustomerContact(
+                id=uuid4(),
+                tenant_id=world.tenant_id,
+                customer_id=world.customer_a_id,
+                name="Compras Alfa",
+                whatsapp_e164=ocupado,
+                is_primary=True,
+            )
+        )
+        await session.commit()
+
+    pagina = await admin.get("/portal/users")
+    resposta = await admin.post(
+        "/portal/users",
+        data={
+            "csrf_token": _token(pagina.text),
+            "full_name": "Colide Com Contato",
+            "email": "colide@teste.com.br",
+            "password": "OutraSenhaBoa2026",
+            "role": "REPRESENTATIVE",
+            "whatsapp_e164": ocupado,
+        },
+    )
+
+    assert resposta.status_code == 200
+    assert "já está em uso" in resposta.text
+    # Nada de tripa interna na tela.
+    assert "Traceback" not in resposta.text
+    assert "WhatsappAlreadyUsed" not in resposta.text
+
+    async with world.app.state.session_factory() as session:
+        # Nenhum registro parcial: o usuário não existe, e o contato segue dono
+        # do número.
+        assert await session.scalar(select(User).where(User.email == "colide@teste.com.br")) is None
+        contato = await session.scalar(
+            select(CustomerContact).where(CustomerContact.whatsapp_e164 == ocupado)
+        )
+        assert contato is not None
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_de_outro_usuario_do_portal_tambem_e_recusado(world, admin):
+    """Mesma exceção, outra origem — a colisão entre dois usuários do portal."""
+    pagina = await admin.get("/portal/users")
+    await admin.post(
+        "/portal/users",
+        data={
+            "csrf_token": _token(pagina.text),
+            "full_name": "Primeiro Dono",
+            "email": "primeiro@teste.com.br",
+            "password": "OutraSenhaBoa2026",
+            "role": "REPRESENTATIVE",
+            "whatsapp_e164": "+5511966665555",
+        },
+    )
+
+    pagina = await admin.get("/portal/users")
+    resposta = await admin.post(
+        "/portal/users",
+        data={
+            "csrf_token": _token(pagina.text),
+            "full_name": "Segundo Dono",
+            "email": "segundo@teste.com.br",
+            "password": "OutraSenhaBoa2026",
+            "role": "REPRESENTATIVE",
+            "whatsapp_e164": "+5511966665555",
+        },
+    )
+
+    assert resposta.status_code == 200
+    assert "já está em uso" in resposta.text
+
+    async with world.app.state.session_factory() as session:
+        assert (
+            await session.scalar(select(User).where(User.email == "segundo@teste.com.br"))
+        ) is None
+
+
+@pytest.mark.asyncio
+async def test_email_duplicado_continua_com_a_mensagem_de_sempre(world, admin):
+    """Regressão da tabela: acrescentar um código não pode mover os outros."""
+    pagina = await admin.get("/portal/users")
+    resposta = await admin.post(
+        "/portal/users",
+        data={
+            "csrf_token": _token(pagina.text),
+            "full_name": "Repetido",
+            "email": ADMIN_EMAIL,
+            "password": "OutraSenhaBoa2026",
+            "role": "REPRESENTATIVE",
+        },
+    )
+
+    assert resposta.status_code == 200
+    assert "Já existe um usuário com esse e-mail." in resposta.text
+
+
+@pytest.mark.asyncio
+async def test_telefone_invalido_continua_distinto_de_telefone_em_uso(admin):
+    pagina = await admin.get("/portal/users")
+    resposta = await admin.post(
+        "/portal/users",
+        data={
+            "csrf_token": _token(pagina.text),
+            "full_name": "Telefone Torto",
+            "email": "torto@teste.com.br",
+            "password": "OutraSenhaBoa2026",
+            "role": "REPRESENTATIVE",
+            "whatsapp_e164": "1199",
+        },
+    )
+
+    assert resposta.status_code == 200
+    assert "Telefone inválido" in resposta.text
+    assert "já está em uso" not in resposta.text
 
 
 @pytest.mark.asyncio
