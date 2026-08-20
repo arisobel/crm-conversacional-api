@@ -104,6 +104,22 @@ arquivo no painel, ou use:
 caprover deploy --tarFile .\dist\crm-conversacional-api-<timestamp>.tar
 ```
 
+### Deploy direto pelo CLI
+
+Instale o CLI oficial uma vez (`npm install -g caprover`), preencha no `.env` a
+URL HTTPS do painel, o nome do app e o **App Token** criado em
+`Apps > <app> > Deployment`. O token fica somente no ambiente do processo e não
+é passado como argumento de linha de comando.
+
+```powershell
+.\deploy-caprover.ps1
+```
+
+O script empacota o contexto de build com `build.ps1` e envia o tarball pelo
+CLI. Para conferir a configuração sem criar pacote ou publicar, use
+`.\deploy-caprover.ps1 -WhatIf`. Para reenviar um pacote já criado, use
+`.\deploy-caprover.ps1 -TarFile .\dist\arquivo.tar -SkipBuild`.
+
 ## Comandos de qualidade
 
 ```powershell
