@@ -28,6 +28,7 @@ from crm_api.models.user import User, UserRole
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.catalog import CatalogRepository, ProductFilters
 from crm_api.repositories.customer_admin import CustomerAdminRepository
+from crm_api.repositories.customer_intakes import CustomerIntakeRepository
 from crm_api.repositories.icms import IcmsRuleRepository
 from crm_api.repositories.interactions import InteractionRepository
 from crm_api.repositories.portfolio import (
@@ -60,6 +61,15 @@ from crm_api.services.customer_admin import (
     LocationNotFound,
     PreferredProductNotFound,
     ProductNotFound,
+)
+from crm_api.services.customer_intake import (
+    BlankField,
+    CustomerIntakeService,
+    IntakeAlreadyResolved,
+    IntakeNotFound,
+)
+from crm_api.services.customer_intake import (
+    WhatsappAlreadyUsed as IntakeWhatsappAlreadyUsed,
 )
 from crm_api.services.customer_price_list import (
     CustomerPriceListService,
@@ -131,6 +141,10 @@ _CODIGOS: list[tuple[type[Exception], str]] = [
     (InvalidStateCode, "uf-invalida"),
     (DuplicateDocument, "documento-duplicado"),
     (DuplicateWhatsapp, "telefone-duplicado"),
+    (IntakeWhatsappAlreadyUsed, "telefone-em-uso"),
+    (IntakeNotFound, "nao-encontrado"),
+    (IntakeAlreadyResolved, "intake-ja-resolvido"),
+    (BlankField, "campo-obrigatorio"),
     (InvalidWhatsappNumber, "telefone-invalido"),
     (DefaultLocationRequired, "padrao-obrigatoria"),
     (InvalidOwner, "titular-invalido"),
@@ -250,6 +264,26 @@ def _interaction_service(session: AsyncSession) -> InteractionService:
         interactions=InteractionRepository(session),
         portfolio=CustomerPortfolioRepository(session),
         audit=AuditRepository(session),
+    )
+
+
+def _intake_service(request: Request, session: AsyncSession) -> CustomerIntakeService:
+    """Mesmo serviço da porta interna; o portal só apresenta a fila.
+
+    Aceitar por aqui não pode ganhar uma segunda implementação de criação
+    de cliente. O serviço reaproveita o cadastro comercial, que já garante
+    localidade padrão, carteira, telefone canônico e auditoria.
+    """
+    admin = CustomerAdminRepository(session)
+    audit = AuditRepository(session)
+    return CustomerIntakeService(
+        intakes=CustomerIntakeRepository(session),
+        admin=admin,
+        users=UserRepository(session),
+        customers=CustomerAdminService(
+            portfolio=CustomerPortfolioRepository(session), admin=admin, audit=audit
+        ),
+        audit=audit,
     )
 
 
@@ -474,6 +508,103 @@ async def criar_cliente(
 
     await session.commit()
     return _redirect(f"/portal/customers/{cliente.id}", "cliente-criado")
+
+
+# ---------------------------------------------------------- pré-cadastros
+
+
+@router.get("/intakes", include_in_schema=False)
+async def pagina_pre_cadastros(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    m: Annotated[str | None, Query()] = None,
+) -> Response:
+    """Fila pendente que cada papel pode de fato resolver.
+
+    O recorte de representante acontece no serviço, não no template: ele vê
+    somente o que abriu; `ADMIN` e `MANAGER` veem a fila do tenant inteiro.
+    """
+    intakes, total = await _intake_service(request, session).queue(
+        scope_for(current_user), actor_role=current_user.role
+    )
+    return _render(
+        request,
+        "intakes.html",
+        {"intakes": intakes, "total": total},
+        current_user=current_user,
+        mensagem=m,
+    )
+
+
+@router.post("/intakes/{intake_id}/accept", include_in_schema=False)
+async def aceitar_pre_cadastro(
+    request: Request,
+    intake_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    legal_name: _CustomerForm = None,
+    state_code: _CustomerForm = None,
+    trade_name: _CustomerForm = None,
+    document_number: _CustomerForm = None,
+    contact_name: _CustomerForm = None,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/intakes", "csrf")
+
+    try:
+        intake = await _intake_service(request, session).accept(
+            current_user.tenant_id,
+            intake_id,
+            actor_user_id=current_user.user_id,
+            actor_role=current_user.role,
+            legal_name=legal_name,
+            state_code=state_code,
+            trade_name=trade_name,
+            document_number=document_number,
+            contact_name=contact_name,
+            request_id=request.headers.get("x-request-id"),
+        )
+    except Exception as error:  # noqa: BLE001 -- reclassificado por _codigo_do_erro
+        await session.rollback()
+        return _redirect("/portal/intakes", _codigo_do_erro(error))
+
+    await session.commit()
+    # O CHECK da tabela exige customer_id em todo intake ACCEPTED. Mantemos a
+    # guarda para que uma regressão nessa invariante não produza uma URL /None.
+    if intake.customer_id is None:
+        raise RuntimeError("accepted customer intake has no customer")
+    return _redirect(f"/portal/customers/{intake.customer_id}", "intake-aceito")
+
+
+@router.post("/intakes/{intake_id}/reject", include_in_schema=False)
+async def rejeitar_pre_cadastro(
+    request: Request,
+    intake_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    reason: Annotated[str, Form()],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/intakes", "csrf")
+
+    try:
+        await _intake_service(request, session).reject(
+            current_user.tenant_id,
+            intake_id,
+            actor_user_id=current_user.user_id,
+            actor_role=current_user.role,
+            reason=reason,
+            request_id=request.headers.get("x-request-id"),
+        )
+    except Exception as error:  # noqa: BLE001 -- reclassificado por _codigo_do_erro
+        await session.rollback()
+        return _redirect("/portal/intakes", _codigo_do_erro(error))
+
+    await session.commit()
+    return _redirect("/portal/intakes", "intake-rejeitado")
 
 
 @router.get("/customers/{customer_id}", include_in_schema=False)

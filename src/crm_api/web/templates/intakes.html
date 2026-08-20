@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Pré-cadastros{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Pré-cadastros pendentes</h1>
+  <p class="dica">{{ total }} aguardando conferência.</p>
+</div>
+
+{% if intakes %}
+  {% for intake, autor in intakes %}
+  <section class="painel">
+    <div class="cabecalho">
+      <div>
+        <h2>{{ intake.legal_name }}</h2>
+        <p class="dica">
+          Aberto por {{ autor.full_name }} em {{ intake.created_at.strftime('%d/%m/%Y %H:%M') }}
+          via {{ intake.source }}.
+        </p>
+      </div>
+    </div>
+
+    <form method="post" action="/portal/intakes/{{ intake.id }}/accept" class="formulario">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+      <label for="legal_name_{{ intake.id }}">Razão social</label>
+      <input id="legal_name_{{ intake.id }}" name="legal_name" value="{{ intake.legal_name }}" required>
+
+      <label for="trade_name_{{ intake.id }}">Nome fantasia</label>
+      <input id="trade_name_{{ intake.id }}" name="trade_name">
+
+      <label for="document_number_{{ intake.id }}">Documento</label>
+      <input id="document_number_{{ intake.id }}" name="document_number">
+
+      <label for="state_code_{{ intake.id }}">UF</label>
+      <input id="state_code_{{ intake.id }}" name="state_code" maxlength="2" size="2"
+             value="{{ intake.state_code }}" required>
+
+      {% if intake.whatsapp_e164 %}
+      <label for="contact_name_{{ intake.id }}">Nome do contato</label>
+      <input id="contact_name_{{ intake.id }}" name="contact_name" value="{{ intake.legal_name }}">
+      <p class="dica">WhatsApp informado: {{ intake.whatsapp_e164 }}. Ele só será autorizado ao aceitar.</p>
+      {% else %}
+      <p class="dica">Nenhum WhatsApp foi informado; o cliente será criado sem contato.</p>
+      {% endif %}
+
+      {% if intake.preferred_products_text %}
+      <p class="dica">Preferências relatadas: {{ intake.preferred_products_text }}</p>
+      {% endif %}
+
+      <button type="submit">Aceitar e criar cliente</button>
+    </form>
+
+    <form method="post" action="/portal/intakes/{{ intake.id }}/reject" class="formulario">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="reason_{{ intake.id }}">Motivo da rejeição</label>
+      <input id="reason_{{ intake.id }}" name="reason" maxlength="500" required>
+      <button type="submit" class="link">Rejeitar pré-cadastro</button>
+    </form>
+  </section>
+  {% endfor %}
+{% else %}
+  <p class="vazio">Não há pré-cadastros pendentes no seu escopo.</p>
+{% endif %}
+{% endblock %}

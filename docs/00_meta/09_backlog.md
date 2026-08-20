@@ -289,7 +289,10 @@ Duas decisões de alcance tomadas aqui, mais restritivas que o portal:
       `CustomerAdminService` — o mesmo do portal, para que localidade padrão,
       titularidade e auditoria não ganhem uma segunda implementação.
 - [ ] Aplicar a `0011` contra PostgreSQL.
-- [ ] `/portal/intake` — a fila. O serviço já a serve (`queue`), falta a tela.
+- [x] `/portal/intakes` — fila de pendentes, com revisão, aceite e recusa.
+      Representante vê e resolve apenas os que abriu; `ADMIN` e `MANAGER`, a
+      fila inteira. O aceite reutiliza `CustomerIntakeService`, preservando o
+      titular original e revalidando o telefone antes de autorizar o contato.
 - [ ] **Depende da máquina de confirmação do Gateway** (`GW-040` a `GW-045`,
       todos abertos) para ser alcançável pelo WhatsApp. Até lá o endpoint existe,
       testado, e o manifesto do representante **não** anuncia a ação — anunciar
