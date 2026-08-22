@@ -51,6 +51,21 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
     ),
     "familia-criada": ("ok", "Família cadastrada."),
     "familia-salva": ("ok", "Família atualizada."),
+    "nota-registrada": ("ok", "Conversa registrada no histórico."),
+    "nota-corrigida": ("ok", "Nota corrigida. A versão anterior fica na auditoria."),
+    # falhas de registro de conversa
+    "nota-vazia": ("erro", "Escreva o que aconteceu antes de registrar."),
+    "nota-meio-invalido": ("erro", "Escolha um meio da lista."),
+    "nota-sentido-invalido": ("erro", "Sentido inválido. Deixe em branco se não se aplica."),
+    "nota-inexistente": ("erro", "Essa nota não existe mais."),
+    # A distinção importa: a primeira é impossível por desenho, a segunda é
+    # questão de alçada e um gestor conseguiria.
+    "nota-nao-editavel": (
+        "erro",
+        "Só nota registrada à mão pode ser corrigida. Mensagem do WhatsApp é "
+        "registro do que aconteceu e não se reescreve.",
+    ),
+    "nota-de-outro": ("erro", "Essa nota foi escrita por outra pessoa."),
     # falhas de validação
     "uf-invalida": ("erro", "UF inválida. Use uma das 27 unidades federativas."),
     "documento-duplicado": ("erro", "Já existe um cliente com esse documento."),

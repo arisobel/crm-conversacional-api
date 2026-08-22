@@ -22,6 +22,7 @@ from crm_api.core.database import get_session
 from crm_api.core.numbers import InvalidDecimal, parse_decimal
 from crm_api.core.passwords import WeakPassword
 from crm_api.core.states import InvalidStateCode, normalize_state_code
+from crm_api.models.interaction import NOTE_CHANNELS, InteractionDirection
 from crm_api.models.pricing import AvailabilityStatus
 from crm_api.models.tax import IcmsRule
 from crm_api.models.user import User, UserRole
@@ -84,7 +85,14 @@ from crm_api.services.icms import (
     InvalidTaxRate,
     OriginNotConfigured,
 )
-from crm_api.services.interactions import InteractionService
+from crm_api.services.interactions import (
+    EmptyNote,
+    InteractionService,
+    NotEditable,
+    NoteNotFound,
+    NoteNotOwned,
+    UnknownNoteChannel,
+)
 from crm_api.services.portfolio import CustomerNotInScope, InvalidOwner, PortfolioService
 from crm_api.services.price_publication import (
     BatchNotFound,
@@ -164,6 +172,11 @@ _CODIGOS: list[tuple[type[Exception], str]] = [
     (LocationUnavailable, "sem-localidade"),
     (PricesUnavailable, "sem-competencia"),
     (InvalidTaxRate, "aliquota-invalida"),
+    (EmptyNote, "nota-vazia"),
+    (UnknownNoteChannel, "nota-meio-invalido"),
+    (NoteNotFound, "nota-inexistente"),
+    (NotEditable, "nota-nao-editavel"),
+    (NoteNotOwned, "nota-de-outro"),
 ]
 
 
@@ -673,6 +686,12 @@ async def pagina_cliente(
             "interacoes": interacoes,
             "total_interacoes": total_interacoes,
             "timeline_truncada": total_interacoes > len(interacoes),
+            "meios_de_nota": NOTE_CHANNELS,
+            # Quem pode corrigir cada nota. O autor corrige a dele; gestão
+            # corrige qualquer uma. A tela só esconde o que o serviço recusaria.
+            "pode_editar_nota": (
+                lambda nota: nota.actor_user_id == current_user.user_id or pode_gerir
+            ),
             "pode_gerir": pode_gerir,
             "representantes": await _designaveis(session, current_user.tenant_id)
             if pode_gerir
@@ -681,6 +700,71 @@ async def pagina_cliente(
         current_user=current_user,
         mensagem=m,
     )
+
+
+@router.post("/customers/{customer_id}/notas", include_in_schema=False)
+async def registrar_nota(
+    request: Request,
+    customer_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    summary: Annotated[str, Form()],
+    channel: Annotated[str, Form()],
+    direction: _CustomerForm = None,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    destino = f"/portal/customers/{customer_id}"
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+
+    try:
+        await _interaction_service(session).register_note(
+            scope=scope_for(current_user),
+            customer_id=customer_id,
+            author_user_id=current_user.user_id,
+            summary=summary,
+            channel=channel,
+            direction=InteractionDirection(direction) if direction else None,
+        )
+    except ValueError:
+        await session.rollback()
+        return _redirect(destino, "nota-sentido-invalido")
+    except Exception as error:  # noqa: BLE001 -- reclassificado por _codigo_do_erro
+        await session.rollback()
+        return _redirect(destino, _codigo_do_erro(error))
+
+    await session.commit()
+    return _redirect(destino, "nota-registrada")
+
+
+@router.post("/customers/{customer_id}/notas/{note_id}", include_in_schema=False)
+async def editar_nota(
+    request: Request,
+    customer_id: uuid.UUID,
+    note_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    summary: Annotated[str, Form()],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    destino = f"/portal/customers/{customer_id}"
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+
+    try:
+        await _interaction_service(session).edit_note(
+            scope=scope_for(current_user),
+            note_id=note_id,
+            editor_user_id=current_user.user_id,
+            editor_role=current_user.role,
+            summary=summary,
+        )
+    except Exception as error:  # noqa: BLE001 -- reclassificado por _codigo_do_erro
+        await session.rollback()
+        return _redirect(destino, _codigo_do_erro(error))
+
+    await session.commit()
+    return _redirect(destino, "nota-corrigida")
 
 
 @router.post("/customers/{customer_id}", include_in_schema=False)

@@ -23,10 +23,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.models.interaction import (
     GATEWAY_SOURCE,
+    NOTE_CHANNELS,
+    PORTAL_SOURCE,
     WHATSAPP_CHANNEL,
     CustomerInteraction,
     InteractionDirection,
+    InteractionKind,
 )
+from crm_api.models.user import UserRole
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.interactions import InteractionRepository
 from crm_api.repositories.portfolio import CustomerPortfolioRepository, PortfolioScope
@@ -40,6 +44,26 @@ _LIMITE_RESUMO = 2000
 
 class RetentionNotConfigured(Exception):
     """Expurgo pedido sem política de retenção definida."""
+
+
+class EmptyNote(Exception):
+    """Nota sem texto. Uma linha em branco na ficha não registra nada."""
+
+
+class UnknownNoteChannel(Exception):
+    """Meio fora da lista que o portal oferece."""
+
+
+class NoteNotFound(Exception):
+    """Nota inexistente neste tenant."""
+
+
+class NotEditable(Exception):
+    """Tentativa de reescrever um evento de canal, que é imutável por desenho."""
+
+
+class NoteNotOwned(Exception):
+    """Representante tentando corrigir a nota de outro."""
 
 
 class Outcome(StrEnum):
@@ -140,6 +164,7 @@ class InteractionService:
             interacao = CustomerInteraction(
                 id=uuid.uuid4(),
                 tenant_id=tenant_id,
+                kind=dono.kind,
                 customer_id=dono.customer_id,
                 actor_user_id=dono.actor_user_id,
                 contact_id=dono.contact_id,
@@ -199,6 +224,123 @@ class InteractionService:
             return _Owner(actor_user_id=usuario.id)
 
         raise _ResolutionFailed("no customer contact or portal user matches this phone")
+
+    # ------------------------------------------------------------ nota manual
+
+    async def register_note(
+        self,
+        *,
+        scope: PortfolioScope,
+        customer_id: uuid.UUID,
+        author_user_id: uuid.UUID,
+        summary: str,
+        channel: str,
+        direction: InteractionDirection | None,
+        occurred_at: datetime | None = None,
+        contact_id: uuid.UUID | None = None,
+    ) -> CustomerInteraction:
+        """Registra na ficha uma conversa que aconteceu fora do canal.
+
+        O autor é sempre quem está logado, nunca um campo do formulário: a nota
+        é o relato dele, e deixar escolher o autor permitiria atribuir a outro
+        representante uma conversa que nunca houve.
+        """
+        if await self._portfolio.get_customer(scope, customer_id) is None:
+            raise CustomerNotInScope
+
+        texto = summary.strip()
+        if not texto:
+            raise EmptyNote
+        if channel not in NOTE_CHANNELS:
+            raise UnknownNoteChannel(channel)
+
+        nota = CustomerInteraction(
+            id=uuid.uuid4(),
+            tenant_id=scope.tenant_id,
+            kind=InteractionKind.REPRESENTATIVE_NOTE,
+            customer_id=customer_id,
+            actor_user_id=author_user_id,
+            contact_id=contact_id,
+            channel=channel,
+            direction=direction,
+            source=PORTAL_SOURCE,
+            # A nota não referencia sistema externo nenhum — ela é a própria
+            # origem. Usar o id dela mantém `(tenant, source, external_ref)`
+            # único sem inventar uma referência que não existe.
+            external_ref="",
+            occurred_at=_em_utc(occurred_at or datetime.now(UTC)),
+            summary=texto[:_LIMITE_RESUMO],
+        )
+        nota.external_ref = str(nota.id)
+        self._interactions.add(nota)
+
+        self._audit.record(
+            action="INTERACTION_NOTE_CREATED",
+            entity="customer_interactions",
+            tenant_id=scope.tenant_id,
+            actor_user_id=author_user_id,
+            entity_id=nota.id,
+            after={
+                "customer_id": str(customer_id),
+                "channel": channel,
+                "direction": direction.value if direction else None,
+                "summary": nota.summary,
+            },
+        )
+        return nota
+
+    async def edit_note(
+        self,
+        *,
+        scope: PortfolioScope,
+        note_id: uuid.UUID,
+        editor_user_id: uuid.UUID,
+        editor_role: UserRole,
+        summary: str,
+        now: datetime | None = None,
+    ) -> CustomerInteraction:
+        """Corrige o texto de uma nota já registrada.
+
+        É a única escrita que altera uma linha desta tabela, e vale só para
+        nota. Evento de canal continua imutável: ele relata o que aconteceu, e
+        reescrever o que o cliente disse seria falsificar a projeção.
+        """
+        nota = await self._interactions.get_by_id(scope.tenant_id, note_id)
+        if nota is None:
+            raise NoteNotFound
+        if nota.kind is not InteractionKind.REPRESENTATIVE_NOTE:
+            raise NotEditable
+        # Escopo pelo cliente, não pela nota: um representante que perdeu a
+        # titularidade da conta deixa de alcançar o histórico dela junto.
+        if nota.customer_id is None or (
+            await self._portfolio.get_customer(scope, nota.customer_id) is None
+        ):
+            raise CustomerNotInScope
+        # Autor corrige o que escreveu; gestão corrige qualquer uma. Um
+        # representante reescrevendo a nota de outro apagaria o relato alheio.
+        if editor_role not in (UserRole.ADMIN, UserRole.MANAGER) and (
+            nota.actor_user_id != editor_user_id
+        ):
+            raise NoteNotOwned
+
+        texto = summary.strip()
+        if not texto:
+            raise EmptyNote
+
+        anterior = nota.summary
+        nota.summary = texto[:_LIMITE_RESUMO]
+        nota.edited_at = _em_utc(now or datetime.now(UTC))
+
+        self._audit.record(
+            action="INTERACTION_NOTE_EDITED",
+            entity="customer_interactions",
+            tenant_id=scope.tenant_id,
+            actor_user_id=editor_user_id,
+            entity_id=nota.id,
+            before={"summary": anterior},
+            after={"summary": nota.summary},
+        )
+        return nota
 
     # --------------------------------------------------------------- leitura
 
@@ -273,11 +415,23 @@ class InteractionService:
 
 @dataclass(frozen=True)
 class _Owner:
-    """A quem o evento pertence — exatamente um dos dois, como o `CHECK` exige."""
+    """A quem o evento de canal pertence — exatamente um dos dois.
+
+    A ingestão nunca produz `REPRESENTATIVE_NOTE`: nota nasce no portal, não no
+    Gateway. Por isso `kind` aqui só tem duas saídas possíveis.
+    """
 
     customer_id: uuid.UUID | None = None
     actor_user_id: uuid.UUID | None = None
     contact_id: uuid.UUID | None = None
+
+    @property
+    def kind(self) -> InteractionKind:
+        return (
+            InteractionKind.CUSTOMER_CHANNEL
+            if self.customer_id is not None
+            else InteractionKind.ACTOR_CHANNEL
+        )
 
 
 class _ResolutionFailed(Exception):

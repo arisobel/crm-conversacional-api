@@ -1,8 +1,12 @@
 """Leitura e escrita da projeção de interações.
 
 A timeline é sempre alcançada **pelo cliente**, que por sua vez passa pelo
-`PortfolioScope` na camada de serviço. Não existe consulta de interação por id
-solto: ela permitiria enumerar a conversa de carteiras alheias.
+`PortfolioScope` na camada de serviço — uma leitura por id solto permitiria
+enumerar a conversa de carteiras alheias.
+
+A `0012` abriu uma exceção estreita, `get_by_id`, porque corrigir uma nota exige
+alcançá-la. Ela é restrita ao tenant e o escopo de carteira continua sendo
+verificado no serviço, pelo `customer_id` da linha encontrada.
 """
 
 import uuid
@@ -24,6 +28,23 @@ class InteractionRepository:
 
     def add(self, interaction: CustomerInteraction) -> None:
         self._session.add(interaction)
+
+    async def get_by_id(
+        self, tenant_id: uuid.UUID, interaction_id: uuid.UUID
+    ) -> CustomerInteraction | None:
+        """Busca por id, restrita ao tenant.
+
+        Contraria a nota do topo deste módulo de propósito, e só por causa da
+        edição de nota: para corrigir uma nota é preciso alcançá-la. O escopo de
+        carteira continua sendo aplicado — pelo `customer_id` da linha, na
+        camada de serviço —, então isto não abre enumeração de conversa alheia.
+        """
+        return await self._session.scalar(
+            select(CustomerInteraction).where(
+                CustomerInteraction.tenant_id == tenant_id,
+                CustomerInteraction.id == interaction_id,
+            )
+        )
 
     async def resolve_portal_user(self, tenant_id: uuid.UUID, phone: str) -> User | None:
         """Localiza o usuário do portal dono deste telefone, ativo ou não.

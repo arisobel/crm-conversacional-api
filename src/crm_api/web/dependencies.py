@@ -21,6 +21,25 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+# O canal é gravado em maiúsculas porque o Gateway grava assim e a coluna é
+# compartilhada. Traduzir na exibição evita ter que escolher entre um banco
+# legível e um banco compatível.
+_ROTULOS_DE_MEIO = {
+    "WHATSAPP": "WhatsApp",
+    "PHONE": "Telefone",
+    "VISIT": "Visita",
+    "EMAIL": "E-mail",
+    "OTHER": "Outro",
+}
+
+
+def rotulo_meio(canal: str | None) -> str:
+    """Nome do meio para leitura humana; desconhecido passa como veio."""
+    return _ROTULOS_DE_MEIO.get(canal or "", canal or "—")
+
+
+templates.env.globals["rotulo_meio"] = rotulo_meio
+
 LOGIN_PATH = "/portal/login"
 
 

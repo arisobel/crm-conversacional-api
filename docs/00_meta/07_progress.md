@@ -1,18 +1,60 @@
 # Progresso central
 
-Atualizado em: 2026-08-10
+Atualizado em: 2026-08-22
 
 ## Estado atual
 
-**Fase ativa:** F5 concluída. **R0 a R6 implementados e implantados.**
+**Fase ativa:** F5 e W concluídas do lado do CRM. **R0 a R6 e W1 a W7
+implementados e implantados.** Frente aberta: **D — disparo para grupo de
+clientes** (ver [backlog](09_backlog.md)).
 
-As migrações `0006`, `0007` e `0008` estão em produção, e o push de interações
-do Gateway também: em 2026-08-06 o log registrou
-`[CRM INTERACTION PUSH DELIVERED] ... attempt: 1`, o que prova a cadeia inteira
-— rede interna, HMAC, tenant e o endpoint criado pela `0008`.
+### Verificado em produção em 2026-08-22
 
-O que falta para a conversa entregar preço não é código, é dado e decisão
-fiscal: matriz de ICMS, UF de origem do tenant, competência publicada e Q1/Q2.
+Conferido nas variáveis do CapRover e nos logs dos dois serviços após um "olá",
+não por leitura de documentação:
+
+- **A cadeia inteira `0001` → `0011` está aplicada.**
+  `CRM_RUN_MIGRATIONS_ON_STARTUP=true` é honrada pelo `docker-entrypoint.sh`,
+  que roda `alembic upgrade head` a cada start. As guardas da `0009` (colisão de
+  telefone) e da `0006` (competência duplicada) **passaram**.
+- **O manifesto canônico está ligado.** `mode: 'MANIFEST'` com
+  `legacy_allowed: false` — o caminho legado já não é usado.
+- **O push de interações roda nos dois sentidos**, INBOUND e OUTBOUND, com
+  `created: 1` em ambos.
+- **Nenhum número de representante foi autorizado ainda.** O log traz
+  `actor_role: 'cliente'`. Todo o caminho de representante está construído dos
+  dois lados e **nunca rodou de ponta a ponta**.
+
+Três itens do backlog que estavam abertos e estavam prontos: o push assíncrono
+no Gateway, os executores de representante (são quatro, não três) e a máquina de
+confirmação do W7.
+
+### N1 — conversa representante × cliente (2026-08-22)
+
+**Migração `0012`.** A `0010` fixou que uma interação tem exatamente um dono, e
+a regra estava certa para o caso dela: "bom dia" dito ao robô não pertence a
+cliente nenhum. Mas representante conversando **com o cliente** é uma terceira
+forma, com os dois donos, e o `CHECK` a recusava.
+
+Entra o discriminador `kind` e o `CHECK` passa a exigir de cada forma o seu
+formato exato — a alternativa, afrouxar para "pelo menos um dono", devolveria a
+permissividade que a `0010` tinha tirado.
+
+Uma invariante foi quebrada de propósito: **nota manual pode ser editada.** O
+resto da tabela continua imutável. Nota é texto que uma pessoa escreveu, e
+proibir corrigir só faria nascer uma segunda nota dizendo "corrigindo a
+anterior" — dado pior do que o problema. Cada edição grava o texto anterior em
+`audit_log`.
+
+### A decisão fiscal de 2026-08-22
+
+**O sistema não calcula imposto.** O preço entregue é o preço-base, com o aviso
+"em caso de incidência de impostos adicionais, eles serão acrescidos ao valor
+base". Q1 e Q2 estão **dispensadas, não respondidas** — deixaram de importar.
+
+O motor de ICMS do R4 fica dormente, não removido, com
+`CRM_WHATSAPP_ICMS_ENABLED` desligado. A matriz das 27 UFs deixa de ser
+pré-requisito de qualquer coisa.
 
 **Mudança de direção em 2026-08-04:** o produto passa a ser um CRM operado por
 representantes comerciais; o WhatsApp vira canal, não interface primária. Ver
@@ -142,28 +184,41 @@ vier de `price_entries`.
 
 ## Em andamento
 
-- Nada em implementação. O plano F5 está concluído do lado do CRM.
+- **Frente D — disparo para grupo de clientes.** Em desenho; nada em código.
+  Decidido: segmentação em dois eixos (material e porte), remetente é a linha
+  BPTI, template da Meta em aprovação, disparo por link como caminho secundário.
+- **Frente N — conversa representante × cliente na ficha.** N1 (nota manual)
+  implementada em 22/08 pela migração `0012`; N2 (envio pelo portal) depende da
+  rota de envio CRM → Gateway, compartilhada com o disparo.
 
 ## Próximo baby-step
 
-Três coisas que dependem de decisão e de carga de dado, não de código:
-
-1. **Confirmar Q1 e Q2**, carregar a matriz de ICMS e definir
-   `tenants.origin_state_code`. Só então ligar `CRM_WHATSAPP_ICMS_ENABLED`. O
-   sistema não estima: sem matriz ele falha. Mas com a matriz carregada e a
-   fórmula errada, ele produz números plausíveis e incorretos — e pelo WhatsApp
-   eles vão direto ao cliente, sem representante conferindo.
-2. **Publicar uma competência** em `/portal/prices` e cadastrar os produtos
+1. **Autorizar um número de representante no painel do Gateway.** É o único
+   passo que falta para W4, W6 e W7 rodarem de ponta a ponta — quatro
+   executores, manifesto e máquina de confirmação já estão prontos e ligados dos
+   dois lados, e nada disso jamais foi exercido com um representante real.
+2. **Modo "sem conversão" em `CustomerPriceListService.resolve`.** Ele passa
+   sempre pelo resolvedor de ICMS; sem matriz carregada, a tela de lista
+   resolvida por cliente do portal **não funciona**. A decisão de 22/08 torna
+   isso um defeito aberto, não uma pendência de dado.
+3. **Publicar uma competência** em `/portal/prices` e cadastrar os produtos
    preferidos dos clientes; sem eles a tabela sai como catálogo inteiro.
-3. **Confirmar Q3** e configurar `CRM_INTERACTION_RETENTION_DAYS`. Sem ela, nada
-   é apagado — o que é seguro, mas não é uma política.
+4. **Confirmar Q3** e configurar `CRM_INTERACTION_RETENTION_DAYS`. A variável
+   não existe no CapRover, conferido em 22/08: nada é apagado — o que é seguro,
+   mas não é uma política.
+5. **Registrar a decisão fiscal como ADR.** Sem ela, a matriz de ICMS vazia
+   parece esquecimento em vez de escolha.
 
 ## Pendências abertas
 
 - Nenhuma migração é executada contra PostgreSQL no ambiente de
   desenvolvimento — não há Docker nem banco aqui; a validação é a cadeia de
-  revisões (`0008_customer_interactions` é head) e o esquema equivalente sobre
-  SQLite nos testes. A verificação real é o log de produção.
+  revisões (`0011_customer_intakes` é head) e o esquema equivalente sobre SQLite
+  nos testes. **Em produção elas rodam sozinhas**, no start do contêiner, e é aí
+  que a verificação real acontece.
+- **`alembic upgrade head` automático no start não tem passo de revisão.** Um
+  deploy com migração ruim derruba o start do contêiner. Funciona para uma
+  pessoa; não sobrevive a duas. Ninguém decidiu manter ou tirar.
 - Interação de contato não cadastrado volta como `REJECTED` e **não é
   reenfileirada**: cadastrar o contato depois não traz de volta o que já foi
   recusado. Só as mensagens seguintes entram na timeline.
@@ -175,22 +230,30 @@ Três coisas que dependem de decisão e de carga de dado, não de código:
 - A `0006` é a mais delicada de todas até agora: ela verifica conflitos antes de
   gravar e **aborta a transação inteira** se encontrar duas tabelas `ACTIVE` com
   o mesmo produto e competência, em vez de resolver por "último vence".
-- **Q1 e Q2 continuam sem resposta contábil.** R4 foi implementada assim mesmo,
-  com a fórmula selecionável e sem estimativa implícita, mas a confirmação
-  precisa vir antes de qualquer preço convertido chegar a um cliente.
+- **Q1 e Q2 foram dispensadas em 2026-08-22**, não respondidas. O sistema não
+  calcula imposto; entrega o preço-base com aviso. Se um dia o cálculo voltar,
+  as duas perguntas contábeis voltam junto — elas não foram resolvidas, só
+  deixaram de estar no caminho.
 - `CRM_SESSION_COOKIE_SECURE` precisa permanecer `true` em produção; só os
-  testes o desligam.
+  testes o desligam. **Não está definida no CapRover**, e o padrão do código é
+  `true` — correto hoje, mas por omissão e não por configuração.
 - O limitador de login tem estado em processo. Com mais de uma réplica, ele
   precisa migrar para armazenamento compartilhado; o bloqueio por conta em
   `users.locked_until` é o controle que já atravessa réplicas.
 - Nenhum cliente de produção tem titular. A carteira só passa a existir quando
   um administrador designar os titulares pelo portal.
 
-- **`CRM_WHATSAPP_ICMS_ENABLED` está desligado e deve continuar assim** até Q1 e Q2
-  serem confirmadas. O interruptor existe porque o alcance é diferente do portal: lá um
-  representante confere o `trace` antes de cotar, aqui o número vai direto ao cliente.
-  Sem ele, carregar a matriz de ICMS para usar o portal mudaria, como efeito colateral,
-  o que o cliente recebe pelo WhatsApp.
+- **`CRM_WHATSAPP_ICMS_ENABLED` está desligado e passa a ser permanente**, pela
+  decisão de 22/08. Não está definida no CapRover; o padrão do código é `false`,
+  que é o desejado. O interruptor deixa de ser transitório e vira o mecanismo que
+  mantém R4 dormente.
+- **`CustomerPriceListService.resolve` passa sempre pelo resolvedor de ICMS.**
+  Sem matriz carregada — e ela não será carregada — a tela de lista resolvida por
+  cliente do portal não funciona. Era pendência de dado; a decisão de 22/08
+  transformou em defeito aberto.
+- **Nota manual não pode ser excluída, só corrigida.** Uma nota lançada no
+  cliente errado fica na ficha dele; o que sobra é reescrevê-la para "lançamento
+  indevido". Falta decidir se some ou se é marcada.
 
 ## Evidências
 

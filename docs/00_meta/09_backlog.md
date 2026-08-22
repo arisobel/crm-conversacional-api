@@ -5,17 +5,54 @@ Plano de entrega: [F5](../40_delivery/F5_REPRESENTATIVE_PORTAL.md).
 
 ## P0 — Decisões que bloqueiam implementação
 
-- [ ] Confirmar se o preço-base carregado já contém ICMS embutido e qual alíquota (Q1).
-- [ ] Confirmar a fórmula de conversão entre UFs: "por dentro" ou acréscimo simples (Q2).
+- [x] ~~Q1 — o preço-base já contém ICMS embutido?~~ **Dispensada em 2026-08-22.**
+- [x] ~~Q2 — conversão "por dentro" ou acréscimo simples?~~ **Dispensada em 2026-08-22.**
 - [ ] Definir retenção e visibilidade do histórico de interações sob LGPD (Q3).
 - [x] Q4 — a interface é server-rendered na mesma origem da API (ADR-017).
 
-Q1 e Q2 bloqueavam R4, que foi implementada assim mesmo com fórmula selecionável
-e sem estimativa implícita; a confirmação continua obrigatória antes de qualquer
-preço convertido chegar a um cliente.
+**Decisão administrativa de 2026-08-22: o sistema não calcula imposto.** O preço
+entregue é o preço-base, acompanhado do aviso "em caso de incidência de impostos
+adicionais, eles serão acrescidos ao valor base". Isso encerra Q1 e Q2 por
+dispensa, não por resposta: a pergunta contábil continua sem responder, e deixou
+de importar porque ninguém depende mais dela.
+
+O motor de ICMS do R4 **não é removido** — fica dormente com
+`CRM_WHATSAPP_ICMS_ENABLED` desligado, que já é o padrão e é o que está em
+produção. Se a decisão mudar, o código está pronto e testado.
+
+- [ ] Registrar a decisão como ADR. Sem ela, daqui a um ano a matriz de ICMS
+      vazia parece esquecimento em vez de escolha.
+- [ ] Modo "sem conversão" em `CustomerPriceListService.resolve`, que hoje passa
+      sempre pelo resolvedor de ICMS. Sem matriz carregada, a tela de lista
+      resolvida por cliente do portal **não funciona**. O `trace` continua
+      existindo e passa a registrar que não houve cálculo.
 
 Q3 não bloqueou R5. O que ela decide é o **prazo** de retenção, e enquanto não
 houver decisão o sistema não apaga nada: o expurgo recusa rodar sem política.
+
+## Migrações em produção — verificado em 2026-08-22
+
+`CRM_RUN_MIGRATIONS_ON_STARTUP=true` está configurada no CapRover e é honrada
+pelo `docker-entrypoint.sh`, que roda `alembic upgrade head` **a cada start do
+contêiner**. Como a produção está servindo o código de `0a8c5af` (2026-08-19,
+que já inclui a `0011`) e respondendo requisições em 2026-08-22, a cadeia
+inteira `0001` → `0011` está aplicada.
+
+Isso encerra por evidência, e não por execução manual, os itens de "aplicar a
+migração X contra PostgreSQL" que estavam abertos em R0, W1, W4 e W7.
+
+Duas consequências que valem registro, porque são guardas que **passaram**:
+
+- A `0009` aborta se encontrar um telefone que seja usuário do portal e contato
+  de cliente ao mesmo tempo. O contêiner subiu, logo não há colisão hoje.
+- A `0006` aborta se houver duas tabelas `ACTIVE` com o mesmo produto e
+  competência. Também passou.
+
+O risco que essa configuração cria e que ninguém decidiu ainda: **um deploy com
+migração ruim derruba o start do contêiner**, e não há passo de revisão entre
+publicar e migrar. Funciona bem para uma pessoa; não sobrevive a duas.
+
+- [ ] Decidir se `alembic upgrade head` continua automático no start.
 
 ## R0 — Fundação de identidade (implementada)
 
@@ -25,7 +62,7 @@ houver decisão o sistema não apaga nada: o expurgo recusa rodar sem política.
 - [x] Autorização por papel, separada do HMAC do Gateway.
 - [x] Rate limit no login.
 - [x] Seed do primeiro `ADMIN` sem SQL manual (`crm_api.admin_cli`).
-- [ ] Aplicar a migração `0003` contra PostgreSQL e conferir o resultado.
+- [x] Aplicar a migração `0003` contra PostgreSQL — ver "Migrações em produção".
 - [ ] Substituir o limitador em processo caso o serviço passe a rodar replicado.
 
 ## R1 — Representante e carteira (implementada)
@@ -60,8 +97,13 @@ houver decisão o sistema não apaga nada: o expurgo recusa rodar sem política.
 - [x] Conversão de preço com trace auditável e fórmula selecionável.
 - [x] Rota de lista personalizada por cliente, localidade e competência.
 - [x] CRUD da matriz por API, restrito a `ADMIN`.
-- [ ] Carga CSV inicial da matriz das 27 UFs.
-- [ ] **Confirmar Q1/Q2 antes de qualquer preço ir a cliente.**
+- [x] ~~Carga CSV inicial da matriz das 27 UFs.~~ **Cancelada pela decisão de
+      2026-08-22:** não há cálculo de imposto, logo não há matriz a carregar.
+- [x] ~~Confirmar Q1/Q2 antes de qualquer preço ir a cliente.~~ Dispensada.
+
+**R4 fica dormente, não removida.** Todo o motor continua no código, testado, e
+`CRM_WHATSAPP_ICMS_ENABLED` desligado é o que garante que nada dele alcance um
+cliente. Reativar é decisão comercial mais carga da matriz, não desenvolvimento.
 
 ## R5 — Histórico de interações (implementada)
 
@@ -70,11 +112,59 @@ houver decisão o sistema não apaga nada: o expurgo recusa rodar sem política.
 - [x] Timeline paginada por cliente, com escopo de carteira.
 - [x] Rotina de expurgo auditada, que recusa rodar sem política definida.
 - [x] Filtro de carteira por última interação — desbloqueia o pendente de R1.
-- [ ] **Push assíncrono no Gateway**, com retry e sem bloquear a resposta ao
-      contato. Outro repositório; contrato em
+- [x] **Push assíncrono no Gateway**, com retry e sem bloquear a resposta ao
+      contato. **Implementado e verificado em produção em 2026-08-22.**
+      `modules/crm_interaction_push.js` tem fila, retry com backoff, desistência
+      e teto de fila. É enfileirado nos dois sentidos: INBOUND em `server.js:5272`,
+      **antes** de qualquer processamento — se a resolução de intenção falhar, o
+      representante ainda vê que o cliente escreveu — e OUTBOUND a cada resposta
+      do bot, em `server.js:4930`. Contrato em
       [F5_INTERACTION_PUSH_CONTRACT](../40_delivery/F5_INTERACTION_PUSH_CONTRACT.md).
-- [ ] Definir Q3 e configurar `CRM_INTERACTION_RETENTION_DAYS`.
+- [ ] Definir Q3 e configurar `CRM_INTERACTION_RETENTION_DAYS`. **A variável não
+      existe no CapRover**, conferido em 2026-08-22: o expurgo recusa rodar e
+      nada é apagado.
 - [ ] Agendar a execução periódica do expurgo.
+- [x] **A timeline passa a aceitar representante ↔ cliente** — ver N1 abaixo.
+- [ ] **Nenhum aviso ao representante** quando o cliente escreve. Ele precisa
+      abrir a ficha para descobrir.
+
+## N — Conversa representante × cliente na ficha
+
+### N1 — Nota manual (implementada em 2026-08-22)
+
+**Migração `0012`.** O `ck_interaction_exactly_one_owner` da `0010` recusava a
+linha com cliente e usuário juntos — a forma exata de uma conversa entre
+representante e cliente. Entra o discriminador `kind` e o `CHECK` passa a exigir
+de cada forma o seu formato, em vez de afrouxar para "pelo menos um dono".
+
+Verificada por `tests/test_representative_notes.py` (17) e
+`tests/test_portal_notes.py` (7). A suíte inteira está em 379 verdes.
+
+- [x] `kind` com as três formas, `CHECK` por forma e backfill derivado do dono
+      que cada linha já tinha. Nenhuma linha existente muda.
+- [x] `direction` nulável, exigida só das formas de canal — "visitei o cliente"
+      não é recebida nem enviada.
+- [x] Registro na ficha com meio (telefone, visita, WhatsApp, e-mail, outro) e
+      sentido opcional. O autor é sempre quem está logado.
+- [x] **Nota é editável; evento de canal não.** É a única escrita que altera uma
+      linha desta tabela. Cada correção grava em `audit_log` com o texto
+      anterior, e `edited_at` mostra a marca sem consultar a trilha.
+- [x] Autor corrige a própria; `ADMIN` e `MANAGER` corrigem qualquer uma.
+- [x] Escopo de carteira aplicado no registro e na correção.
+- [ ] Aplicar a `0012` contra PostgreSQL. Ela roda sozinha no próximo deploy;
+      confirmar nos logs de start.
+- [ ] Excluir nota. Hoje só dá para corrigir o texto — uma nota lançada no
+      cliente errado fica lá, e corrigi-la para "lançamento indevido" é o que
+      sobra. Falta decidir se some ou se é marcada.
+- [ ] Filtrar a timeline por origem. Com nota e canal na mesma lista, quem
+      procura só o que passou pelo WhatsApp não tem como recortar.
+
+### N2 — Envio pelo portal pela linha BPTI
+
+Compartilha a rota de envio CRM → Gateway com o D3; fazer as duas juntas.
+
+- [ ] Mensagem enviada pelo portal ao cliente, gravada como interação.
+- [ ] A resposta já volta sozinha pelo push, que roda nos dois sentidos.
 
 ## R6a — Telas de cadastro (implementada)
 
@@ -155,10 +245,11 @@ unicidade e acrescenta `public_ref` a `users` e `customer_contacts`.
 
 Verificada por `tests/test_whatsapp_actor_identity.py` (13 testes).
 
-- [ ] Aplicar a `0009` contra PostgreSQL. **A migração para se encontrar um
-      telefone que seja usuário do portal e contato de cliente ao mesmo tempo** —
-      resolver a colisão é decisão comercial, não do script.
-- [ ] Agendar `python -m crm_api.admin_cli check-whatsapp-identities`.
+- [x] Aplicar a `0009` contra PostgreSQL — aplicada no start; ver "Migrações em
+      produção". A guarda de colisão passou, logo hoje nenhum telefone é usuário
+      do portal e contato de cliente ao mesmo tempo.
+- [ ] Agendar `python -m crm_api.admin_cli check-whatsapp-identities`. A guarda
+      da `0009` só olha o momento da migração; a colisão pode nascer depois.
 
 ### W2 — Bloqueio no Gateway, antes de tudo
 
@@ -200,9 +291,14 @@ e falhariam para ele. Anunciar ação sem executor faria a allowlist do Gateway
 recusar o manifesto **inteiro** e deixar o contato sem resposta. As capacidades
 dele entram na W6, junto com os executores.
 
-- [ ] Publicar antes de o Gateway ligar a flag — o CRM precisa estar no ar
-      primeiro, como foi no piloto do manifesto legado.
-- [ ] Quando a flag virar lá, congelar o `GET /internal/interaction-capabilities`.
+**Atualização de 2026-08-22: o representante não recebe mais `capabilities: []`.**
+O serviço já emite as quatro capacidades dele, incluindo o pré-cadastro. O
+parágrafo acima descreve o estado de 16/08 e fica como histórico.
+
+- [x] Publicar antes de o Gateway ligar a flag — feito; a flag lá já está ligada.
+- [ ] Congelar o `GET /internal/interaction-capabilities`. **Agora é acionável:**
+      a flag virou no Gateway e o log de produção mostra `mode: 'MANIFEST'` com
+      `legacy_allowed: false`, ou seja, o caminho legado já não é usado.
 
 ### W4 — Interação de representante (implementada em 2026-08-16)
 
@@ -213,9 +309,12 @@ Verificada por `tests/test_representative_interactions.py` (12 testes), e
 `tests/test_interactions.py` passa sem nenhuma alteração — que é a prova de que
 o caminho do cliente, hoje em produção, não mudou de comportamento.
 
-- [ ] Aplicar a `0010` contra PostgreSQL.
-- [ ] **Já pode autorizar o primeiro número de representante no painel do
-      Gateway.** Era esta etapa que faltava.
+- [x] Aplicar a `0010` contra PostgreSQL — ver "Migrações em produção".
+- [ ] **Autorizar o primeiro número de representante no painel do Gateway.**
+      Continua sendo o passo que falta, e agora é o único: os executores existem,
+      o manifesto anuncia as capacidades e as flags estão ligadas. O log de
+      2026-08-22 mostra `actor_role: 'cliente'` — nenhum número de representante
+      foi autorizado ainda, então esse caminho **nunca rodou de ponta a ponta**.
 - [ ] A reversão da `0010` **falha de propósito** se já houver conversa de
       representante gravada: voltar `customer_id` a `NOT NULL` apagaria o dono
       dessas linhas em silêncio.
@@ -247,19 +346,28 @@ verificadas por `tests/test_representative_whatsapp.py` (14 testes).
       código** no caminho legado, e no envelope canônico nada fora do manifesto
       reconhece esses termos. Sem eles, `"produto PUE 20"` deixava de resolver por
       regra e passava a depender da LLM.
-- [ ] Ligar `CRM_CAPABILITY_MANIFEST_ENABLED` sozinha primeiro, conferir os logs
-      `[CRM CAPABILITY MANIFEST DECISION]`, e só então a flag de intenção.
-- [ ] **Lado do Gateway, pedido 2:** os três executores, contra as rotas acima.
-- [ ] Acrescentar as três capacidades ao manifesto do representante — **só
-      depois** de a allowlist do Gateway conhecer as ações, senão o manifesto é
-      recusado inteiro.
-- [ ] **No mesmo dia disso, `legacyAllowed: false` no `UNAVAILABLE` passa a ser
-      obrigatório no Gateway.** Hoje o fallback não vaza nada: os dois executores
-      resolvem a tabela pelo telefone de quem escreveu procurando cliente, e o
-      telefone do representante não é contato de cliente — dá `404` e ele recebe
-      "não encontrei tabela para seu cadastro". O prejuízo é mensagem enganosa.
-      Com executores próprios, o fallback trocaria o conjunto de autorização dele
-      pelo de cliente, e aí há o que perder.
+- [x] Ligar `CRM_CAPABILITY_MANIFEST_ENABLED` e a flag de intenção. **As duas
+      estão ligadas em produção**, verificado em 2026-08-22: o caminho canônico
+      em `server.js:5197` só é alcançado com ambas, e o log
+      `[CRM CAPABILITY MANIFEST RESOLVED]` prova que foi alcançado.
+- [x] **Lado do Gateway, pedido 2: os executores.** Feito, e são **quatro**, não
+      três — `CRM_REP_SEARCH_PRICE_ITEMS`, `CRM_REP_LOOKUP_CUSTOMER`,
+      `CRM_REP_GET_CUSTOMER_PRICE_LIST` e `CRM_REP_CREATE_CUSTOMER_INTAKE`,
+      registrados em `server.js:3827`.
+- [x] Acrescentar as capacidades ao manifesto do representante. O serviço já
+      emite as quatro, incluindo a escrita do pré-cadastro.
+- [x] **`legacyAllowed: false`** — o log de produção mostra
+      `legacy_allowed: false` na decisão. Não há mais fallback ao caminho legado.
+
+**Achado de 2026-08-22, do log de um "olá":** entre `[MANIFEST DECISION]` e
+`[MANIFEST RESOLVED]` passaram-se 3 segundos, e o desfecho foi
+`capability_id: 'UNKNOWN', source: 'UNKNOWN'`. É o comportamento correto — uma
+saudação não é capacidade nenhuma — mas o custo não é: `server.js:5202` tenta
+regra e, falhando, **sempre chama a LLM**. Toda saudação paga uma ida à LLM e
+três segundos de espera.
+
+- [ ] Resolver saudação e agradecimento antes da LLM. É o primeiro turno de
+      quase toda conversa, e hoje é o mais lento e o mais caro.
 
 Duas decisões de alcance tomadas aqui, mais restritivas que o portal:
 
@@ -288,15 +396,24 @@ Duas decisões de alcance tomadas aqui, mais restritivas que o portal:
 - [x] Aceitar e rejeitar no serviço, delegando a criação do cliente ao
       `CustomerAdminService` — o mesmo do portal, para que localidade padrão,
       titularidade e auditoria não ganhem uma segunda implementação.
-- [ ] Aplicar a `0011` contra PostgreSQL.
+- [x] Aplicar a `0011` contra PostgreSQL — ver "Migrações em produção".
 - [x] `/portal/intakes` — fila de pendentes, com revisão, aceite e recusa.
       Representante vê e resolve apenas os que abriu; `ADMIN` e `MANAGER`, a
       fila inteira. O aceite reutiliza `CustomerIntakeService`, preservando o
       titular original e revalidando o telefone antes de autorizar o contato.
-- [ ] **Depende da máquina de confirmação do Gateway** (`GW-040` a `GW-045`,
-      todos abertos) para ser alcançável pelo WhatsApp. Até lá o endpoint existe,
-      testado, e o manifesto do representante **não** anuncia a ação — anunciar
-      antes do executor faria a allowlist recusar o manifesto inteiro.
+- [x] **A máquina de confirmação do Gateway existe e está ligada ao intake.**
+      Verificado em 2026-08-22, e corrige o que este item afirmava: `GW-040` a
+      `GW-045` não estão todos abertos. `CRM_REP_CREATE_CUSTOMER_INTAKE` está
+      registrada como `write` em `server.js:3840`, com coleta de slots, pedido de
+      confirmação em `server.js:3987`, tratamento de "sim/não" em `server.js:4088`
+      e store em MySQL. O manifesto do representante **já anuncia** a ação.
+- [ ] Rodar o pré-cadastro de ponta a ponta pelo WhatsApp. Nada mais bloqueia —
+      falta só um número de representante autorizado no painel do Gateway (W4).
+- [ ] **Comentário desatualizado no Gateway,** `server.js:3849`: "nenhuma ação
+      CRM é de escrita hoje, então a máquina não é instanciada em lugar nenhum".
+      O mapa duas linhas acima registra o intake como `write`. O código andou e o
+      comentário ficou — e é exatamente o tipo de comentário que faz a próxima
+      pessoa concluir que a funcionalidade não existe.
 
 Três invariantes desenhadas de propósito, cada uma com teste que falha se alguém
 as afrouxar:
@@ -310,12 +427,85 @@ as afrouxar:
   semana; sem revalidar, a aceitação criaria a colisão que o manifesto recusa com
   `409` — e o número pararia de ser atendido sem ninguém saber por quê.
 
+## D — Disparo de preço para grupo de clientes
+
+Frente aberta em 2026-08-22. Objetivo de curto prazo: disparar o preço de um
+artigo, ou o aviso de tabela nova, para um grupo de clientes.
+
+### D0 — Decisões tomadas
+
+- **Segmentação em dois eixos:** material (poliéster, viscose, elastano) e porte
+  (grande, pequeno).
+- **O remetente é a linha BPTI**, não o celular do representante. O disparo por
+  link `wa.me` fica como caminho secundário, não como o principal.
+- **Sem cálculo de imposto** — ver a decisão de 2026-08-22 no topo deste arquivo.
+
+### D1 — Segmentação
+
+- [ ] Eixo material: **derivar** de `product_families` via
+      `customer_preferred_products`, em vez de criar atributo novo. O filtro de
+      carteira já aceita `preferred_product_id`; falta a variante por família.
+- [ ] Confirmar que as famílias cadastradas hoje no tenant são de fato
+      poliéster, viscose e elastano. Se não forem, o eixo ainda não existe.
+- [ ] Eixo porte: **atributo declarado**, porque não há histórico de compra de
+      onde derivar — `offers` nunca teve uso.
+- [ ] Modelar como **eixo + valor**, não coluna e não tag livre: "grande" e
+      "pequeno" são mutuamente exclusivos dentro do eixo, e unicidade por
+      `(cliente, eixo)` guarda isso no banco. Coluna vira migração a cada eixo
+      novo; tag livre deixa o cliente ser grande e pequeno ao mesmo tempo.
+- [ ] Decidir se "preferido" significa "o que entra na tabela dele" — o sentido
+      atual — ou "o que ele compra". O disparo usa o segundo, e usar um pelo
+      outro é decisão, não detalhe.
+
+### D2 — Agregado de disparo, sem enviar nada
+
+É o corte que entrega valor sem depender da Meta nem do Gateway, e é onde a
+máquina de estados inteira pode ser testada antes de existir canal.
+
+- [ ] Público como **critério salvo, reavaliado no disparo** — não lista
+      estática, que apodrece.
+- [ ] Prévia obrigatória: quantos entram, quantos sem contato, quantos sem preço
+      publicado.
+- [ ] Snapshot por destinatário: conteúdo, parâmetros e **o texto do aviso
+      fiscal vigente naquele dia**, na disciplina do `calculation_snapshot`.
+- [ ] Aprovação humana antes de qualquer envio (ADR-005).
+
+### D3 — Canal pela linha BPTI
+
+- [ ] **Rota de envio no Gateway.** Não existe: as duas funções de envio só
+      rodam dentro do processamento de um webhook e amarram a mensagem a um
+      `replyToWamid`. É inversão de direção — o CRM nunca chamou ninguém — e
+      pede ADR próprio.
+- [ ] **Templates aprovados pela Meta.** Nenhum suporte a `type: "template"`
+      existe no Gateway hoje. Dois submetidos: `tabela_mensal_convite` e
+      `preco_artigo_atualizado`. O progresso do Gateway já registra em aberto que
+      "template aprovado fora da janela precisa de definição do negócio".
+- [ ] **Máquina de estados por destinatário**, porque a janela de 24 h decide o
+      caminho: dentro dela sai texto livre; fora, o template abre a conversa e a
+      tabela só sai depois da resposta. Num disparo, a maioria estará fora.
+- [ ] **Opt-in e opt-out por contato.** `customer_contacts` não tem campo algum
+      de consentimento. Vira condição do público, não item de melhoria.
+- [ ] Calcular o estado da janela a partir de `customer_interactions`
+      (`direction = INBOUND`, `occurred_at`). O dado já existe.
+
+### D4 — Disparo por link, secundário
+
+- [ ] Fila de mensagens prontas no portal, com link `wa.me` por cliente.
+- [ ] **Registrar que este canal é manual e não observado.** A conversa acontece
+      no aparelho do representante, não passa pelo webhook e nunca entra na
+      timeline. Se a tela não disser isso, alguém vai procurar na ficha o que
+      nunca vai estar lá.
+- [ ] Risco a mitigar: o cliente recebe pelo celular do representante e responde
+      **na linha BPTI**, onde o bot atende sem saber que houve disparo.
+
 ## Pendências herdadas
 
 - [ ] Implementar idempotência por `event_id`.
 - [ ] Criar testes de integração com PostgreSQL.
 - [ ] Consulta específica de item por SKU, nome comercial, especificação ou família.
-- [ ] Validar em produção o manifesto de capacidades por sessão no `crm_api`.
+- [x] Validar em produção o manifesto de capacidades por sessão no `crm_api` —
+      verificado em 2026-08-22 pelo log de um "olá": manifesto servido,
+      `actor_role: 'cliente'`, `capability_count: 2`.
 - [ ] Coerência de `tenant_id` entre todas as FKs.
 - [ ] Migrar `conversations`, `messages`, `inbound_events` e `outbound_messages` ao Gateway.
 

@@ -270,16 +270,66 @@
 
 <section class="painel">
   <h2>Histórico de interações</h2>
+
+  <form method="post" action="/portal/customers/{{ cliente.id }}/notas" class="form-nota">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h3>Registrar uma conversa</h3>
+    <p class="ajuda">
+      Para o que aconteceu fora do WhatsApp — ligação, visita, e-mail. O que
+      passa pela linha do WhatsApp entra sozinho.
+    </p>
+    <label for="nota-summary">O que aconteceu</label>
+    <textarea id="nota-summary" name="summary" rows="3" maxlength="2000" required
+              placeholder="Liguei para confirmar o pedido; pediu cotação de 75/36 cru."></textarea>
+    <div class="linha-campos">
+      <div>
+        <label for="nota-channel">Meio</label>
+        <select id="nota-channel" name="channel">
+          {% for meio in meios_de_nota %}
+          <option value="{{ meio }}">{{ rotulo_meio(meio) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="nota-direction">Sentido</label>
+        <select id="nota-direction" name="direction">
+          <option value="">Não se aplica</option>
+          <option value="OUTBOUND">Eu procurei o cliente</option>
+          <option value="INBOUND">O cliente me procurou</option>
+        </select>
+      </div>
+    </div>
+    <button type="submit">Registrar</button>
+  </form>
+
   {% if interacoes %}
   <ul class="timeline">
     {% for interacao in interacoes %}
-    <li class="{{ 'recebida' if interacao.direction.value == 'INBOUND' else 'enviada' }}">
+    {% set e_nota = interacao.kind.value == 'REPRESENTATIVE_NOTE' %}
+    <li class="{{ 'nota' if e_nota else ('recebida' if interacao.direction and interacao.direction.value == 'INBOUND' else 'enviada') }}">
       <span class="quando">{{ interacao.occurred_at.strftime('%d/%m/%Y %H:%M') }}</span>
       <span class="canal">
-        {{ interacao.channel }} ·
+        {{ rotulo_meio(interacao.channel) }}
+        {%- if interacao.direction %} ·
         {{ 'recebida' if interacao.direction.value == 'INBOUND' else 'enviada' }}
+        {%- endif %}
+        {%- if e_nota %} · registro manual{% endif %}
+        {%- if interacao.edited_at %}
+        · <span class="editada" title="Corrigida em {{ interacao.edited_at.strftime('%d/%m/%Y %H:%M') }}">editada</span>
+        {%- endif %}
       </span>
       <p>{{ interacao.summary or '—' }}</p>
+      {% if e_nota and pode_editar_nota(interacao) %}
+      <details class="corrigir-nota">
+        <summary>Corrigir</summary>
+        <form method="post"
+              action="/portal/customers/{{ cliente.id }}/notas/{{ interacao.id }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <textarea name="summary" rows="3" maxlength="2000" required>{{ interacao.summary or '' }}</textarea>
+          <button type="submit">Salvar correção</button>
+        </form>
+      </details>
+      {% endif %}
     </li>
     {% endfor %}
   </ul>
@@ -289,8 +339,8 @@
   </p>
   {% else %}
   <p class="vazio">
-    Nenhuma interação registrada. O histórico é alimentado pelo Gateway do
-    WhatsApp; o CRM não é dono da conversa.
+    Nenhuma interação registrada. O que passa pelo WhatsApp entra sozinho, pelo
+    Gateway; o resto você registra no formulário acima.
   </p>
   {% endif %}
 </section>
