@@ -190,6 +190,39 @@ async def test_representante_nao_alcanca_ficha_de_carteira_alheia(world):
 
 
 @pytest.mark.asyncio
+async def test_endpoint_json_devolve_a_nota_sem_sentido_definido(world):
+    """Nota tem `direction` nulo, e o schema precisa admitir isso.
+
+    Sem este teste o defeito só apareceria em produção: o `InteractionResponse`
+    exigia `direction`, e a primeira nota de visita na timeline derrubaria
+    `GET /admin/customers/{id}/interactions` com 500.
+    """
+    async with _browser(world) as client:
+        await _entrar(client, REPRESENTATIVE_A_EMAIL)
+        pagina = await _ficha(client, world.customer_a_id)
+        await client.post(
+            f"/portal/customers/{world.customer_a_id}/notas",
+            data={
+                "summary": "Visita sem sentido definido.",
+                "channel": "VISIT",
+                "direction": "",
+                "csrf_token": _token(pagina.text),
+            },
+        )
+
+        resposta = await client.get(
+            f"/admin/customers/{world.customer_a_id}/interactions"
+        )
+        assert resposta.status_code == 200
+        item = resposta.json()["items"][0]
+        assert item["kind"] == "REPRESENTATIVE_NOTE"
+        assert item["direction"] is None
+        assert item["edited_at"] is None
+        assert item["customer_id"] == str(world.customer_a_id)
+        assert item["actor_user_id"] == str(world.representative_a_id)
+
+
+@pytest.mark.asyncio
 async def test_gestao_ve_e_corrige_nota_de_representante(world):
     async with _browser(world) as representante:
         await _entrar(representante, REPRESENTATIVE_A_EMAIL)

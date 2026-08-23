@@ -163,6 +163,7 @@ def _page(interacoes, *, total: int, limit: int, offset: int) -> InteractionPage
         items=[
             InteractionResponse(
                 interaction_id=interacao.id,
+                kind=interacao.kind,
                 customer_id=interacao.customer_id,
                 actor_user_id=interacao.actor_user_id,
                 contact_id=interacao.contact_id,
@@ -172,6 +173,7 @@ def _page(interacoes, *, total: int, limit: int, offset: int) -> InteractionPage
                 external_ref=interacao.external_ref,
                 occurred_at=interacao.occurred_at,
                 summary=interacao.summary,
+                edited_at=interacao.edited_at,
             )
             for interacao in interacoes
         ],

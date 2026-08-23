@@ -1821,24 +1821,45 @@ components:
     Interaction:
       type: object
       required:
-        [interaction_id, customer_id, channel, direction, source, external_ref, occurred_at]
+        [interaction_id, kind, customer_id, channel, direction, source, external_ref, occurred_at]
       properties:
         interaction_id:
           type: string
           format: uuid
-        customer_id:
+        kind:
           type: string
+          enum: [CUSTOMER_CHANNEL, ACTOR_CHANNEL, REPRESENTATIVE_NOTE]
+          description: >
+            Qual das três formas. `CUSTOMER_CHANNEL` é o cliente conversando
+            com o robô; `ACTOR_CHANNEL`, o representante conversando com o
+            robô; `REPRESENTATIVE_NOTE`, a conversa entre representante e
+            cliente registrada à mão na ficha. A combinação de donos preenchida
+            depende disto, e o banco a garante.
+        customer_id:
+          type: [string, "null"]
           format: uuid
+          description: Nulo apenas em `ACTOR_CHANNEL`.
+        actor_user_id:
+          type: [string, "null"]
+          format: uuid
+          description: Preenchido em `ACTOR_CHANNEL` e em `REPRESENTATIVE_NOTE`.
         contact_id:
           type: [string, "null"]
           format: uuid
         channel:
           type: string
+          description: >
+            `WHATSAPP` no que vem do Gateway. Nota manual usa o meio escolhido
+            na ficha: `PHONE`, `VISIT`, `WHATSAPP`, `EMAIL` ou `OTHER`.
         direction:
-          type: string
-          enum: [INBOUND, OUTBOUND]
+          type: [string, "null"]
+          enum: [INBOUND, OUTBOUND, null]
+          description: >
+            Nulo só em nota: uma ligação é feita ou recebida, mas uma visita
+            não é nem uma nem outra. Evento de canal sempre tem sentido.
         source:
           type: string
+          description: "`whatsapp-gateway` no que vem do canal; `portal` na nota manual."
         external_ref:
           type: string
         occurred_at:
@@ -1846,6 +1867,12 @@ components:
           format: date-time
         summary:
           type: [string, "null"]
+        edited_at:
+          type: [string, "null"]
+          format: date-time
+          description: >
+            Momento da última correção. Só nota é editável; evento de canal
+            traz sempre nulo.
 
     InteractionPage:
       type: object

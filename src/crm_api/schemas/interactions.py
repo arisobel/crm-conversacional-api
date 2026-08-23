@@ -7,6 +7,7 @@ from crm_api.models.interaction import (
     GATEWAY_SOURCE,
     WHATSAPP_CHANNEL,
     InteractionDirection,
+    InteractionKind,
 )
 
 _LOTE_MAXIMO = 200
@@ -62,17 +63,30 @@ class InteractionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     interaction_id: UUID
-    # Exatamente um dos dois vem preenchido: a conversa é de um cliente ou de um
-    # usuário do portal, nunca das duas coisas nem de nenhuma (ADR-022).
+    kind: InteractionKind = Field(
+        description=(
+            "Qual das três formas: conversa do cliente com o robô, do "
+            "representante com o robô, ou nota registrada à mão na ficha."
+        )
+    )
+    # Quais vêm preenchidos depende de `kind`, e o banco garante a combinação:
+    # canal de cliente tem só `customer_id`, canal de ator tem só
+    # `actor_user_id`, e a nota manual tem os dois.
     customer_id: UUID | None
     actor_user_id: UUID | None = None
     contact_id: UUID | None
     channel: str
-    direction: InteractionDirection
+    # Nulo só em nota: uma ligação é feita ou recebida, mas uma visita não é
+    # nem uma nem outra.
+    direction: InteractionDirection | None
     source: str
     external_ref: str
     occurred_at: datetime
     summary: str | None
+    edited_at: datetime | None = Field(
+        default=None,
+        description="Preenchido quando a nota foi corrigida. Sempre nulo em evento de canal.",
+    )
 
 
 class InteractionPage(BaseModel):
