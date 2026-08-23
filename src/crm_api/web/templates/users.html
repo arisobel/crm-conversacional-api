@@ -1,10 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Representantes{% endblock %}
+{% block title %}Usuários do portal{% endblock %}
 
 {% block conteudo %}
 <div class="cabecalho">
   <h1>Usuários do portal</h1>
 </div>
+<p class="dica">
+  Representantes, gerentes e administradores. Não existe cadastro separado de
+  representante: ele é um usuário com o papel <code>REPRESENTATIVE</code>.
+</p>
 
 <table>
   <thead>

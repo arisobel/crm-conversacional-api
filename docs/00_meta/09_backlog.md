@@ -470,17 +470,44 @@ artigo, ou o aviso de tabela nova, para um grupo de clientes.
 
 ### D1 — Segmentação
 
+**Revisto em 2026-08-22, depois do retorno do Charles.** São **três** formas de
+agrupar, não duas, e a diferença entre elas não é de gosto: é de onde a verdade
+mora.
+
+| Forma | Exemplo | Origem | Se mantém sozinha? |
+|---|---|---|---|
+| Derivada | Grupo de Poliéster, de Viscose, de Alta-tenacidade | família do artigo, via preferidos | sim |
+| Eixo declarado | porte: grande / pequeno | digitado, exclusivo dentro do eixo | não |
+| Lista de julgamento | "clientes com potencial de crescimento" | montada à mão pelo representante | não |
+
+A terceira é nova e **corrige uma recomendação anterior deste backlog**. Estava
+escrito que o público deve ser critério salvo e nunca lista estática, porque
+lista apodrece. Vale para as duas primeiras. Não vale para a terceira:
+"potencial de crescimento" é julgamento comercial e não se deriva de critério
+nenhum — ali a lista **é** o dado.
+
+Uniforme na tela, diferente no armazenamento: o seletor de público oferece as
+três do mesmo jeito, e só a derivada não guarda linha.
+
 - [ ] Eixo material: **derivar** de `product_families` via
       `customer_preferred_products`, em vez de criar atributo novo. O filtro de
       carteira já aceita `preferred_product_id`; falta a variante por família.
-- [ ] Confirmar que as famílias cadastradas hoje no tenant são de fato
-      poliéster, viscose e elastano. Se não forem, o eixo ainda não existe.
+- [ ] Confirmar quais famílias existem hoje no tenant. O Charles citou
+      poliéster, viscose e **alta-tenacidade** — que é propriedade do fio de
+      poliéster, não um material irmão dos outros dois. Se o cadastro não
+      separar isso em famílias, o eixo derivado não nasce como ele espera.
 - [ ] Eixo porte: **atributo declarado**, porque não há histórico de compra de
       onde derivar — `offers` nunca teve uso.
-- [ ] Modelar como **eixo + valor**, não coluna e não tag livre: "grande" e
-      "pequeno" são mutuamente exclusivos dentro do eixo, e unicidade por
-      `(cliente, eixo)` guarda isso no banco. Coluna vira migração a cada eixo
-      novo; tag livre deixa o cliente ser grande e pequeno ao mesmo tempo.
+- [ ] Modelar eixo como **eixo + valor**: "grande" e "pequeno" são mutuamente
+      exclusivos dentro do eixo, e unicidade por `(cliente, eixo)` guarda isso
+      no banco. Coluna vira migração a cada eixo novo; tag livre deixa o cliente
+      ser grande e pequeno ao mesmo tempo.
+- [ ] Lista de julgamento: grupo sem eixo, **não exclusivo**, com dono.
+- [ ] **Decidir se a lista do representante é dele ou do tenant.** Se o Charles
+      monta "potencial de crescimento", o Michel enxerga? Compartilhar por
+      padrão expõe julgamento comercial de um sobre a carteira do outro;
+      privado por padrão faz cada um remontar a mesma lista. Não há resposta
+      técnica — é decisão do Charles.
 - [ ] Decidir se "preferido" significa "o que entra na tabela dele" — o sentido
       atual — ou "o que ele compra". O disparo usa o segundo, e usar um pelo
       outro é decisão, não detalhe.
@@ -525,6 +552,38 @@ máquina de estados inteira pode ser testada antes de existir canal.
       nunca vai estar lá.
 - [ ] Risco a mitigar: o cliente recebe pelo celular do representante e responde
       **na linha BPTI**, onde o bot atende sem saber que houve disparo.
+
+### D5 — Aviso de queda de preço
+
+Pedido do Charles em 2026-08-22, e é **um caso diferente** dos outros dois: não
+é tabela nova, é um evento — o preço de alguns artigos baixou. Nas palavras
+dele: "chamar todos clientes do grupo Y e avisar que hoje o preço caiu e
+perguntar se ele gostaria de saber o preço; o cliente precisa apertar sim para
+receber a cotação".
+
+**Ele descreveu a janela de 24 h sem saber que ela existe.** "Apertar sim para
+receber" é exatamente o botão de resposta rápida que a Meta obriga fora da
+janela. O fluxo de duas etapas deixa de ser limitação técnica imposta e passa a
+ser o que o negócio já queria.
+
+- [ ] **Detector de queda — o dado já existe.** `price_entry_revisions` guarda
+      `previous` e `current` de cada gravação, com `batch_id` e `changed_at`.
+      "Quais artigos caíram nesta publicação" é uma consulta, não uma
+      funcionalidade: comparar o `base_price` de antes com o de depois dentro do
+      lote. A tabela foi construída para auditoria e serve a isto sem alteração
+      de esquema.
+- [ ] **O público é o cruzamento, não o grupo inteiro.** Não é "todos do grupo
+      Y", é "todos do grupo Y **que preferem algum artigo que caiu**". Avisar
+      queda de preço a quem não compra aquilo é a mensagem que queima confiança
+      e gera opt-out.
+- [ ] Terceiro template, `preco_reduzido_aviso`, sem o valor no corpo — assim
+      não envelhece e o opt-in acontece antes da cotação.
+- [ ] **Definir o piso de queda que merece disparo.** Decisão comercial do
+      Charles: uma queda de 1% frustra quem apertou "sim", e o próximo aviso ele
+      ignora.
+- [ ] **Definir a frequência máxima.** Competência mensal mais revisões no meio
+      do mês podem virar vários templates de marketing para o mesmo cliente. É
+      onde os limites por usuário da Meta e o quality rating mordem.
 
 ## Pendências herdadas
 
