@@ -29,6 +29,7 @@
   </nav>
   <div class="sessao">
     <span>{{ current_user.full_name }} · {{ current_user.role.value }}</span>
+    <a href="/portal/minha-senha">Minha senha</a>
     <form method="post" action="/portal/logout">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button type="submit" class="link">Sair</button>

@@ -51,6 +51,17 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
     ),
     "familia-criada": ("ok", "Família cadastrada."),
     "familia-salva": ("ok", "Família atualizada."),
+    "senha-redefinida": (
+        "ok",
+        "Senha redefinida. As sessões abertas do usuário foram encerradas e "
+        "qualquer bloqueio por tentativas foi liberado.",
+    ),
+    "senha-trocada": (
+        "ok",
+        "Senha trocada. Suas outras sessões foram encerradas; esta continua valendo.",
+    ),
+    "senha-atual-errada": ("erro", "A senha atual não confere."),
+    "senha-nao-confere": ("erro", "A confirmação não bate com a nova senha."),
     "nota-registrada": ("ok", "Conversa registrada no histórico."),
     "nota-corrigida": ("ok", "Nota corrigida. A versão anterior fica na auditoria."),
     # falhas de registro de conversa

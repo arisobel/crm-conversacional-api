@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 from crm_api.core.config import Settings
-from crm_api.core.passwords import hash_password, validate_password_policy
+from crm_api.core.passwords import hash_password, validate_password_policy, verify_password
 from crm_api.core.phone import normalize_whatsapp_e164
 from crm_api.models.user import User, UserRole
 from crm_api.repositories.audit import AuditRepository
@@ -32,6 +32,10 @@ class WhatsappAlreadyUsed(Exception):
 
 class UnsafeUserChange(Exception):
     """Alteração que trancaria o portal ou o próprio autor para fora."""
+
+
+class WrongCurrentPassword(Exception):
+    """Senha atual não confere na troca feita pelo próprio usuário."""
 
 
 class UserService:
@@ -225,6 +229,56 @@ class UserService:
             entity_id=user.id,
             before={"active": was_active},
             after={"active": active, "revoked_sessions": revoked},
+            request_id=request_id,
+        )
+        return user
+
+    async def change_own_password(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        session_id: uuid.UUID,
+        current_password: str,
+        new_password: str,
+        request_id: str | None = None,
+    ) -> User:
+        """Troca a própria senha, conferindo a atual antes.
+
+        A senha atual é exigida de propósito. Sem ela, uma sessão sequestrada
+        trocaria a senha e trancaria o dono para fora da própria conta — o
+        cookie roubado viraria posse permanente em vez de acesso temporário.
+
+        Revoga as **outras** sessões e mantém esta: se a troca foi feita porque
+        a senha vazou, quem estiver com ela em outro lugar cai; e quem trocou
+        continua trabalhando.
+        """
+        user = await self._get(tenant_id, user_id)
+        if not verify_password(user.password_hash, current_password):
+            self._audit.record(
+                action="USER_PASSWORD_CHANGE_REFUSED",
+                entity="users",
+                tenant_id=tenant_id,
+                actor_user_id=user_id,
+                entity_id=user.id,
+                after={"reason": "current password did not match"},
+                request_id=request_id,
+            )
+            raise WrongCurrentPassword
+
+        user.password_hash = self._check_password(new_password, email=user.email)
+        user.updated_at = datetime.now(UTC)
+        revoked = await self._sessions.revoke_others_for_user(
+            user.id, keep_session_id=session_id, now=datetime.now(UTC)
+        )
+
+        self._audit.record(
+            action="USER_PASSWORD_CHANGED",
+            entity="users",
+            tenant_id=tenant_id,
+            actor_user_id=user_id,
+            entity_id=user.id,
+            after={"revoked_sessions": revoked},
             request_id=request_id,
         )
         return user

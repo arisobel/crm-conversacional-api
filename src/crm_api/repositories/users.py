@@ -201,6 +201,27 @@ class SessionRepository:
         )
         return result.rowcount or 0
 
+    async def revoke_others_for_user(
+        self, user_id: uuid.UUID, *, keep_session_id: uuid.UUID, now: datetime
+    ) -> int:
+        """Revoga as sessões do usuário, menos aquela de onde ele está agindo.
+
+        Serve à troca da própria senha. Revogar tudo derrubaria quem acabou de
+        trocar, e um logout imediato depois de uma operação bem-sucedida se lê
+        como falha — a pessoa tenta de novo, e da segunda vez a senha "antiga"
+        que ela digita já é a nova.
+        """
+        result = await self._session.execute(
+            update(UserSession)
+            .where(
+                UserSession.user_id == user_id,
+                UserSession.id != keep_session_id,
+                UserSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
+        return result.rowcount or 0
+
     async def touch(
         self, session_id: uuid.UUID, *, now: datetime, expires_at: datetime
     ) -> None:

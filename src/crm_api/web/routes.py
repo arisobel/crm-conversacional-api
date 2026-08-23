@@ -105,6 +105,7 @@ from crm_api.services.users import (
     UserNotFound,
     UserService,
     WhatsappAlreadyUsed,
+    WrongCurrentPassword,
 )
 from crm_api.web import messages
 from crm_api.web.csrf import (
@@ -172,6 +173,7 @@ _CODIGOS: list[tuple[type[Exception], str]] = [
     (LocationUnavailable, "sem-localidade"),
     (PricesUnavailable, "sem-competencia"),
     (InvalidTaxRate, "aliquota-invalida"),
+    (WrongCurrentPassword, "senha-atual-errada"),
     (EmptyNote, "nota-vazia"),
     (UnknownNoteChannel, "nota-meio-invalido"),
     (NoteNotFound, "nota-inexistente"),
@@ -1078,6 +1080,99 @@ async def salvar_usuario(
 
     await session.commit()
     return _redirect("/portal/users", "usuario-salvo")
+
+
+@router.post("/users/{user_id}/password", include_in_schema=False)
+async def redefinir_senha(
+    request: Request,
+    user_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    password: Annotated[str, Form()],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    """Redefinição pelo `ADMIN`, para quem esqueceu a senha.
+
+    Não exige a senha antiga — quem esqueceu não a tem. O que a torna segura é
+    a alçada: só `ADMIN` chega aqui, e a operação derruba todas as sessões do
+    usuário e limpa o bloqueio por tentativas.
+    """
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/users", "csrf")
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+
+    try:
+        await _user_service(request, session).set_password(
+            tenant_id=current_user.tenant_id,
+            actor_user_id=current_user.user_id,
+            user_id=user_id,
+            password=password,
+            request_id=request.headers.get("x-request-id"),
+        )
+    except Exception as error:  # noqa: BLE001 -- reclassificado por _codigo_do_erro
+        await session.rollback()
+        return _redirect("/portal/users", _codigo_do_erro(error))
+
+    await session.commit()
+    return _redirect("/portal/users", "senha-redefinida")
+
+
+@router.get("/minha-senha", include_in_schema=False)
+async def pagina_minha_senha(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    m: Annotated[str | None, Query()] = None,
+) -> Response:
+    """Troca da própria senha. Aberta a qualquer papel, inclusive representante."""
+    return _render(
+        request,
+        "my_password.html",
+        {"minimo": request.app.state.settings.password_min_length},
+        current_user=current_user,
+        mensagem=m,
+    )
+
+
+@router.post("/minha-senha", include_in_schema=False)
+async def trocar_minha_senha(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_password: Annotated[str, Form()],
+    new_password: Annotated[str, Form()],
+    confirm_password: Annotated[str, Form()],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    destino = "/portal/minha-senha"
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+    # Conferida aqui e não no serviço: é erro de digitação no formulário, não
+    # regra de negócio, e o serviço não deveria conhecer o segundo campo.
+    if new_password != confirm_password:
+        return _redirect(destino, "senha-nao-confere")
+
+    try:
+        await _user_service(request, session).change_own_password(
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.user_id,
+            session_id=current_user.session_id,
+            current_password=current_password,
+            new_password=new_password,
+            request_id=request.headers.get("x-request-id"),
+        )
+    except Exception as error:  # noqa: BLE001 -- reclassificado por _codigo_do_erro
+        # O commit é preciso mesmo na recusa: a tentativa errada é auditada, e
+        # um rollback aqui apagaria justamente o registro que interessa.
+        codigo = _codigo_do_erro(error)
+        if isinstance(error, WrongCurrentPassword):
+            await session.commit()
+        else:
+            await session.rollback()
+        return _redirect(destino, codigo)
+
+    await session.commit()
+    return _redirect(destino, "senha-trocada")
 
 
 # --------------------------------------------------- produtos preferidos
