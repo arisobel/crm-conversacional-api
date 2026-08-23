@@ -18,9 +18,7 @@
     <a href="/portal/customers" class="marca">CRM</a>
     <a href="/portal/customers">Carteira</a>
     <a href="/portal/intakes">Pré-cadastros</a>
-    {% if current_user.role.value in ('ADMIN', 'MANAGER') %}
     <a href="/portal/products">Produtos</a>
-    {% endif %}
     {% if current_user.role.value == 'ADMIN' %}
     <a href="/portal/prices">Tabelas</a>
     <a href="/portal/icms-rules">ICMS</a>

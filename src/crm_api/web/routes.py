@@ -45,11 +45,15 @@ from crm_api.services.catalog import (
     BasePriceRequired,
     CatalogService,
     DuplicateFamily,
+    DuplicateGroup,
     DuplicateSku,
     FamilyNotFound,
     FamilyRequired,
+    GroupNotFound,
+    GroupRequired,
     IncompleteArticle,
     InvalidBasePrice,
+    ProductNotInCatalog,
     SkuLocked,
 )
 from crm_api.services.customer_admin import (
@@ -174,6 +178,10 @@ _CODIGOS: list[tuple[type[Exception], str]] = [
     (PricesUnavailable, "sem-competencia"),
     (InvalidTaxRate, "aliquota-invalida"),
     (WrongCurrentPassword, "senha-atual-errada"),
+    (GroupRequired, "grupo-sem-nome"),
+    (DuplicateGroup, "grupo-duplicado"),
+    (GroupNotFound, "grupo-inexistente"),
+    (ProductNotInCatalog, "produto-inexistente"),
     (EmptyNote, "nota-vazia"),
     (UnknownNoteChannel, "nota-meio-invalido"),
     (NoteNotFound, "nota-inexistente"),
@@ -1601,8 +1609,11 @@ async def pagina_produtos(
     editar: Annotated[str | None, Query()] = None,
     m: Annotated[str | None, Query()] = None,
 ) -> Response:
-    if current_user.role not in _MANAGEMENT_ROLES:
-        return _redirect("/portal/customers", "sem-permissao")
+    # Leitura aberta a qualquer papel desde a `0013`: o representante precisa
+    # ver o catálogo para etiquetar artigo em grupo. Escrever artigo e família
+    # continua com a gestão — errar um grupo muda o público de um disparo,
+    # errar uma família muda o que **todo** cliente vê na tabela dele.
+    pode_gerir = current_user.role in _MANAGEMENT_ROLES
 
     catalogo = CatalogRepository(session)
     competencia = await PriceEntryRepository(session).latest_month(
@@ -1615,16 +1626,22 @@ async def pagina_produtos(
         without_price=bool(sem_preco),
     )
 
+    linhas = await catalogo.list_products(current_user.tenant_id, filtros, month=competencia)
     return _render(
         request,
         "products.html",
         {
-            "linhas": await catalogo.list_products(
-                current_user.tenant_id, filtros, month=competencia
-            ),
+            "linhas": linhas,
             "familias": await catalogo.list_families(current_user.tenant_id, active=None),
             "contagem_por_familia": await catalogo.count_products_by_family(
                 current_user.tenant_id
+            ),
+            "grupos": await catalogo.list_groups(current_user.tenant_id, active=None),
+            "contagem_por_grupo": await catalogo.count_products_by_group(
+                current_user.tenant_id
+            ),
+            "grupos_do_artigo": await catalogo.groups_of_products(
+                current_user.tenant_id, [linha.product.id for linha in linhas]
             ),
             "competencia": competencia,
             "busca": busca or "",
@@ -1633,6 +1650,7 @@ async def pagina_produtos(
             "sem_preco": bool(sem_preco),
             # Qual linha abre já em modo de edição, depois do redirecionamento.
             "editando": editar or "",
+            "pode_gerir": pode_gerir,
         },
         current_user=current_user,
         mensagem=m,
@@ -1779,6 +1797,146 @@ async def salvar_produto(
 
     await session.commit()
     return _redirect(destino, codigo)
+
+
+@router.post("/product-groups", include_in_schema=False)
+async def criar_grupo_de_artigo(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    name: Annotated[str, Form()],
+    busca: _CustomerForm = None,
+    familia: _CustomerForm = None,
+    situacao: _CustomerForm = None,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    """Criar grupo é aberto a qualquer papel, inclusive representante.
+
+    O grupo é do tenant, não de quem o criou: "poliéster" que significasse
+    coisas diferentes por representante tornaria o público de um disparo
+    imprevisível. A autoria fica registrada só para auditoria.
+    """
+    destino = _filtros_na_volta(busca, familia, situacao)
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+
+    try:
+        await _catalog_service(session).create_group(
+            tenant_id=current_user.tenant_id,
+            actor_user_id=current_user.user_id,
+            name=name,
+            request_id=request.headers.get("x-request-id"),
+        )
+    except Exception as error:  # noqa: BLE001 -- reclassificado por _codigo_do_erro
+        await session.rollback()
+        return _redirect(destino, _codigo_do_erro(error))
+
+    await session.commit()
+    return _redirect(destino, "grupo-criado")
+
+
+@router.post("/product-groups/{group_id}", include_in_schema=False)
+async def alterar_grupo_de_artigo(
+    request: Request,
+    group_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    acao: Annotated[str, Form()],
+    name: _CustomerForm = None,
+    busca: _CustomerForm = None,
+    familia: _CustomerForm = None,
+    situacao: _CustomerForm = None,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    """Renomear e desativar. **Só a gestão** — diferente de criar e etiquetar.
+
+    Renomear um grupo muda o significado de tudo o que já foi etiquetado com
+    ele, e desativar tira o grupo de circulação. Criar um grupo novo não
+    desfaz o trabalho de ninguém; mexer num existente, sim.
+    """
+    destino = _filtros_na_volta(busca, familia, situacao)
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+    if current_user.role not in _MANAGEMENT_ROLES:
+        return _redirect("/portal/customers", "sem-permissao")
+    if acao not in {"renomear", "ativar", "desativar"}:
+        return _redirect(destino, "nao-encontrado")
+
+    servico = _catalog_service(session)
+    try:
+        if acao == "renomear":
+            await servico.rename_group(
+                tenant_id=current_user.tenant_id,
+                actor_user_id=current_user.user_id,
+                group_id=group_id,
+                name=name or "",
+                request_id=request.headers.get("x-request-id"),
+            )
+        else:
+            await servico.set_group_active(
+                tenant_id=current_user.tenant_id,
+                actor_user_id=current_user.user_id,
+                group_id=group_id,
+                active=acao == "ativar",
+                request_id=request.headers.get("x-request-id"),
+            )
+    except Exception as error:  # noqa: BLE001 -- reclassificado por _codigo_do_erro
+        await session.rollback()
+        return _redirect(destino, _codigo_do_erro(error))
+
+    await session.commit()
+    return _redirect(destino, "grupo-salvo")
+
+
+@router.post("/products/{product_id}/groups", include_in_schema=False)
+async def etiquetar_artigo(
+    request: Request,
+    product_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    acao: Annotated[str, Form()],
+    group_id: Annotated[str, Form()],
+    busca: _CustomerForm = None,
+    familia: _CustomerForm = None,
+    situacao: _CustomerForm = None,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    """Põe e tira etiqueta. Aberto a qualquer papel, inclusive representante."""
+    destino = _filtros_na_volta(busca, familia, situacao)
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+    if acao not in {"incluir", "remover"}:
+        return _redirect(destino, "nao-encontrado")
+
+    try:
+        grupo = uuid.UUID(group_id)
+    except ValueError:
+        return _redirect(destino, "nao-encontrado")
+
+    servico = _catalog_service(session)
+    try:
+        if acao == "incluir":
+            await servico.add_product_to_group(
+                tenant_id=current_user.tenant_id,
+                actor_user_id=current_user.user_id,
+                group_id=grupo,
+                product_id=product_id,
+                request_id=request.headers.get("x-request-id"),
+            )
+        else:
+            await servico.remove_product_from_group(
+                tenant_id=current_user.tenant_id,
+                actor_user_id=current_user.user_id,
+                group_id=grupo,
+                product_id=product_id,
+                request_id=request.headers.get("x-request-id"),
+            )
+    except Exception as error:  # noqa: BLE001 -- reclassificado por _codigo_do_erro
+        await session.rollback()
+        return _redirect(destino, _codigo_do_erro(error))
+
+    await session.commit()
+    return _redirect(destino, "etiqueta-salva")
 
 
 @router.post("/families", include_in_schema=False)

@@ -8,7 +8,13 @@ from decimal import Decimal
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from crm_api.models.catalog import CustomerPreferredProduct, Product, ProductFamily
+from crm_api.models.catalog import (
+    CustomerPreferredProduct,
+    Product,
+    ProductFamily,
+    ProductGroup,
+    ProductGroupMember,
+)
 from crm_api.models.pricing import (
     AvailabilityStatus,
     PriceEntry,
@@ -274,7 +280,95 @@ class CatalogRepository:
 
     # ---------------------------------------------------------------- comum
 
-    def add(self, entity: ProductFamily | Product | PriceList | PriceListItem) -> None:
+    # ------------------------------------------------- grupos de artigo
+
+    async def list_groups(
+        self, tenant_id: uuid.UUID, *, active: bool | None = True
+    ) -> list[ProductGroup]:
+        statement = select(ProductGroup).where(ProductGroup.tenant_id == tenant_id)
+        if active is not None:
+            statement = statement.where(ProductGroup.active.is_(active))
+        return list(
+            await self._session.scalars(statement.order_by(ProductGroup.normalized_name))
+        )
+
+    async def find_group_by_name(
+        self, tenant_id: uuid.UUID, normalized: str
+    ) -> ProductGroup | None:
+        """Procura pelo nome canônico, não pelo digitado.
+
+        É o que faz "Poliéster" reencontrar o "poliester" que já existe, em vez
+        de criar um irmão que divide o público do disparo ao meio.
+        """
+        return await self._session.scalar(
+            select(ProductGroup).where(
+                ProductGroup.tenant_id == tenant_id,
+                ProductGroup.normalized_name == normalized,
+            )
+        )
+
+    async def get_group(
+        self, tenant_id: uuid.UUID, group_id: uuid.UUID
+    ) -> ProductGroup | None:
+        return await self._session.scalar(
+            select(ProductGroup).where(
+                ProductGroup.tenant_id == tenant_id, ProductGroup.id == group_id
+            )
+        )
+
+    async def count_products_by_group(self, tenant_id: uuid.UUID) -> dict[uuid.UUID, int]:
+        result = await self._session.execute(
+            select(ProductGroupMember.group_id, func.count(ProductGroupMember.id))
+            .where(ProductGroupMember.tenant_id == tenant_id)
+            .group_by(ProductGroupMember.group_id)
+        )
+        return {group_id: quantos for group_id, quantos in result.all()}
+
+    async def groups_of_products(
+        self, tenant_id: uuid.UUID, product_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, list[ProductGroup]]:
+        """Grupos de cada artigo da página exibida, numa consulta só."""
+        if not product_ids:
+            return {}
+        result = await self._session.execute(
+            select(ProductGroupMember.product_id, ProductGroup)
+            .join(ProductGroup, ProductGroup.id == ProductGroupMember.group_id)
+            .where(
+                ProductGroupMember.tenant_id == tenant_id,
+                ProductGroupMember.product_id.in_(product_ids),
+            )
+            .order_by(ProductGroup.normalized_name)
+        )
+        por_artigo: dict[uuid.UUID, list[ProductGroup]] = {}
+        for product_id, grupo in result.tuples().all():
+            por_artigo.setdefault(product_id, []).append(grupo)
+        return por_artigo
+
+    async def get_membership(
+        self, tenant_id: uuid.UUID, group_id: uuid.UUID, product_id: uuid.UUID
+    ) -> ProductGroupMember | None:
+        return await self._session.scalar(
+            select(ProductGroupMember).where(
+                ProductGroupMember.tenant_id == tenant_id,
+                ProductGroupMember.group_id == group_id,
+                ProductGroupMember.product_id == product_id,
+            )
+        )
+
+    async def remove_membership(self, membership: ProductGroupMember) -> None:
+        await self._session.delete(membership)
+
+    # ---------------------------------------------------------------- comum
+
+    def add(
+        self,
+        entity: ProductFamily
+        | Product
+        | PriceList
+        | PriceListItem
+        | ProductGroup
+        | ProductGroupMember,
+    ) -> None:
         self._session.add(entity)
 
     async def flush(self) -> None:

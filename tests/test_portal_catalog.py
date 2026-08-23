@@ -439,14 +439,27 @@ async def test_desativar_familia_tira_os_artigos_dela_da_tabela(world, admin):
 
 
 @pytest.mark.asyncio
-async def test_representante_nao_alcanca_a_tela_de_produtos(world):
+async def test_representante_le_a_tela_de_produtos_mas_nao_a_administra(world):
+    """Mudou na `0013`, de propósito.
+
+    Antes o representante nem alcançava a tela. Agora ele precisa dela para
+    etiquetar artigo em grupo, então lê — e continua sem cadastrar artigo, sem
+    editar e sem tocar em família, que é o que agrupa a tabela enviada ao
+    cliente.
+    """
     async with _browser(world) as client:
         await _entrar(client, REPRESENTATIVE_A_EMAIL)
         pagina = await client.get("/portal/products")
-        ficha = await client.get(f"/portal/customers/{world.customer_a_id}")
 
-    assert "Seu papel não permite essa operação." in pagina.text
-    assert 'href="/portal/products"' not in ficha.text
+    assert pagina.status_code == 200
+    assert "Seu papel não permite essa operação." not in pagina.text
+    # Lê o catálogo e enxerga os grupos.
+    assert "Grupos de artigo" in pagina.text
+    # Mas nada de administrar.
+    assert "Novo artigo" not in pagina.text
+    assert "Nova família" not in pagina.text
+    assert "<h2>Famílias</h2>" not in pagina.text
+    assert "desativar" not in pagina.text
 
 
 @pytest.mark.asyncio

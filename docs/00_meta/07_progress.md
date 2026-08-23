@@ -46,6 +46,24 @@ proibir corrigir só faria nascer uma segunda nota dizendo "corrigindo a
 anterior" — dado pior do que o problema. Cada edição grava o texto anterior em
 `audit_log`.
 
+### D6 — grupo de artigo (2026-08-23)
+
+**Migração `0013`.** O eixo de material do disparo ia derivar de
+`product_families`. Não serve: "alta-tenacidade" é propriedade do fio de
+poliéster, não um material ao lado dele, e o mesmo artigo é os dois.
+
+Família não vira N↔N para acomodar isso — ela é **layout**, agrupa e ordena a
+tabela impressa para o cliente, e um artigo em duas famílias não teria sob qual
+cabeçalho sair. Entram `product_groups` e `product_group_members` ao lado,
+N↔N, com `products.family_id` intocado.
+
+`normalized_name` único é a guarda que importa: sem ela "poliester" e
+"poliéster" nascem como dois grupos e o público de um disparo racha sem ninguém
+perceber.
+
+`/portal/products` passou a ser legível por representante, que também cria
+grupo e etiqueta. Renomear, desativar, artigo e família continuam com a gestão.
+
 ### A decisão fiscal de 2026-08-22
 
 **O sistema não calcula imposto.** O preço entregue é o preço-base, com o aviso

@@ -489,13 +489,11 @@ nenhum — ali a lista **é** o dado.
 Uniforme na tela, diferente no armazenamento: o seletor de público oferece as
 três do mesmo jeito, e só a derivada não guarda linha.
 
-- [ ] Eixo material: **derivar** de `product_families` via
-      `customer_preferred_products`, em vez de criar atributo novo. O filtro de
-      carteira já aceita `preferred_product_id`; falta a variante por família.
-- [ ] Confirmar quais famílias existem hoje no tenant. O Charles citou
-      poliéster, viscose e **alta-tenacidade** — que é propriedade do fio de
-      poliéster, não um material irmão dos outros dois. Se o cadastro não
-      separar isso em famílias, o eixo derivado não nasce como ele espera.
+- [x] **Eixo material: `product_groups`, não `product_families`** — migração
+      `0013`, implementada em 2026-08-23. Ver D6.
+- [x] ~~Confirmar quais famílias existem hoje no tenant.~~ Deixou de ser
+      pré-requisito: o grupo é criado à parte e não depende de como o catálogo
+      foi organizado em famílias.
 - [ ] Eixo porte: **atributo declarado**, porque não há histórico de compra de
       onde derivar — `offers` nunca teve uso.
 - [ ] Modelar eixo como **eixo + valor**: "grande" e "pequeno" são mutuamente
@@ -552,6 +550,47 @@ máquina de estados inteira pode ser testada antes de existir canal.
       nunca vai estar lá.
 - [ ] Risco a mitigar: o cliente recebe pelo celular do representante e responde
       **na linha BPTI**, onde o bot atende sem saber que houve disparo.
+
+### D6 — Grupo de artigo (implementada em 2026-08-23)
+
+**Migração `0013`.** `product_groups` e `product_group_members`, N↔N com o
+artigo. `products.family_id` fica exatamente como está.
+
+Verificada por `tests/test_product_groups.py` (17). Suíte em 422 verdes.
+
+O eixo de material ia derivar de `product_families`. Não serve, e o retorno do
+Charles mostrou por quê: ele citou "poliéster", "viscose" e "alta-tenacidade"
+como grupos irmãos, mas alta tenacidade é propriedade do fio de poliéster. O
+mesmo artigo é os dois.
+
+Família não pode virar N↔N para acomodar isso, porque **família é layout**:
+agrupa e ordena a tabela que o cliente recebe pelo WhatsApp, e um artigo em duas
+famílias não teria sob qual cabeçalho imprimir. **Grupo é consulta**, e ali a
+multiplicidade é o ponto. Mesma separação do ADR-021.
+
+- [x] Criar, renomear, desativar e etiquetar pela tela de produtos.
+- [x] **`normalized_name` único por tenant.** Sem acento e em caixa baixa:
+      "poliester", "poliéster" e "POLIÉSTER" são o mesmo grupo. É a guarda que
+      sobrevive a uma chamada de API e a um clique apressado — sem ela a
+      taxonomia se multiplica e o público de um disparo racha em silêncio.
+- [x] Desativar preserva as associações; apagar perderia classificação feita
+      artigo a artigo.
+- [x] **`/portal/products` aberta a representante para ler e etiquetar.** Criar
+      grupo também é dele. Renomear, desativar, e tudo de artigo e de família
+      continuam com a gestão: criar grupo não desfaz o trabalho de ninguém,
+      renomear muda o significado do que já foi etiquetado, e mexer em família
+      muda o que **todo** cliente vê na tabela dele.
+- [x] O grupo é do tenant, não de quem criou. `created_by` fica só para
+      auditoria — "poliéster" com significados diferentes por representante
+      tornaria o disparo imprevisível.
+- [ ] Aplicar a `0013` contra PostgreSQL. Roda sozinha no próximo deploy.
+- [ ] **Filtrar a carteira por grupo de artigo.** É o que liga esta tabela ao
+      disparo, e ainda não existe: o filtro de cliente aceita
+      `preferred_product_id`, não grupo.
+- [ ] Mesclar dois grupos que nasceram parecidos apesar da guarda — "poliéster"
+      e "poliester texturizado" passam pela unicidade e são a mesma coisa.
+- [ ] Etiquetar em lote. Hoje é um artigo por vez, e um catálogo inteiro na mão
+      é onde a classificação morre.
 
 ### D5 — Aviso de queda de preço
 

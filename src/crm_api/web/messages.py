@@ -51,6 +51,19 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
     ),
     "familia-criada": ("ok", "Família cadastrada."),
     "familia-salva": ("ok", "Família atualizada."),
+    "grupo-criado": ("ok", "Grupo de artigo criado."),
+    "grupo-salvo": ("ok", "Grupo atualizado."),
+    "etiqueta-salva": ("ok", "Grupos do artigo atualizados."),
+    "grupo-sem-nome": ("erro", "Dê um nome ao grupo."),
+    # Diz o que fazer, não só o que deu errado: o grupo equivalente já existe e
+    # é nele que o artigo deve entrar — criar um irmão dividiria o público.
+    "grupo-duplicado": (
+        "erro",
+        "Já existe um grupo com esse nome, ignorando acento e maiúsculas. "
+        "Use o que existe: dois grupos parecidos dividiriam o público de um "
+        "disparo sem ninguém perceber.",
+    ),
+    "grupo-inexistente": ("erro", "Grupo não encontrado."),
     "senha-redefinida": (
         "ok",
         "Senha redefinida. As sessões abertas do usuário foram encerradas e "

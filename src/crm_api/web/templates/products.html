@@ -4,10 +4,12 @@
 {% block conteudo %}
 <div class="cabecalho">
   <h1>Produtos</h1>
+  {% if pode_gerir %}
   <div class="acoes-cabecalho">
     <button type="button" class="link" data-abre="modal-produto">Novo artigo</button>
     <button type="button" class="link" data-abre="modal-familia">Nova família</button>
   </div>
+  {% endif %}
 </div>
 
 <section class="painel">
@@ -48,6 +50,7 @@
         <th>SKU</th>
         <th>Nome comercial</th>
         <th>Família</th>
+        <th>Grupos</th>
         <th>Un.</th>
         <th class="numero">Preço no mês</th>
         <th class="numero">Preferido por</th>
@@ -67,6 +70,13 @@
           {% endif %}
         </td>
         <td>{{ linha.family.name }}</td>
+        <td>
+          {%- for g in grupos_do_artigo.get(produto.id, []) -%}
+          <span class="etiqueta neutra">{{ g.name }}</span>
+          {%- else -%}
+          <span class="vazio">—</span>
+          {%- endfor -%}
+        </td>
         <td>{{ produto.unit }}</td>
         <td class="numero">
           {%- if linha.base_price is not none -%}
@@ -81,6 +91,7 @@
         </td>
         <td>{% if produto.active %}ativo{% else %}<span class="vazio">inativo</span>{% endif %}</td>
         <td class="acoes">
+          {% if pode_gerir %}
           <form method="post" action="/portal/products/{{ produto.id }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="busca" value="{{ busca }}">
@@ -93,6 +104,56 @@
             {% endif %}
           </form>
           <button type="button" class="link" data-abre="editar-{{ produto.id }}">editar</button>
+          {% endif %}
+        </td>
+      </tr>
+
+      {# Etiquetar fica fora da célula de ações: `.acoes form` deita os campos
+         em linha. `tr.detalhe` é o padrão da lista de preço e da tela de
+         usuários. #}
+      <tr class="detalhe">
+        <td colspan="9">
+          <div class="gaveta">
+            <details>
+              <summary>grupos deste artigo</summary>
+              <form method="post" action="/portal/products/{{ produto.id }}/groups"
+                    class="formulario">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="busca" value="{{ busca }}">
+                <input type="hidden" name="familia" value="{{ familia_escolhida }}">
+                <input type="hidden" name="situacao" value="{{ situacao }}">
+                <input type="hidden" name="acao" value="incluir">
+
+                <label for="grupo-{{ produto.id }}">Incluir em</label>
+                <select id="grupo-{{ produto.id }}" name="group_id" required>
+                  <option value="">Escolha um grupo</option>
+                  {% for g in grupos if g.active %}
+                  <option value="{{ g.id }}">{{ g.name }}</option>
+                  {% endfor %}
+                </select>
+                <p class="dica">
+                  Um artigo pode estar em vários grupos ao mesmo tempo — é para
+                  isso que eles servem. A família continua sendo uma só, porque
+                  é ela que agrupa a tabela enviada ao cliente.
+                </p>
+                <button type="submit">Incluir no grupo</button>
+              </form>
+
+              {% for g in grupos_do_artigo.get(produto.id, []) %}
+              <form method="post" action="/portal/products/{{ produto.id }}/groups"
+                    class="formulario-linha">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="busca" value="{{ busca }}">
+                <input type="hidden" name="familia" value="{{ familia_escolhida }}">
+                <input type="hidden" name="situacao" value="{{ situacao }}">
+                <input type="hidden" name="acao" value="remover">
+                <input type="hidden" name="group_id" value="{{ g.id }}">
+                <span>{{ g.name }}</span>
+                <button type="submit" class="link">remover</button>
+              </form>
+              {% endfor %}
+            </details>
+          </div>
         </td>
       </tr>
       {% endfor %}
@@ -104,6 +165,7 @@
   {% endif %}
 </section>
 
+{% if pode_gerir %}
 {% for linha in linhas %}
 {% set produto = linha.product %}
 <dialog id="editar-{{ produto.id }}" class="modal">
@@ -156,7 +218,86 @@
   </form>
 </dialog>
 {% endfor %}
+{% endif %}
 
+<section class="painel">
+  <h2>Grupos de artigo</h2>
+  <p class="dica">
+    Agrupamento livre, para segmentar cliente e montar o público de um disparo.
+    Um artigo pode estar em vários — um fio de alta tenacidade é poliéster
+    <em>e</em> é alta-tenacidade. Diferente da família, que é uma só porque é
+    ela que agrupa a tabela impressa para o cliente.
+  </p>
+  {% if grupos %}
+  <table>
+    <thead>
+      <tr>
+        <th>Nome</th>
+        <th class="numero">Artigos</th>
+        <th>Situação</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in grupos %}
+      <tr>
+        <td>
+          {% if pode_gerir %}
+          <form method="post" action="/portal/product-groups/{{ g.id }}"
+                class="formulario-linha">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="acao" value="renomear">
+            <input type="hidden" name="busca" value="{{ busca }}">
+            <input type="hidden" name="familia" value="{{ familia_escolhida }}">
+            <input type="hidden" name="situacao" value="{{ situacao }}">
+            <input type="text" name="name" value="{{ g.name }}" required maxlength="120">
+            <button type="submit" class="link">salvar</button>
+          </form>
+          {% else %}
+          {{ g.name }}
+          {% endif %}
+        </td>
+        <td class="numero">{{ contagem_por_grupo.get(g.id, 0) }}</td>
+        <td>{% if g.active %}ativo{% else %}<span class="vazio">inativo</span>{% endif %}</td>
+        <td class="acoes">
+          {% if pode_gerir %}
+          <form method="post" action="/portal/product-groups/{{ g.id }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="busca" value="{{ busca }}">
+            <input type="hidden" name="familia" value="{{ familia_escolhida }}">
+            <input type="hidden" name="situacao" value="{{ situacao }}">
+            {% if g.active %}
+            <button type="submit" name="acao" value="desativar" class="link">desativar</button>
+            {% else %}
+            <button type="submit" name="acao" value="ativar" class="link">reativar</button>
+            {% endif %}
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="vazio">Nenhum grupo criado ainda.</p>
+  {% endif %}
+
+  <form method="post" action="/portal/product-groups" class="formulario-linha">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="busca" value="{{ busca }}">
+    <input type="hidden" name="familia" value="{{ familia_escolhida }}">
+    <input type="hidden" name="situacao" value="{{ situacao }}">
+    <input type="text" name="name" placeholder="Nome do grupo (ex.: Poliéster)"
+           required maxlength="120">
+    <button type="submit">Criar grupo</button>
+  </form>
+  <p class="dica">
+    Antes de criar, confira se já existe: acento e maiúsculas são ignorados, e
+    dois grupos parecidos dividiriam o público de um disparo ao meio.
+  </p>
+</section>
+
+{% if pode_gerir %}
 <section class="painel">
   <h2>Famílias</h2>
   <p class="dica">
@@ -208,7 +349,9 @@
   <p class="vazio">Nenhuma família cadastrada.</p>
   {% endif %}
 </section>
+{% endif %}
 
+{% if pode_gerir %}
 <dialog id="modal-produto" class="modal">
   <form method="post" action="/portal/products" class="formulario">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -282,4 +425,5 @@
     </div>
   </form>
 </dialog>
+{% endif %}
 {% endblock %}

@@ -14,7 +14,13 @@ import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from crm_api.models.catalog import Product, ProductFamily
+from crm_api.core.text import normalize_group_name
+from crm_api.models.catalog import (
+    Product,
+    ProductFamily,
+    ProductGroup,
+    ProductGroupMember,
+)
 from crm_api.models.pricing import (
     NO_PRICE_AVAILABILITIES,
     AvailabilityStatus,
@@ -30,6 +36,22 @@ from crm_api.repositories.catalog import CatalogRepository
 # faz o segundo artigo do mês cair no mesmo lote em vez de criar um lote por
 # artigo — publicar cinquenta lotes de uma linha não é revisão, é ruído.
 BATCH_NAME = "Inclusões pelo portal"
+
+
+class GroupRequired(Exception):
+    """Grupo sem nome."""
+
+
+class DuplicateGroup(Exception):
+    """Já existe grupo com este nome, ignorando acento e caixa."""
+
+
+class GroupNotFound(Exception):
+    """Grupo inexistente neste tenant."""
+
+
+class ProductNotInCatalog(Exception):
+    """Artigo inexistente neste tenant."""
 
 
 class IncompleteArticle(Exception):
@@ -351,6 +373,184 @@ class CatalogService:
         return product
 
     # ------------------------------------------------------------- famílias
+
+    # ------------------------------------------------- grupos de artigo
+
+    async def create_group(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        name: str,
+        request_id: str | None = None,
+    ) -> ProductGroup:
+        """Cria um grupo, ou recusa se já houver um equivalente.
+
+        "Equivalente" ignora acento e caixa: `Poliéster` e `poliester` são o
+        mesmo grupo. Sem isso a taxonomia se multiplica sozinha e o público de
+        um disparo racha sem ninguém perceber.
+        """
+        nome = name.strip()
+        if not nome:
+            raise GroupRequired
+        canonico = normalize_group_name(nome)
+        if not canonico:
+            raise GroupRequired
+        if await self._catalog.find_group_by_name(tenant_id, canonico) is not None:
+            raise DuplicateGroup
+
+        grupo = ProductGroup(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            name=nome,
+            normalized_name=canonico,
+            created_by=actor_user_id,
+        )
+        self._catalog.add(grupo)
+        self._audit.record(
+            action="PRODUCT_GROUP_CREATED",
+            entity="product_groups",
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=grupo.id,
+            after={"name": grupo.name},
+            request_id=request_id,
+        )
+        await self._catalog.flush()
+        return grupo
+
+    async def rename_group(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        group_id: uuid.UUID,
+        name: str,
+        request_id: str | None = None,
+    ) -> ProductGroup:
+        grupo = await self._catalog.get_group(tenant_id, group_id)
+        if grupo is None:
+            raise GroupNotFound
+
+        nome = name.strip()
+        canonico = normalize_group_name(nome)
+        if not canonico:
+            raise GroupRequired
+
+        existente = await self._catalog.find_group_by_name(tenant_id, canonico)
+        if existente is not None and existente.id != grupo.id:
+            raise DuplicateGroup
+
+        antes = grupo.name
+        grupo.name = nome
+        grupo.normalized_name = canonico
+        self._audit.record(
+            action="PRODUCT_GROUP_RENAMED",
+            entity="product_groups",
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=grupo.id,
+            before={"name": antes},
+            after={"name": nome},
+            request_id=request_id,
+        )
+        return grupo
+
+    async def set_group_active(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        group_id: uuid.UUID,
+        active: bool,
+        request_id: str | None = None,
+    ) -> ProductGroup:
+        """Desativa sem apagar.
+
+        As associações continuam gravadas: reativar traz o grupo de volta
+        inteiro, e apagar perderia uma classificação que alguém montou artigo a
+        artigo. O grupo desativado sai da tela e não pode virar público.
+        """
+        grupo = await self._catalog.get_group(tenant_id, group_id)
+        if grupo is None:
+            raise GroupNotFound
+
+        grupo.active = active
+        self._audit.record(
+            action="PRODUCT_GROUP_ACTIVATED" if active else "PRODUCT_GROUP_DEACTIVATED",
+            entity="product_groups",
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=grupo.id,
+            after={"active": active},
+            request_id=request_id,
+        )
+        return grupo
+
+    async def add_product_to_group(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        group_id: uuid.UUID,
+        product_id: uuid.UUID,
+        request_id: str | None = None,
+    ) -> ProductGroupMember:
+        """Etiqueta um artigo. Repetir não duplica nem falha."""
+        grupo = await self._catalog.get_group(tenant_id, group_id)
+        if grupo is None:
+            raise GroupNotFound
+        if await self._catalog.get_product(tenant_id, product_id) is None:
+            raise ProductNotInCatalog
+
+        existente = await self._catalog.get_membership(tenant_id, group_id, product_id)
+        if existente is not None:
+            return existente
+
+        vinculo = ProductGroupMember(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            group_id=group_id,
+            product_id=product_id,
+            added_by=actor_user_id,
+        )
+        self._catalog.add(vinculo)
+        self._audit.record(
+            action="PRODUCT_GROUP_MEMBER_ADDED",
+            entity="product_group_members",
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=vinculo.id,
+            after={"group_id": str(group_id), "product_id": str(product_id)},
+            request_id=request_id,
+        )
+        await self._catalog.flush()
+        return vinculo
+
+    async def remove_product_from_group(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        group_id: uuid.UUID,
+        product_id: uuid.UUID,
+        request_id: str | None = None,
+    ) -> None:
+        """Remove a etiqueta. Remover o que não está lá é silencioso."""
+        vinculo = await self._catalog.get_membership(tenant_id, group_id, product_id)
+        if vinculo is None:
+            return
+
+        await self._catalog.remove_membership(vinculo)
+        self._audit.record(
+            action="PRODUCT_GROUP_MEMBER_REMOVED",
+            entity="product_group_members",
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=vinculo.id,
+            before={"group_id": str(group_id), "product_id": str(product_id)},
+            request_id=request_id,
+        )
 
     async def create_family(
         self,
