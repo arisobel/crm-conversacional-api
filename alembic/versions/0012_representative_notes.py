@@ -95,7 +95,8 @@ _DOWNGRADE = (
        WHERE kind = 'REPRESENTATIVE_NOTE';
       IF notas > 0 THEN
         RAISE EXCEPTION
-          'ha % notas de representante; elas nao existem em outro lugar, decida o destino antes de reverter',
+          'ha % notas de representante; elas nao existem em outro lugar, '
+          'decida o destino delas antes de reverter',
           notas;
       END IF;
     END $$

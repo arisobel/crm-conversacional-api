@@ -468,3 +468,47 @@ Para os próximos pedidos ao Gateway, isso vira critério de aceite permanente:
 **comportamento do manifesto legado do CRM inalterado, provado pelos testes
 existentes sem nenhuma modificação neles.** É o único jeito de uma alteração
 dessas quebrar produção em silêncio.
+
+## ADR-027 — Atributo têxtil é camada, não refatoração do artigo
+
+**Status:** aceita em 2026-08-23. Migração `0014`.
+
+A matéria-prima do fio vivia dentro de `commercial_name` e `specification` como
+texto livre, e a consequência era medível: "tem poliéster?" — pergunta que o robô
+recebe toda semana — não alcançava POY, alta tenacidade, Reflex nem recoberto,
+que **são** poliéster e não estavam marcados como tal em lugar nenhum. E a
+composição real é multivalorada e percentual (`65PES/35CV`, `92PES 8PUE`), o que
+nenhum campo de texto responde quando a pergunta é "algo com pelo menos 60% de
+poliéster".
+
+**A camada é aditiva: `products` não ganha coluna.** Ele carrega preço publicado
+atrás de si — `price_entries` o referencia, e o SKU trava no primeiro preço
+publicado justamente porque é por ele que a planilha mensal reencontra o artigo
+(ADR-021). Acrescentar atributo ali faria cadastro descritivo mexer numa tabela
+cujo compromisso é comercial. Duas tabelas novas, `fibers` e
+`product_compositions`, e nada do catálogo é tocado.
+
+**Nada de EAV.** O vocabulário têxtil é fechado — fibra é fibra, e a lista cabe
+num seed. Par atributo/valor genérico daria flexibilidade que ninguém pediu em
+troca de consulta ilegível e de nenhuma validação possível.
+
+**Ausência não é negativa.** Artigo sem composição é artigo cujo cadastro ainda
+não foi feito, não artigo sem aquela fibra. A consulta devolve os confirmados e,
+em conjunto separado, os não classificados — e nunca omite os segundos. Sem essa
+regra, cadastro incompleto viraria resposta errada com cara de certa: "não temos
+poliéster" quando o correto é "ninguém cadastrou ainda".
+
+**A soma de 100% fica no serviço.** Ela cruza linhas de uma mesma composição, e
+o custo de um gatilho não se paga num catálogo de centenas de itens. Em troca, a
+escrita substitui a composição inteira em vez de remendar, para que a validação
+tenha momento definido e nenhum estado intermediário inválido exista.
+
+**Composição entra por importação revisável**, no espírito do ADR-009, e nunca
+por heurística que adivinhe fibra a partir do nome comercial. Um artigo cuja soma
+não fecha é recusado inteiro; os demais do lote entram, e a saída lista SKU e
+motivo de cada recusa.
+
+Custo aceito: **um join a mais** em toda consulta por fibra, e a composição
+precisa ser cadastrada artigo a artigo. Em troca, nenhum preço publicado é
+migrado, e cadastro incompleto não bloqueia venda — um artigo sem composição
+continua aparecendo na busca e na tabela do cliente exatamente como antes.

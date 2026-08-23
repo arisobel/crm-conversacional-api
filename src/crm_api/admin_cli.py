@@ -5,6 +5,8 @@
 
     python -m crm_api.admin_cli purge-interactions [--days N] [--dry-run]
 
+    python -m crm_api.admin_cli seed-fibers
+
 A senha é lida de `CRM_SEED_PASSWORD` ou, na ausência dela, solicitada pelo
 terminal sem eco. Ela nunca é aceita por argumento de linha de comando, que
 ficaria visível na lista de processos e no histórico do shell.
@@ -27,9 +29,11 @@ from crm_api.models.user import User, UserRole
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.interactions import InteractionRepository
 from crm_api.repositories.portfolio import CustomerPortfolioRepository
+from crm_api.repositories.textile import TextileRepository
 from crm_api.repositories.users import UserRepository
 from crm_api.services.auth import normalize_email
 from crm_api.services.interactions import InteractionService, RetentionNotConfigured
+from crm_api.services.textile import TextileService
 
 _PASSWORD_ENV = "CRM_SEED_PASSWORD"
 
@@ -139,6 +143,40 @@ async def _purge_interactions(days: int | None, dry_run: bool) -> None:
         await engine.dispose()
 
 
+async def _seed_fibers() -> int:
+    """Semeia as fibras reconhecidas pelo tenant.
+
+    Idempotente: rodar de novo não duplica nem sobrescreve. O que já existe é
+    deixado como está, inclusive se alguém tiver corrigido o nome pela mão — o
+    seed semeia, não normaliza.
+    """
+    settings = get_settings()
+    engine, session_factory = create_session_factory(settings)
+    try:
+        async with session_factory() as session:
+            tenant = await session.scalar(
+                select(Tenant).where(Tenant.slug == settings.tenant_slug)
+            )
+            if tenant is None:
+                raise SystemExit(f"tenant '{settings.tenant_slug}' não encontrado")
+
+            servico = TextileService(
+                textile=TextileRepository(session), audit=AuditRepository(session)
+            )
+            criadas = await servico.seed_fibers(tenant_id=tenant.id)
+            await session.commit()
+
+            if not criadas:
+                print("nenhuma fibra nova; o cadastro já estava completo")
+                return 0
+            for fibra in criadas:
+                print(f"{fibra.code:<4} {fibra.name}")
+            print(f"{len(criadas)} fibra(s) cadastrada(s)")
+            return 0
+    finally:
+        await engine.dispose()
+
+
 async def _check_whatsapp_identities() -> int:
     """Prova que um telefone não é usuário e contato de cliente ao mesmo tempo.
 
@@ -203,12 +241,19 @@ def main(argv: list[str] | None = None) -> int:
         help="verifica colisões de telefone entre usuários e contatos de cliente",
     )
 
+    subparsers.add_parser(
+        "seed-fibers",
+        help="cadastra as fibras têxteis reconhecidas pelo tenant (idempotente)",
+    )
+
     arguments = parser.parse_args(argv)
     if arguments.command == "purge-interactions":
         asyncio.run(_purge_interactions(arguments.days, arguments.dry_run))
         return 0
     if arguments.command == "check-whatsapp-identities":
         return asyncio.run(_check_whatsapp_identities())
+    if arguments.command == "seed-fibers":
+        return asyncio.run(_seed_fibers())
 
     asyncio.run(_create_user(arguments.email, arguments.name, UserRole(arguments.role)))
     return 0

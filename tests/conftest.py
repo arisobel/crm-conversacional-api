@@ -19,6 +19,7 @@ from crm_api.models.catalog import (  # noqa: E402
     ProductFamily,
 )
 from crm_api.models.customer import Customer, CustomerLocation, Tenant  # noqa: E402
+from crm_api.models.textile import Fiber, ProductComposition  # noqa: E402, F401
 from crm_api.models.user import User, UserRole  # noqa: E402
 
 PASSWORD = "SenhaForte12345"

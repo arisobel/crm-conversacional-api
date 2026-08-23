@@ -378,6 +378,59 @@ Outbox técnico de envio e acompanhamento de entrega.
 
 Restrições: idempotência e ID do Gateway únicos por tenant.
 
+## 18. `fibers` — camada têxtil, migração `0014`
+
+Fibra reconhecida pelo tenant. Vocabulário fechado e curado por seed, não
+taxonomia livre: `PES` é poliéster em qualquer planilha do setor.
+
+| Campo | Tipo | Nulável | Regra / significado |
+|---|---|---:|---|
+| `id` | uuid | não | PK |
+| `tenant_id` | uuid | não | FK → `tenants.id` |
+| `code` | text | não | Sigla do setor: `PES`, `CV`, `CO`, `PUE`, `PA`, `EL`. É por ela que o CSV casa |
+| `name` | text | não | Nome exibido |
+| `active` | boolean | não | Ativação lógica; padrão `true` |
+| `created_at` | timestamptz | não | Criação |
+
+Restrições: `UNIQUE(tenant_id, code)`; índice `(tenant_id, active)`.
+
+Semeada por `python -m crm_api.admin_cli seed-fibers`, idempotente pela sigla —
+o que já existe não é sobrescrito, inclusive nome corrigido à mão.
+
+## 19. `product_compositions` — camada têxtil, migração `0014`
+
+Percentual de uma fibra em um artigo. Multivalorada porque a composição real é:
+`65PES/35CV`, `92PES 8PUE`, `70PES/30CO`.
+
+| Campo | Tipo | Nulável | Regra / significado |
+|---|---|---:|---|
+| `id` | uuid | não | PK |
+| `tenant_id` | uuid | não | FK → `tenants.id` |
+| `product_id` | uuid | não | FK → `products.id`; **exclusão em cascata** |
+| `fiber_id` | uuid | não | FK → `fibers.id` |
+| `percent` | numeric(5,2) | não | Percentual em `(0, 100]` |
+| `created_at` | timestamptz | não | Criação |
+
+Restrições: `UNIQUE(product_id, fiber_id)`; `CHECK(percent > 0 AND percent <= 100)`;
+índices `(product_id)` e `(tenant_id, fiber_id)` — o segundo é o caminho quente
+de "artigos de poliéster".
+
+Três decisões registradas no ADR-027 governam esta tabela:
+
+**A soma de 100% é validada no serviço, não no banco.** Ela cruza linhas de uma
+mesma composição, e um gatilho não se paga num catálogo de centenas de itens. A
+escrita substitui a composição inteira em vez de remendar linha a linha, para
+que a validação tenha um momento definido.
+
+**Ausência não é negativa.** Artigo sem linha aqui é artigo cujo cadastro ainda
+não foi feito, não artigo sem fibra. A consulta por fibra devolve os artigos
+confirmados **e**, em conjunto separado, os que ninguém classificou — e nunca
+omite os segundos.
+
+**`ON DELETE CASCADE`, diferente de `product_group_members`.** Lá o vínculo é
+classificação que alguém montou artigo a artigo e vale preservar; aqui a linha é
+propriedade do artigo, e sem o artigo `65% PES` não descreve coisa alguma.
+
 # Relacionamentos principais
 
 ```mermaid
