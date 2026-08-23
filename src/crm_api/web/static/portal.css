@@ -92,6 +92,9 @@ tbody tr:last-child td { border-bottom: none; }
 td a { color: var(--acento); text-decoration: none; }
 td a:hover { text-decoration: underline; }
 
+/* Vale para a fileira de botõezinhos da célula de ações — e só para ela. Um
+   formulário de vários campos aqui dentro viraria uma linha de campos lado a
+   lado; ele mora em `tr.detalhe`, não na célula. */
 .acoes form { display: flex; gap: 12px; margin: 0; }
 
 /* ---------------------------------------------------------- formulários */
@@ -184,6 +187,14 @@ button.link {
 tr.detalhe td { padding-top: 0; border-bottom: none; }
 tr.detalhe summary { color: var(--tinta-fraca); font-size: 12px; cursor: pointer; }
 tr.detalhe span { color: var(--tinta-fraca); font-size: 12px; }
+
+/* Gaveta de formulários sob a linha da tabela. Fechada, é só uma fileira de
+   links; aberta, o formulário desce em coluna como em qualquer painel. */
+.gaveta { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 24px; }
+.gaveta > details { min-width: 260px; }
+.gaveta > details[open] { flex-basis: 100%; }
+.gaveta .formulario { margin-top: 10px; }
+.gaveta a { font-size: 12px; }
 
 /* --------------------------------------------------------------- login */
 

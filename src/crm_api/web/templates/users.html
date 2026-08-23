@@ -23,40 +23,6 @@
       <td>{% if usuario.active %}ativo{% else %}<span class="vazio">inativo</span>{% endif %}</td>
       <td>{{ usuario.last_login_at.strftime('%d/%m/%Y %H:%M') if usuario.last_login_at else '—' }}</td>
       <td class="acoes">
-        <details class="editar-usuario">
-          <summary>editar</summary>
-          <form method="post" action="/portal/users/{{ usuario.id }}/editar">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-
-            <label for="nome-{{ usuario.id }}">Nome</label>
-            <input id="nome-{{ usuario.id }}" name="full_name"
-                   value="{{ usuario.full_name }}" required>
-
-            <label for="papel-{{ usuario.id }}">Papel</label>
-            <select id="papel-{{ usuario.id }}" name="role">
-              {% for valor, descricao in [
-                   ('REPRESENTATIVE', 'REPRESENTATIVE — atende a própria carteira'),
-                   ('MANAGER', 'MANAGER — enxerga todo o tenant'),
-                   ('ADMIN', 'ADMIN — também administra usuários')] %}
-              <option value="{{ valor }}" {% if usuario.role.value == valor %}selected{% endif %}>
-                {{ descricao }}
-              </option>
-              {% endfor %}
-            </select>
-
-            <label for="zap-{{ usuario.id }}">WhatsApp</label>
-            <input id="zap-{{ usuario.id }}" name="whatsapp_e164"
-                   value="{{ usuario.whatsapp_e164 or '' }}" placeholder="+5511999999999">
-            <p class="ajuda">
-              É por este número que ele é reconhecido como representante no
-              WhatsApp. Deixe em branco para remover — e note que remover aqui
-              <strong>não</strong> tira a autorização dele no painel do Gateway.
-            </p>
-
-            <button type="submit">Salvar</button>
-          </form>
-        </details>
-
         {% if usuario.id != current_user.user_id %}
         <form method="post" action="/portal/users/{{ usuario.id }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -66,25 +32,74 @@
           <button type="submit" name="acao" value="ativar" class="link">reativar</button>
           {% endif %}
         </form>
-        <details class="redefinir-senha">
-          <summary>redefinir senha</summary>
-          <form method="post" action="/portal/users/{{ usuario.id }}/password">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <label for="senha-{{ usuario.id }}">Nova senha para {{ usuario.full_name }}</label>
-            <input id="senha-{{ usuario.id }}" name="password" type="password"
-                   autocomplete="new-password" minlength="{{ tamanho_minimo_senha }}" required>
-            <p class="ajuda">
-              Encerra as sessões abertas dele e libera o bloqueio por tentativas.
-              Combine a senha por outro canal e peça que ele a troque em
-              “Minha senha”.
-            </p>
-            <button type="submit">Redefinir</button>
-          </form>
-        </details>
         {% else %}
         <span class="vazio">você</span>
-        <a href="/portal/minha-senha">trocar minha senha</a>
         {% endif %}
+      </td>
+    </tr>
+
+    {# Formulários fora da célula: dentro dela, `.acoes form` os deitaria em
+       linha. `tr.detalhe` é o padrão que a lista de preço já usa. #}
+    <tr class="detalhe">
+      <td colspan="7">
+        <div class="gaveta">
+          <details>
+            <summary>editar cadastro</summary>
+            <form method="post" action="/portal/users/{{ usuario.id }}/editar"
+                  class="formulario">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+              <label for="nome-{{ usuario.id }}">Nome</label>
+              <input id="nome-{{ usuario.id }}" name="full_name"
+                     value="{{ usuario.full_name }}" required>
+
+              <label for="papel-{{ usuario.id }}">Papel</label>
+              <select id="papel-{{ usuario.id }}" name="role">
+                {% for valor, descricao in [
+                     ('REPRESENTATIVE', 'REPRESENTATIVE — atende a própria carteira'),
+                     ('MANAGER', 'MANAGER — enxerga todo o tenant'),
+                     ('ADMIN', 'ADMIN — também administra usuários')] %}
+                <option value="{{ valor }}" {% if usuario.role.value == valor %}selected{% endif %}>
+                  {{ descricao }}
+                </option>
+                {% endfor %}
+              </select>
+
+              <label for="zap-{{ usuario.id }}">WhatsApp</label>
+              <input id="zap-{{ usuario.id }}" name="whatsapp_e164"
+                     value="{{ usuario.whatsapp_e164 or '' }}" placeholder="+5511999999999">
+              <p class="dica">
+                É por este número que ele é reconhecido como representante no
+                WhatsApp. Deixe em branco para remover — e note que remover aqui
+                <strong>não</strong> tira a autorização dele no painel do Gateway.
+              </p>
+
+              <button type="submit">Salvar cadastro</button>
+            </form>
+          </details>
+
+          {% if usuario.id != current_user.user_id %}
+          <details>
+            <summary>redefinir senha</summary>
+            <form method="post" action="/portal/users/{{ usuario.id }}/password"
+                  class="formulario">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <label for="senha-{{ usuario.id }}">Nova senha</label>
+              <input id="senha-{{ usuario.id }}" name="password" type="password"
+                     autocomplete="new-password"
+                     minlength="{{ tamanho_minimo_senha }}" required>
+              <p class="dica">
+                Encerra as sessões abertas dele e libera o bloqueio por
+                tentativas. Combine a senha por outro canal e peça que ele a
+                troque em “Minha senha”.
+              </p>
+              <button type="submit">Redefinir senha</button>
+            </form>
+          </details>
+          {% else %}
+          <a href="/portal/minha-senha">trocar minha senha</a>
+          {% endif %}
+        </div>
       </td>
     </tr>
     {% endfor %}
