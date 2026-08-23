@@ -171,7 +171,12 @@ class UserService:
             await self._guard_last_admin(user)
             user.role = role
         if full_name is not None:
-            user.full_name = full_name
+            # A API já barra pelo schema; o portal manda o campo do formulário,
+            # e um nome em branco deixaria a lista de usuários com uma linha
+            # sem como ser identificada.
+            if not full_name.strip():
+                raise UnsafeUserChange("a user cannot be left without a name")
+            user.full_name = full_name.strip()
         if whatsapp_e164 is not None:
             user.whatsapp_e164 = (
                 await self._canonical_whatsapp(tenant_id, whatsapp_e164, excluding=user.id)

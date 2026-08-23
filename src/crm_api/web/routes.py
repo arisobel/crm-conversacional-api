@@ -1082,6 +1082,54 @@ async def salvar_usuario(
     return _redirect("/portal/users", "usuario-salvo")
 
 
+@router.post("/users/{user_id}/editar", include_in_schema=False)
+async def editar_usuario(
+    request: Request,
+    user_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    full_name: Annotated[str, Form()],
+    role: Annotated[str, Form()],
+    whatsapp_e164: _CustomerForm = None,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    """Edita nome, papel e WhatsApp de um usuário do portal.
+
+    O formulário manda os três campos sempre, com os valores atuais
+    preenchidos, então isto é substituição e não remendo. É o que permite
+    **limpar** o WhatsApp — a API não consegue, porque o schema dela valida o
+    campo contra E.164 e não tem como expressar "apague".
+    """
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/users", "csrf")
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+
+    try:
+        papel = UserRole(role)
+    except ValueError:
+        return _redirect("/portal/users", "papel-invalido")
+
+    try:
+        await _user_service(request, session).update(
+            tenant_id=current_user.tenant_id,
+            actor_user_id=current_user.user_id,
+            user_id=user_id,
+            full_name=full_name,
+            # String vazia apaga; `None` deixaria o telefone como está, e o
+            # formulário não teria como remover um número digitado errado.
+            whatsapp_e164=(whatsapp_e164 or "").strip(),
+            role=papel,
+            request_id=request.headers.get("x-request-id"),
+        )
+    except Exception as error:  # noqa: BLE001 -- reclassificado por _codigo_do_erro
+        await session.rollback()
+        return _redirect("/portal/users", _codigo_do_erro(error))
+
+    await session.commit()
+    return _redirect("/portal/users", "usuario-salvo")
+
+
 @router.post("/users/{user_id}/password", include_in_schema=False)
 async def redefinir_senha(
     request: Request,

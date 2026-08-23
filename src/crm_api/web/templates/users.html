@@ -8,17 +8,55 @@
 
 <table>
   <thead>
-    <tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Situação</th><th>Último acesso</th><th></th></tr>
+    <tr>
+      <th>Nome</th><th>E-mail</th><th>WhatsApp</th><th>Papel</th>
+      <th>Situação</th><th>Último acesso</th><th></th>
+    </tr>
   </thead>
   <tbody>
     {% for usuario in usuarios %}
     <tr>
       <td>{{ usuario.full_name }}</td>
       <td>{{ usuario.email }}</td>
+      <td>{{ usuario.whatsapp_e164 or '—' }}</td>
       <td>{{ usuario.role.value }}</td>
       <td>{% if usuario.active %}ativo{% else %}<span class="vazio">inativo</span>{% endif %}</td>
       <td>{{ usuario.last_login_at.strftime('%d/%m/%Y %H:%M') if usuario.last_login_at else '—' }}</td>
       <td class="acoes">
+        <details class="editar-usuario">
+          <summary>editar</summary>
+          <form method="post" action="/portal/users/{{ usuario.id }}/editar">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+            <label for="nome-{{ usuario.id }}">Nome</label>
+            <input id="nome-{{ usuario.id }}" name="full_name"
+                   value="{{ usuario.full_name }}" required>
+
+            <label for="papel-{{ usuario.id }}">Papel</label>
+            <select id="papel-{{ usuario.id }}" name="role">
+              {% for valor, descricao in [
+                   ('REPRESENTATIVE', 'REPRESENTATIVE — atende a própria carteira'),
+                   ('MANAGER', 'MANAGER — enxerga todo o tenant'),
+                   ('ADMIN', 'ADMIN — também administra usuários')] %}
+              <option value="{{ valor }}" {% if usuario.role.value == valor %}selected{% endif %}>
+                {{ descricao }}
+              </option>
+              {% endfor %}
+            </select>
+
+            <label for="zap-{{ usuario.id }}">WhatsApp</label>
+            <input id="zap-{{ usuario.id }}" name="whatsapp_e164"
+                   value="{{ usuario.whatsapp_e164 or '' }}" placeholder="+5511999999999">
+            <p class="ajuda">
+              É por este número que ele é reconhecido como representante no
+              WhatsApp. Deixe em branco para remover — e note que remover aqui
+              <strong>não</strong> tira a autorização dele no painel do Gateway.
+            </p>
+
+            <button type="submit">Salvar</button>
+          </form>
+        </details>
+
         {% if usuario.id != current_user.user_id %}
         <form method="post" action="/portal/users/{{ usuario.id }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

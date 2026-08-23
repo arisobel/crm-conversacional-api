@@ -166,6 +166,34 @@ Compartilha a rota de envio CRM → Gateway com o D3; fazer as duas juntas.
 - [ ] Mensagem enviada pelo portal ao cliente, gravada como interação.
 - [ ] A resposta já volta sozinha pelo push, que roda nos dois sentidos.
 
+## R6e — Gestão de acesso pela tela (implementada em 2026-08-22)
+
+Sem migração. Três operações que existiam no serviço e na API mas não tinham
+botão: um representante que esquecesse a senha dependia de alguém chamar a API
+na mão, não podia trocar a senha recebida, e não havia como corrigir o cadastro
+dele — inclusive o WhatsApp, que é a identidade dele no canal.
+
+- [x] Redefinir senha em `/portal/users`, restrito a `ADMIN`. Derruba as sessões
+      do usuário e libera o bloqueio por tentativas.
+- [x] `/portal/minha-senha` — troca da própria senha, para qualquer papel.
+      **Exige a senha atual**: sem isso, um cookie roubado trancaria o dono
+      fora da própria conta. Derruba as **outras** sessões e mantém a atual;
+      revogar tudo derrubaria quem acabou de trocar, e o logout imediato se lê
+      como falha.
+- [x] Editar nome, papel e WhatsApp na tela, com o número na listagem.
+- [x] Tentativa de troca com senha atual errada grava
+      `USER_PASSWORD_CHANGE_REFUSED` — **e a rota faz commit na recusa**, porque
+      o rollback apagaria justamente o registro que interessa investigar.
+- [x] O portal limpa o WhatsApp; a API não consegue. Lá o schema valida contra
+      E.164 e `None` significa "não mexa", então "apague" é inexprimível.
+- [ ] **A tela de auditoria continua não existindo.** `LOGIN_SUCCEEDED`,
+      `LOGIN_FAILED`, `LOGIN_BLOCKED`, `USER_PASSWORD_RESET` e as duas novas são
+      gravadas, e nenhuma rota lê `audit_log`. Hoje só por SQL. Fica mais
+      urgente conforme representantes reais começarem a entrar.
+- [ ] Remover o WhatsApp aqui **não** tira a autorização do número no painel do
+      Gateway — a consequência que o ADR-022 aceitou explicitamente. A tela
+      avisa; a mitigação continua sendo a `/portal/whatsapp` da W5.
+
 ## R6a — Telas de cadastro (implementada)
 
 - [x] Login, logout e sessão com redirecionamento em vez de `401` JSON.

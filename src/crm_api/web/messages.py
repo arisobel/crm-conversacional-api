@@ -108,9 +108,10 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
     ),
     "alteracao-insegura": (
         "erro",
-        "Alteração recusada: você não pode desativar a própria conta nem deixar "
-        "o tenant sem administrador ativo.",
+        "Alteração recusada: você não pode desativar a própria conta, deixar o "
+        "tenant sem administrador ativo, nem deixar um usuário sem nome.",
     ),
+    "papel-invalido": ("erro", "Papel inválido. Escolha um da lista."),
     "preferido-duplicado": ("erro", "Esse produto já está entre os preferidos."),
     "produto-inexistente": ("erro", "Produto não encontrado no catálogo."),
     "artigo-incompleto": ("erro", "Informe o SKU e o nome comercial do artigo."),
