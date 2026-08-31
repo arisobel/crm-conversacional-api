@@ -14,6 +14,7 @@ from conftest import (
     REPRESENTATIVE_A_EMAIL,
     REPRESENTATIVE_B_EMAIL,
     build_portal_world,
+    persist,
 )
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
@@ -124,7 +125,7 @@ async def test_incluir_produto_preferido_pela_ficha(world, admin):
             sku="LIS-50-24",
             commercial_name="50/24 liso",
         )
-        session.add_all([familia, produto])
+        await persist(session, [familia, produto])
         await session.commit()
         novo_id = produto.id
 

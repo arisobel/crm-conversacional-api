@@ -2,12 +2,12 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    CHAR,
     Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
-    String,
     Text,
     Uuid,
     func,
@@ -27,7 +27,7 @@ class Tenant(Base):
     # UF do estabelecimento que fatura. Origem do par que determina o ICMS.
     # Nula até ser configurada; o cálculo falha explicitamente sem ela, em vez
     # de assumir uma origem e produzir um preço plausível e errado.
-    origin_state_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    origin_state_code: Mapped[str | None] = mapped_column(CHAR(2), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -35,14 +35,29 @@ class Tenant(Base):
 
 class Customer(Base):
     __tablename__ = "customers"
-    __table_args__ = (CheckConstraint("state_code GLOB '[A-Z][A-Z]'", name="ck_customers_state"),)
+    # A mesma regra, escrita duas vezes, porque as duas engines não falam a
+    # mesma língua: `~` é do PostgreSQL, `GLOB` é do SQLite. Sem o `ddl_if` o
+    # modelo só era criável em SQLite — e a suíte validava um esquema que
+    # produção não podia ter.
+    #
+    # O texto da versão PostgreSQL é o da `0001`, caractere por caractere, para
+    # que modelo e banco digam a mesma coisa. `ops/ci/check_pg_schema.py`
+    # compara os dois `pg_get_constraintdef` e falha se divergirem.
+    __table_args__ = (
+        CheckConstraint(
+            "state_code ~ '^[A-Z]{2}$'", name="ck_customers_state"
+        ).ddl_if(dialect="postgresql"),
+        CheckConstraint(
+            "state_code GLOB '[A-Z][A-Z]'", name="ck_customers_state_sqlite"
+        ).ddl_if(dialect="sqlite"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
     legal_name: Mapped[str] = mapped_column(Text)
     trade_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     document_number: Mapped[str | None] = mapped_column(Text, nullable=True)
-    state_code: Mapped[str] = mapped_column(String(2))
+    state_code: Mapped[str] = mapped_column(CHAR(2))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Titular vigente da conta. Nulável porque um cliente pode existir sem
     # representante designado — e porque a base atual não tem titular algum.
@@ -82,7 +97,7 @@ class CustomerLocation(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id"), index=True)
     label: Mapped[str] = mapped_column(Text)
-    state_code: Mapped[str] = mapped_column(String(2))
+    state_code: Mapped[str] = mapped_column(CHAR(2))
     city: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)

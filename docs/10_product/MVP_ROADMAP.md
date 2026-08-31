@@ -45,6 +45,24 @@ R4 está bloqueada até a confirmação contábil da fórmula de conversão entr
 | F3 — Oferta | Volta depois do portal |
 | F4 — Gateway | Reduzida à ingestão de interações em R5 |
 
+## Pós-portal — Campanhas de WhatsApp
+
+Esta frente é planejada, não concluída. Seu desenho está em
+[Campanhas de WhatsApp](WHATSAPP_CAMPAIGNS.md) e o backlog rastreável em
+[D — Campanhas de WhatsApp](../00_meta/09_backlog.md).
+
+| Etapa | Entrega | Dependências |
+|---|---|---|
+| C0 | Decisões de negócio, retenção e contrato CRM ↔ Gateway | Consentimento, alçadas, templates e limite de revisão nominal |
+| C1 | Público determinístico, rascunho, snapshots e auditoria no CRM | C0; filtro por grupo/composição e atributos ainda não modelados |
+| C2 | Executor operacional no Gateway | C0; templates Meta, consentimento, fila, rate limit e eventos |
+| C3 | Projeção de resultados e portal de campanhas | C1 e C2; ligação com ficha/timeline do cliente |
+| C4 | Capacidades conversacionais | C1–C3; allowlist e executor validados no Gateway |
+
+O corte não altera a regra central do produto: representante só seleciona sua
+carteira; `ADMIN` e `MANAGER` acompanham o tenant. O Gateway continua dono do
+canal, do consentimento e do envio, e o CRM mantém a projeção comercial.
+
 ## Critérios globais
 
 - Eventos e importações repetidos não duplicam processamento.
@@ -59,7 +77,8 @@ R4 está bloqueada até a confirmação contábil da fórmula de conversão entr
 
 Importação automática de PDFs, oferta e negociação, frete determinístico,
 motor tributário completo (ST, DIFAL, Simples), múltiplas UFs de origem por
-tenant e servidor MCP.
+tenant e servidor MCP. Campanhas de WhatsApp são a frente pós-portal detalhada
+acima; só avançam após as dependências C0.
 
 ## Evolução multiempresa
 

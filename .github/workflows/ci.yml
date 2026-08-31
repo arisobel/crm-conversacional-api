@@ -1,0 +1,138 @@
+name: CI
+
+# Quatro jobs, porque são quatro perguntas diferentes:
+#
+#   lint             — o código obedece ao estilo do projeto?
+#   tests-sqlite     — a suíte passa como qualquer um a roda na máquina?
+#   tests-postgres   — a mesma suíte passa na engine de produção?
+#   migrations       — o SQL que produção executa no start roda de verdade?
+#
+# O último é o que fecha o buraco desta fatia. Até aqui, nada neste repositório
+# executava uma migração contra PostgreSQL: a suíte constrói o esquema por
+# `Base.metadata.create_all` e produção o constrói por `alembic upgrade head`,
+# duas definições independentes que ninguém comparava.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_FROZEN: "1"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync
+      # O ponto, e não `src tests`: foi por lintar só esses dois diretórios que
+      # um E501 ficou escondido em `alembic/` desde a 0012.
+      - run: uv run ruff check .
+
+  tests-sqlite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync
+      # Sem CRM_TEST_DATABASE_URL: SQLite em memória, exatamente como na máquina
+      # de quem desenvolve.
+      - run: uv run pytest -q
+
+  tests-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: crm
+          POSTGRES_PASSWORD: crm
+          POSTGRES_DB: crm
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U crm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync
+      - name: Suíte contra PostgreSQL 16
+        env:
+          CRM_TEST_DATABASE_URL: postgresql+asyncpg://crm:crm@localhost:5432/crm
+        run: uv run pytest -q
+
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: crm
+          POSTGRES_PASSWORD: crm
+          POSTGRES_DB: crm
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U crm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      CRM_DATABASE_URL: postgresql+asyncpg://crm:crm@localhost:5432/crm
+      CRM_METADATA_DATABASE_URL: postgresql+asyncpg://crm:crm@localhost:5432/crm_metadata
+      CRM_TENANT_SLUG: ci
+      CRM_INTERNAL_HMAC_SECRET: ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync
+
+      - name: Sobe o esquema do zero
+        run: uv run alembic upgrade head
+
+      # Ida e volta na cabeça: uma migração que não sabe voltar só é descoberta
+      # no dia em que precisa voltar, que é o pior dia possível.
+      - name: Desce uma revisão e sobe de novo
+        run: |
+          uv run alembic downgrade -1
+          uv run alembic upgrade head
+          uv run alembic current
+
+      # Banco descartável, separado do migrado de propósito: o script derruba o
+      # schema desse aqui para recriá-lo a partir de `Base.metadata`, e nunca
+      # deve ter como apagar o que acabou de migrar.
+      - name: Cria o banco descartável do modelo
+        run: |
+          uv run python - <<'PY'
+          import asyncio
+
+          import asyncpg
+
+
+          async def main() -> None:
+              conexao = await asyncpg.connect("postgresql://crm:crm@localhost:5432/crm")
+              await conexao.execute("DROP DATABASE IF EXISTS crm_metadata")
+              await conexao.execute("CREATE DATABASE crm_metadata")
+              await conexao.close()
+
+
+          asyncio.run(main())
+          PY
+
+      - name: Confere o esquema resultante
+        run: uv run python ops/ci/check_pg_schema.py

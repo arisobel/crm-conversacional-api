@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from conftest import build_portal_world
+from conftest import build_portal_world, persist
 from httpx import ASGITransport, AsyncClient
 
 from crm_api.models.customer_contact import CustomerContact
@@ -27,7 +27,8 @@ TELEFONE_DESATIVADO = "+5551977776666"
 async def world():
     mundo = await build_portal_world()
     async with mundo.app.state.session_factory() as session:
-        session.add_all(
+        await persist(
+            session,
             [
                 CustomerContact(
                     id=uuid4(),

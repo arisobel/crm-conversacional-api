@@ -512,3 +512,32 @@ Custo aceito: **um join a mais** em toda consulta por fibra, e a composição
 precisa ser cadastrada artigo a artigo. Em troca, nenhum preço publicado é
 migrado, e cadastro incompleto não bloqueia venda — um artigo sem composição
 continua aparecendo na busca e na tabela do cliente exatamente como antes.
+
+## ADR-028 — Campanha é projeção comercial do CRM, executada pelo Gateway
+
+**Status:** aceita em 2026-08-31. Especificação em
+[WHATSAPP_CAMPAIGNS.md](../10_product/WHATSAPP_CAMPAIGNS.md).
+
+Campanha de WhatsApp não transforma o CRM em dono do canal. O CRM é dono da
+carteira, clientes, contatos, produtos, grupos/segmentos, permissões e visão
+comercial; resolve a audiência de forma determinística, congela o que foi
+revisado e apresenta a projeção no detalhe da campanha e na ficha do cliente.
+O Gateway continua dono da Meta Cloud API, templates operacionais, envio,
+consentimento/opt-out, limites e estados da mensagem.
+
+Representante só pode selecionar e acompanhar clientes da própria carteira;
+`ADMIN` e `MANAGER` acompanham todo o tenant. A LLM pode reconhecer a intenção
+e extrair critérios declarados, mas não escolhe clientes, inventa critérios nem
+dispara campanha. Toda escrita exige confirmação explícita, idempotência,
+auditoria e revalidação de autorização.
+
+Consentimento de marketing é obrigatório e é aplicado pelo Gateway tanto na
+prévia quanto imediatamente antes de cada envio. Fora da janela de 24 horas, a
+comunicação de marketing usa template Meta com variáveis permitidas. Acima do
+limite configurável, a confirmação final exige revisão nominal no portal; abaixo
+dele, o fluxo conversacional poderá confirmar quando houver executor validado.
+
+O ADR não fecha o limite, a alçada comercial de confirmação/cancelamento, a
+visibilidade das listas de julgamento, o catálogo de templates, a política de
+frequência, a retenção LGPD nem o formato final dos endpoints. Esses itens
+permanecem pendências de negócio/contrato, não decisões aceitas.

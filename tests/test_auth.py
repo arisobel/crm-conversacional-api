@@ -2,7 +2,7 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from conftest import portal_settings
+from conftest import create_schema, persist, portal_settings
 from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
@@ -10,7 +10,6 @@ from sqlalchemy import select
 from crm_api.api.authentication import CurrentUser, require_roles
 from crm_api.core.passwords import WeakPassword, hash_password, validate_password_policy
 from crm_api.main import create_app
-from crm_api.models.base import Base
 from crm_api.models.customer import Tenant
 from crm_api.models.user import AuditLog, User, UserRole, UserSession
 
@@ -22,8 +21,7 @@ INACTIVE_EMAIL = "desligado@teste.com.br"
 
 async def _build_app(**overrides):
     application = create_app(portal_settings(**overrides))
-    async with application.state.engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+    await create_schema(application.state.engine)
 
     tenant = Tenant(id=uuid4(), name="Tenant de teste", slug="test-tenant")
     password_hash = hash_password(PASSWORD)
@@ -55,7 +53,7 @@ async def _build_app(**overrides):
         ),
     ]
     async with application.state.session_factory() as session:
-        session.add_all([tenant, *users])
+        await persist(session, [tenant, *users])
         await session.commit()
     return application
 

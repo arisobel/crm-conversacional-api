@@ -9,7 +9,7 @@ enquanto as migrações `0003+` não forem aplicadas, aquele documento é a verd
 
 | Situação | Entidades |
 |---|---|
-| Novas | `users`, `user_sessions`, `customer_assignment_history`, `customer_locations`, `price_entries`, `price_entry_revisions`, `icms_rules`, `customer_interactions`, `audit_log` |
+| Novas | `users`, `user_sessions`, `customer_assignment_history`, `customer_locations`, `price_entries`, `price_entry_revisions`, `icms_rules`, `customer_interactions`, `whatsapp_campaigns`, `whatsapp_campaign_recipients`, `audit_log` |
 | Alteradas | `tenants` (+ UF de origem), `customers` (+ titular), `price_lists` (passa a ser lote de importação) |
 | Depreciadas | `tax_rules` (substituída por `icms_rules`), `freight_rules` (mantida, sem uso no corte) |
 | Destino Gateway, inalterado | `conversations`, `messages`, `inbound_events`, `outbound_messages` |
@@ -357,6 +357,88 @@ rastro. Sem isso, exatamente o caso mais interessante para investigação seria 
 
 ---
 
+## 7. Projeção comercial de campanhas de WhatsApp
+
+Esta seção é o delta conceitual de uma capacidade ainda não implementada. Ela
+não transfere a posse do canal para o CRM: o Gateway continua com as mensagens,
+o consentimento, o opt-out, a Meta e a fila de envio. O CRM guarda o agregado
+comercial que permite autorizar, auditar, listar campanhas e levá-las à ficha do
+cliente. O contrato de integração proposto está em
+[API_CONTRACT](../30_architecture/API_CONTRACT.md#proposta-de-contrato-para-campanhas-de-whatsapp).
+
+### `whatsapp_campaigns`
+
+Uma intenção comercial criada no CRM e, depois da confirmação, correlacionada à
+campanha operacional criada no Gateway. Não é uma tabela espelho de
+`messages`: uma campanha pode ter muitos destinatários e muitas mensagens, e o
+Gateway continua sendo a fonte operacional dessas mensagens.
+
+| Campo | Tipo | Nulável | Regra |
+|---|---|---:|---|
+| `id` | uuid | não | PK interna e correlação CRM |
+| `tenant_id` | uuid | não | FK → `tenants.id` |
+| `created_by_user_id` | uuid | não | FK → `users.id`; quem abriu o pedido |
+| `representative_user_id` | uuid | sim | FK → `users.id`; responsável comercial exibido e congelado |
+| `status` | campaign_status | não | Estado comercial projetado; não substitui estado por mensagem |
+| `criteria_snapshot` | jsonb | não | Critérios estruturados usados na prévia, imutáveis após criação |
+| `audience_summary_snapshot` | jsonb | não | Contagens, exclusões e versão/regra usada na revisão |
+| `template_snapshot` | jsonb | não | Identificador operacional, idioma e metadados permitidos pelo Gateway |
+| `variables_snapshot` | jsonb | sim | Variáveis de campanha; dados específicos ficam no destinatário |
+| `confirmation` | jsonb | sim | Ator, momento, canal e chave idempotente da confirmação |
+| `gateway_campaign_id` | text | sim | Identificador externo, único por tenant quando presente |
+| `gateway_status` / `gateway_updated_at` | text / timestamptz | sim | Última projeção operacional recebida |
+| `created_at` / `updated_at` | timestamptz | não | Criação e atualização da projeção |
+
+`campaign_status` é deliberadamente estado de negócio: pelo menos `DRAFT`,
+`AWAITING_CONFIRMATION`, `CONFIRMED`, `CANCELLED`, `IN_PROGRESS`, `COMPLETED` e
+`FAILED`, com o detalhamento operacional nos destinatários. O vocabulário final
+e as transições são parte do contrato a fechar; nenhuma transição pode pular a
+confirmação explícita ou reabrir uma campanha cancelada.
+
+### `whatsapp_campaign_recipients`
+
+Fotografia de cada alvo revisado. Ela liga campanha → cliente → contato →
+representante e permite que a ficha do cliente encontre a campanha sem
+consultar o Gateway.
+
+| Campo | Tipo | Nulável | Regra |
+|---|---|---:|---|
+| `id` | uuid | não | PK |
+| `tenant_id` | uuid | não | FK |
+| `campaign_id` | uuid | não | FK → `whatsapp_campaigns.id` |
+| `customer_id` | uuid | não | FK → `customers.id` |
+| `contact_id` | uuid | sim | FK → `customer_contacts.id`; nulo apenas para exclusão prévia sem contato elegível |
+| `representative_user_id` | uuid | sim | FK → `users.id`; titular congelado na prévia |
+| `recipient_snapshot` | jsonb | não | Dados mínimos e variáveis resolvidas, sem substituir o contato mestre |
+| `eligibility_status` | text | não | Elegível ou motivo explícito de exclusão, inclusive consentimento |
+| `delivery_status` | text | sim | `PENDING`, `SENT`, `DELIVERED`, `READ` ou `FAILED` quando houver evento |
+| `gateway_message_id` | text | sim | Identificador externo da mensagem/tentativa |
+| `response_interaction_id` | uuid | sim | FK → `customer_interactions.id`, se resposta for projetada |
+| `failure_reason` / `excluded_reason` | text | sim | Resultado auditável, não texto genérico |
+| `status_updated_at` / `created_at` | timestamptz | não | Ordenação e auditoria |
+
+Restrições esperadas: `UNIQUE(campaign_id, customer_id, contact_id)` para a
+fotografia de destinatário, `UNIQUE(tenant_id, gateway_campaign_id)` quando o
+identificador estiver presente e unicidade idempotente para o evento/mensagem
+externa definida no contrato. O modelo deve admitir que um cliente tenha mais
+de um contato, mas a política de seleção precisa ser explícita para não enviar
+duas vezes por acidente.
+
+### Critérios, histórico e retenção
+
+Os snapshots não são cache descartável: critérios, template, variáveis,
+destinatários, confirmação e resultados precisam explicar o que foi aprovado
+naquele dia mesmo se a carteira, um grupo ou um contato mudarem depois. Em
+contrapartida, eles não autorizam acesso fora da carteira atual: a leitura de
+campanha continua passando pela regra de escopo do CRM.
+
+Eventos Gateway → CRM podem criar ou completar `customer_interactions` com a
+referência de campanha no `payload`, mas não devem copiar indiscriminadamente a
+conversa inteira. Retenção de campanhas, destinatários e conteúdo projetado é
+decisão LGPD pendente; até ela existir, não haverá expurgo por prazo implícito.
+
+---
+
 ## Relacionamentos-alvo
 
 ```mermaid
@@ -367,6 +449,12 @@ erDiagram
     CUSTOMERS ||--o{ CUSTOMER_CONTACTS : possui
     CUSTOMERS ||--o{ CUSTOMER_PREFERRED_PRODUCTS : seleciona
     CUSTOMERS ||--o{ CUSTOMER_INTERACTIONS : registra
+    CUSTOMERS ||--o{ WHATSAPP_CAMPAIGN_RECIPIENTS : recebe
+    CUSTOMER_CONTACTS ||--o{ WHATSAPP_CAMPAIGN_RECIPIENTS : destinatario
+    USERS ||--o{ WHATSAPP_CAMPAIGNS : cria
+    USERS ||--o{ WHATSAPP_CAMPAIGNS : responsavel
+    WHATSAPP_CAMPAIGNS ||--o{ WHATSAPP_CAMPAIGN_RECIPIENTS : contem
+    CUSTOMER_INTERACTIONS ||--o| WHATSAPP_CAMPAIGN_RECIPIENTS : resposta
     PRODUCTS ||--o{ PRICE_ENTRIES : precificado
     PRICE_LISTS ||--o{ PRICE_ENTRIES : publica
     PRICE_ENTRIES ||--o{ PRICE_ENTRY_REVISIONS : versiona
@@ -382,6 +470,12 @@ erDiagram
 - Toda gravação de preço produz uma revisão.
 - Resolução de ICMS é única ou falha; não há alíquota-padrão implícita.
 - Ingestão de interação é idempotente por `(source, external_ref)`.
+- Criação, confirmação, cancelamento e eventos de campanha são idempotentes;
+  repetição não cria campanha, destinatário ou resultado adicional.
+- Critérios, público, template, variáveis e confirmação de campanha são
+  fotografias auditáveis; mudança posterior de cadastro não os reescreve.
+- Consentimento é decidido pelo Gateway na prévia e antes do envio, e uma
+  exclusão por opt-out permanece registrada no destinatário.
 - Representante lê apenas a própria carteira, verificado no repositório.
 - `customer_assignment_history`, `price_entry_revisions`, `customer_interactions`
   e `audit_log` nunca sofrem `UPDATE`.

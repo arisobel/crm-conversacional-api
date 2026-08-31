@@ -13,6 +13,7 @@ from conftest import (
     REPRESENTATIVE_B_EMAIL,
     build_portal_world,
     login,
+    persist,
 )
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
@@ -44,7 +45,8 @@ TELEFONE_DESCONHECIDO = "+5541900000000"
 async def world():
     mundo = await build_portal_world()
     async with mundo.app.state.session_factory() as session:
-        session.add_all(
+        await persist(
+            session,
             [
                 CustomerContact(
                     id=uuid4(),

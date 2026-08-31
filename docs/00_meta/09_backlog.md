@@ -455,174 +455,108 @@ as afrouxar:
   semana; sem revalidar, a aceitação criaria a colisão que o manifesto recusa com
   `409` — e o número pararia de ser atendido sem ninguém saber por quê.
 
-## D — Disparo de preço para grupo de clientes
+## D — Campanhas de WhatsApp / mensagens em lote
 
-Frente aberta em 2026-08-22. Objetivo de curto prazo: disparar o preço de um
-artigo, ou o aviso de tabela nova, para um grupo de clientes.
+Frente documental aberta em 2026-08-31. Substitui o recorte estreito de
+"disparo de preço" por campanhas comerciais auditáveis, sem apagar as decisões
+úteis: produto/grupo, aviso de queda e confirmação humana continuam casos da
+mesma capacidade. Especificação: [Campanhas de WhatsApp](../10_product/WHATSAPP_CAMPAIGNS.md).
 
-### D0 — Decisões tomadas
+### D0 — Limites já fechados
 
-- **Segmentação em dois eixos:** material (poliéster, viscose, elastano) e porte
-  (grande, pequeno).
-- **O remetente é a linha BPTI**, não o celular do representante. O disparo por
-  link `wa.me` fica como caminho secundário, não como o principal.
-- **Sem cálculo de imposto** — ver a decisão de 2026-08-22 no topo deste arquivo.
+- [x] CRM resolve carteira, público e autorização; Gateway é dono da Meta,
+      templates operacionais, consentimento/opt-out, envio e estados do canal.
+- [x] `REPRESENTATIVE` só alcança clientes da própria carteira; `ADMIN` e
+      `MANAGER` acompanham o tenant inteiro.
+- [x] `product_groups`, e não `product_families`, é o eixo de produto. Fibra e
+      composição podem compor critérios, sem inferir classificação ausente.
+- [x] Toda escrita exige confirmação explícita, revalidação de autorização,
+      idempotência e auditoria.
+- [x] Consentimento é obrigatório e deve ser reavaliado pelo Gateway antes de
+      cada envio; marketing fora de 24 horas usa template Meta.
 
-### D1 — Segmentação
+### D1 — Base de segmentação
 
-**Revisto em 2026-08-22, depois do retorno do Charles.** São **três** formas de
-agrupar, não duas, e a diferença entre elas não é de gosto: é de onde a verdade
-mora.
+- [x] `product_groups` e `product_group_members` implementados na migração
+      `0013`; são N↔N e do tenant. Família continua sendo layout da tabela.
+- [x] `fibers` e `product_compositions` implementados na migração `0014`; item
+      sem composição é não classificado, nunca negativa implícita.
+- [ ] Aplicar a `0013` e `0014` no PostgreSQL e confirmar nos logs de start.
+- [ ] Implementar filtro de carteira por grupo e por composição/produto
+      preferencial, sempre sob escopo do representante.
+- [ ] Confirmar se “preferido” significa sinal de compra para segmentação; hoje
+      ele seleciona o que entra na tabela do cliente.
+- [ ] Modelar porte como atributo declarado em eixo exclusivo (`eixo + valor`),
+      com unicidade por cliente e eixo; não inferir de dados inexistentes.
+- [ ] Modelar lista de julgamento não exclusiva, com dono e visibilidade.
+- [ ] Decidir se listas de julgamento são privadas por representante ou visíveis
+      no tenant; não há resposta técnica segura por padrão.
+- [ ] Criar operação de mesclagem e etiquetagem em lote de grupos, para evitar
+      taxonomia duplicada e classificação manual inviável.
 
-| Forma | Exemplo | Origem | Se mantém sozinha? |
-|---|---|---|---|
-| Derivada | Grupo de Poliéster, de Viscose, de Alta-tenacidade | família do artigo, via preferidos | sim |
-| Eixo declarado | porte: grande / pequeno | digitado, exclusivo dentro do eixo | não |
-| Lista de julgamento | "clientes com potencial de crescimento" | montada à mão pelo representante | não |
+### D2 — Agregado comercial e prévia no CRM
 
-A terceira é nova e **corrige uma recomendação anterior deste backlog**. Estava
-escrito que o público deve ser critério salvo e nunca lista estática, porque
-lista apodrece. Vale para as duas primeiras. Não vale para a terceira:
-"potencial de crescimento" é julgamento comercial e não se deriva de critério
-nenhum — ali a lista **é** o dado.
+- [ ] Modelar campanha, destinatário, critérios/template/variáveis congelados,
+      referência externa do Gateway e auditoria, conforme o modelo-alvo.
+- [ ] Implementar prévia determinística: elegíveis, sem contato, sem dado para
+      o critério e exclusões de consentimento retornadas pelo Gateway.
+- [ ] Criar rascunho idempotente e confirmar apenas depois de revisão explícita.
+- [ ] Exigir revisão nominal no portal acima do limite configurável; abaixo
+      dele, permitir confirmação conversacional somente após executor validado.
+- [ ] Implementar cancelamento que afete apenas rascunho/não iniciado/pendente,
+      preservando o que já ocorreu no canal.
+- [ ] Definir retenção LGPD para snapshots de campanha e sua relação com o
+      expurgo das interações; nenhuma limpeza recebe prazo padrão.
 
-Uniforme na tela, diferente no armazenamento: o seletor de público oferece as
-três do mesmo jeito, e só a derivada não guarda linha.
+### D3 — Contratos e execução no Gateway
 
-- [x] **Eixo material: `product_groups`, não `product_families`** — migração
-      `0013`, implementada em 2026-08-23. Ver D6.
-- [x] ~~Confirmar quais famílias existem hoje no tenant.~~ Deixou de ser
-      pré-requisito: o grupo é criado à parte e não depende de como o catálogo
-      foi organizado em famílias.
-- [ ] Eixo porte: **atributo declarado**, porque não há histórico de compra de
-      onde derivar — `offers` nunca teve uso.
-- [ ] Modelar eixo como **eixo + valor**: "grande" e "pequeno" são mutuamente
-      exclusivos dentro do eixo, e unicidade por `(cliente, eixo)` guarda isso
-      no banco. Coluna vira migração a cada eixo novo; tag livre deixa o cliente
-      ser grande e pequeno ao mesmo tempo.
-- [ ] Lista de julgamento: grupo sem eixo, **não exclusivo**, com dono.
-- [ ] **Decidir se a lista do representante é dele ou do tenant.** Se o Charles
-      monta "potencial de crescimento", o Michel enxerga? Compartilhar por
-      padrão expõe julgamento comercial de um sobre a carteira do outro;
-      privado por padrão faz cada um remontar a mesma lista. Não há resposta
-      técnica — é decisão do Charles.
-- [ ] Decidir se "preferido" significa "o que entra na tabela dele" — o sentido
-      atual — ou "o que ele compra". O disparo usa o segundo, e usar um pelo
-      outro é decisão, não detalhe.
+- [ ] Fechar ADR de comandos CRM → Gateway e eventos Gateway → CRM, com HMAC,
+      correlação, idempotência, replay, tentativa parcial e reconciliação.
+- [ ] Implementar catálogo operacional dos templates Meta permitidos e validação
+      de variáveis; o CRM não cria template.
+- [ ] Implementar prévia e revalidação imediatamente anterior ao envio de
+      consentimento/opt-out no Gateway.
+- [ ] Implementar fila, rate limit, estado por destinatário e cancelamento de
+      pendências no Gateway, sem bloquear webhooks existentes.
+- [ ] Emitir ao CRM eventos idempotentes de campanha, destinatário, mensagem,
+      estado (`PENDING`, `SENT`, `DELIVERED`, `READ`, `FAILED`) e resposta.
+- [ ] Confirmar no repositório do Gateway o plano e módulo de campanhas: eles
+      não existem na cópia local analisada neste repositório.
 
-### D2 — Agregado de disparo, sem enviar nada
+### D4 — Portal e ficha do cliente
 
-É o corte que entrega valor sem depender da Meta nem do Gateway, e é onde a
-máquina de estados inteira pode ser testada antes de existir canal.
+- [ ] Listar campanhas por período, situação, representante, template e
+      segmentos, aplicando escopo de carteira no repositório.
+- [ ] Exibir detalhe com destinatários, exclusão por falta de consentimento,
+      resultados, pedido, filtros, template, variáveis e confirmação.
+- [ ] Ligar campanha e destinatário à ficha/timeline do cliente, incluindo
+      mensagem e resposta relacionadas.
+- [ ] Medir e apresentar limitações/erros operacionais sem apresentar a projeção
+      do CRM como fonte de verdade do canal.
 
-- [ ] Público como **critério salvo, reavaliado no disparo** — não lista
-      estática, que apodrece.
-- [ ] Prévia obrigatória: quantos entram, quantos sem contato, quantos sem preço
-      publicado.
-- [ ] Snapshot por destinatário: conteúdo, parâmetros e **o texto do aviso
-      fiscal vigente naquele dia**, na disciplina do `calculation_snapshot`.
-- [ ] Aprovação humana antes de qualquer envio (ADR-005).
+### D5 — Manifesto conversacional, após executor
 
-### D3 — Canal pela linha BPTI
+- [ ] Definir slots, vocabulário, allowlist e fixture de contrato para
+      `CRM_PREVIEW_WHATSAPP_CAMPAIGN_AUDIENCE`.
+- [ ] Definir os mesmos artefatos para criar, confirmar, cancelar e consultar:
+      `CRM_CREATE_WHATSAPP_CAMPAIGN_DRAFT`,
+      `CRM_CONFIRM_WHATSAPP_CAMPAIGN`,
+      `CRM_CANCEL_WHATSAPP_CAMPAIGN` e
+      `CRM_GET_WHATSAPP_CAMPAIGN_STATUS`.
+- [ ] Reconciliar as intenções históricas `BROADCAST_OFERTA`,
+      `COMUNICAR_DISPONIBILIDADE_E_PRECO`, `GERAR_LISTA_PROSPECCAO`,
+      `REGISTRAR_INTERESSE` e `CONSULTAR_HISTORICO_CLIENTE` conforme o
+      mapeamento documental; não publicar capability sem executor local.
 
-- [ ] **Rota de envio no Gateway.** Não existe: as duas funções de envio só
-      rodam dentro do processamento de um webhook e amarram a mensagem a um
-      `replyToWamid`. É inversão de direção — o CRM nunca chamou ninguém — e
-      pede ADR próprio.
-- [ ] **Templates aprovados pela Meta.** Nenhum suporte a `type: "template"`
-      existe no Gateway hoje. Dois submetidos: `tabela_mensal_convite` e
-      `preco_artigo_atualizado`. O progresso do Gateway já registra em aberto que
-      "template aprovado fora da janela precisa de definição do negócio".
-- [ ] **Máquina de estados por destinatário**, porque a janela de 24 h decide o
-      caminho: dentro dela sai texto livre; fora, o template abre a conversa e a
-      tabela só sai depois da resposta. Num disparo, a maioria estará fora.
-- [ ] **Opt-in e opt-out por contato.** `customer_contacts` não tem campo algum
-      de consentimento. Vira condição do público, não item de melhoria.
-- [ ] Calcular o estado da janela a partir de `customer_interactions`
-      (`direction = INBOUND`, `occurred_at`). O dado já existe.
+### D6 — Casos comerciais a preservar
 
-### D4 — Disparo por link, secundário
-
-- [ ] Fila de mensagens prontas no portal, com link `wa.me` por cliente.
-- [ ] **Registrar que este canal é manual e não observado.** A conversa acontece
-      no aparelho do representante, não passa pelo webhook e nunca entra na
-      timeline. Se a tela não disser isso, alguém vai procurar na ficha o que
-      nunca vai estar lá.
-- [ ] Risco a mitigar: o cliente recebe pelo celular do representante e responde
-      **na linha BPTI**, onde o bot atende sem saber que houve disparo.
-
-### D6 — Grupo de artigo (implementada em 2026-08-23)
-
-**Migração `0013`.** `product_groups` e `product_group_members`, N↔N com o
-artigo. `products.family_id` fica exatamente como está.
-
-Verificada por `tests/test_product_groups.py` (17). Suíte em 422 verdes.
-
-O eixo de material ia derivar de `product_families`. Não serve, e o retorno do
-Charles mostrou por quê: ele citou "poliéster", "viscose" e "alta-tenacidade"
-como grupos irmãos, mas alta tenacidade é propriedade do fio de poliéster. O
-mesmo artigo é os dois.
-
-Família não pode virar N↔N para acomodar isso, porque **família é layout**:
-agrupa e ordena a tabela que o cliente recebe pelo WhatsApp, e um artigo em duas
-famílias não teria sob qual cabeçalho imprimir. **Grupo é consulta**, e ali a
-multiplicidade é o ponto. Mesma separação do ADR-021.
-
-- [x] Criar, renomear, desativar e etiquetar pela tela de produtos.
-- [x] **`normalized_name` único por tenant.** Sem acento e em caixa baixa:
-      "poliester", "poliéster" e "POLIÉSTER" são o mesmo grupo. É a guarda que
-      sobrevive a uma chamada de API e a um clique apressado — sem ela a
-      taxonomia se multiplica e o público de um disparo racha em silêncio.
-- [x] Desativar preserva as associações; apagar perderia classificação feita
-      artigo a artigo.
-- [x] **`/portal/products` aberta a representante para ler e etiquetar.** Criar
-      grupo também é dele. Renomear, desativar, e tudo de artigo e de família
-      continuam com a gestão: criar grupo não desfaz o trabalho de ninguém,
-      renomear muda o significado do que já foi etiquetado, e mexer em família
-      muda o que **todo** cliente vê na tabela dele.
-- [x] O grupo é do tenant, não de quem criou. `created_by` fica só para
-      auditoria — "poliéster" com significados diferentes por representante
-      tornaria o disparo imprevisível.
-- [ ] Aplicar a `0013` contra PostgreSQL. Roda sozinha no próximo deploy.
-- [ ] **Filtrar a carteira por grupo de artigo.** É o que liga esta tabela ao
-      disparo, e ainda não existe: o filtro de cliente aceita
-      `preferred_product_id`, não grupo.
-- [ ] Mesclar dois grupos que nasceram parecidos apesar da guarda — "poliéster"
-      e "poliester texturizado" passam pela unicidade e são a mesma coisa.
-- [ ] Etiquetar em lote. Hoje é um artigo por vez, e um catálogo inteiro na mão
-      é onde a classificação morre.
-
-### D5 — Aviso de queda de preço
-
-Pedido do Charles em 2026-08-22, e é **um caso diferente** dos outros dois: não
-é tabela nova, é um evento — o preço de alguns artigos baixou. Nas palavras
-dele: "chamar todos clientes do grupo Y e avisar que hoje o preço caiu e
-perguntar se ele gostaria de saber o preço; o cliente precisa apertar sim para
-receber a cotação".
-
-**Ele descreveu a janela de 24 h sem saber que ela existe.** "Apertar sim para
-receber" é exatamente o botão de resposta rápida que a Meta obriga fora da
-janela. O fluxo de duas etapas deixa de ser limitação técnica imposta e passa a
-ser o que o negócio já queria.
-
-- [ ] **Detector de queda — o dado já existe.** `price_entry_revisions` guarda
-      `previous` e `current` de cada gravação, com `batch_id` e `changed_at`.
-      "Quais artigos caíram nesta publicação" é uma consulta, não uma
-      funcionalidade: comparar o `base_price` de antes com o de depois dentro do
-      lote. A tabela foi construída para auditoria e serve a isto sem alteração
-      de esquema.
-- [ ] **O público é o cruzamento, não o grupo inteiro.** Não é "todos do grupo
-      Y", é "todos do grupo Y **que preferem algum artigo que caiu**". Avisar
-      queda de preço a quem não compra aquilo é a mensagem que queima confiança
-      e gera opt-out.
-- [ ] Terceiro template, `preco_reduzido_aviso`, sem o valor no corpo — assim
-      não envelhece e o opt-in acontece antes da cotação.
-- [ ] **Definir o piso de queda que merece disparo.** Decisão comercial do
-      Charles: uma queda de 1% frustra quem apertou "sim", e o próximo aviso ele
-      ignora.
-- [ ] **Definir a frequência máxima.** Competência mensal mais revisões no meio
-      do mês podem virar vários templates de marketing para o mesmo cliente. É
-      onde os limites por usuário da Meta e o quality rating mordem.
+- [ ] Detector de queda de preço: `price_entry_revisions` já permite comparar
+      `previous` e `current` por lote; falta definir piso e frequência máxima.
+- [ ] Aviso de queda deve cruzar grupo com clientes que preferem artigo que caiu,
+      não avisar todo o grupo indistintamente.
+- [ ] O template, idioma, variáveis e eventual fluxo de resposta do aviso de
+      queda são decisões comerciais e operacionais do Gateway, não texto livre
+      criado pelo CRM.
 
 ## Pendências herdadas
 

@@ -4,11 +4,10 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from conftest import portal_settings
+from conftest import create_schema, persist, portal_settings
 from sqlalchemy import select
 
 from crm_api.main import create_app
-from crm_api.models.base import Base
 from crm_api.models.catalog import Product, ProductFamily
 from crm_api.models.customer import Tenant
 from crm_api.models.pricing import (
@@ -80,8 +79,7 @@ class Cenario:
 @pytest_asyncio.fixture
 async def cenario():
     app = create_app(portal_settings())
-    async with app.state.engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+    await create_schema(app.state.engine)
 
     tenant = Tenant(id=uuid4(), name="Tenant", slug="test-tenant")
     familia = ProductFamily(id=uuid4(), tenant_id=tenant.id, name="Texturizado")
@@ -100,7 +98,7 @@ async def cenario():
         commercial_name="150/144 preto",
     )
     async with app.state.session_factory() as session:
-        session.add_all([tenant, familia, produto_a, produto_b])
+        await persist(session, [tenant, familia, produto_a, produto_b])
         await session.commit()
 
     yield Cenario(app, tenant.id, produto_a.id, produto_b.id)

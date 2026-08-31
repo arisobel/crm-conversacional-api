@@ -127,6 +127,22 @@ uv run ruff check .
 uv run pytest
 ```
 
+Sem configuração, `pytest` roda em SQLite na memória — um banco por teste, sem
+dependência externa. Apontando `CRM_TEST_DATABASE_URL` para um PostgreSQL, a
+mesma suíte roda na engine de produção:
+
+```powershell
+$env:CRM_TEST_DATABASE_URL = "postgresql+asyncpg://crm:crm@localhost:5432/crm"
+uv run pytest
+```
+
+Nesse modo cada teste recria o esquema (`DROP SCHEMA public CASCADE`), então
+aponte para um banco descartável. A CI roda os dois modos em jobs separados, e
+mais um que executa `alembic upgrade head`, `downgrade -1` e `upgrade head`
+contra um PostgreSQL 16 e confere o esquema resultante com
+`ops/ci/check_pg_schema.py` — o único lugar onde o SQL que produção executa no
+start é de fato executado. Veja [.github/workflows/ci.yml](.github/workflows/ci.yml).
+
 ## Chamada interna do Gateway
 
 `GET /customers/by-whatsapp/{phone}` é uma operação entre serviços. O Gateway precisa

@@ -13,11 +13,11 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from conftest import TEST_DATABASE_URL, create_schema, persist
 from httpx import ASGITransport, AsyncClient
 
 from crm_api.core.config import Settings
 from crm_api.main import create_app
-from crm_api.models.base import Base
 from crm_api.models.catalog import (
     CustomerPreferredProduct,
     Product,
@@ -35,7 +35,7 @@ CAMINHO = f"/price-lists/current/by-whatsapp/{TELEFONE}"
 
 def _settings(**overrides) -> Settings:
     valores = {
-        "database_url": "sqlite+aiosqlite://",
+        "database_url": TEST_DATABASE_URL,
         "tenant_slug": "test-tenant",
         "internal_hmac_secret": "test-secret",
         "whatsapp_icms_enabled": True,
@@ -65,8 +65,7 @@ async def _montar(
     **setting_overrides,
 ):
     application = create_app(_settings(**setting_overrides))
-    async with application.state.engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+    await create_schema(application.state.engine)
 
     tenant = Tenant(
         id=uuid4(), name="Tenant de teste", slug="test-tenant", origin_state_code=origem
@@ -147,7 +146,7 @@ async def _montar(
         )
 
     async with application.state.session_factory() as session:
-        session.add_all(registros)
+        await persist(session, registros)
         await session.commit()
 
     return application, preferido.id, outro.id

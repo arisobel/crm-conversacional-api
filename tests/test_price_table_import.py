@@ -2,12 +2,12 @@ from datetime import UTC, date, datetime
 from uuid import uuid4
 
 import pytest
+from conftest import TEST_DATABASE_URL, create_schema, persist
 from sqlalchemy import select
 
 from crm_api.core.config import Settings
 from crm_api.imports.price_table import activate_price_list, import_price_table
 from crm_api.main import create_app
-from crm_api.models.base import Base
 from crm_api.models.catalog import Product, ProductFamily
 from crm_api.models.customer import Tenant
 from crm_api.models.pricing import PriceList, PriceListItem, PriceListStatus
@@ -17,13 +17,12 @@ from crm_api.models.pricing import PriceList, PriceListItem, PriceListStatus
 async def test_import_creates_a_draft_price_list_and_hides_unpriced_items(tmp_path):
     app = create_app(
         Settings(
-            database_url="sqlite+aiosqlite://",
+            database_url=TEST_DATABASE_URL,
             tenant_slug="test-tenant",
             internal_hmac_secret="test-secret",
         )
     )
-    async with app.state.engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+    await create_schema(app.state.engine)
     async with app.state.session_factory() as session:
         session.add(Tenant(name="Tenant de teste", slug="test-tenant"))
         await session.commit()
@@ -83,13 +82,12 @@ async def _mundo_com_artigo(tmp_path, *, nome_no_cadastro: str, familia: str = "
     """Tenant com um artigo TEX-01 já cadastrado, para provar o reencontro."""
     app = create_app(
         Settings(
-            database_url="sqlite+aiosqlite://",
+            database_url=TEST_DATABASE_URL,
             tenant_slug="test-tenant",
             internal_hmac_secret="test-secret",
         )
     )
-    async with app.state.engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+    await create_schema(app.state.engine)
 
     tenant = Tenant(id=uuid4(), name="Tenant de teste", slug="test-tenant")
     produto_familia = ProductFamily(id=uuid4(), tenant_id=tenant.id, name=familia)
@@ -101,7 +99,7 @@ async def _mundo_com_artigo(tmp_path, *, nome_no_cadastro: str, familia: str = "
         commercial_name=nome_no_cadastro,
     )
     async with app.state.session_factory() as session:
-        session.add_all([tenant, produto_familia, produto])
+        await persist(session, [tenant, produto_familia, produto])
         await session.commit()
 
     source = tmp_path / "tabela.csv"

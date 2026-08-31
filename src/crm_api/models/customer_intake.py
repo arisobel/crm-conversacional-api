@@ -18,6 +18,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import (
+    CHAR,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -98,7 +99,7 @@ class CustomerIntake(Base):
     # Obrigatória: sem UF não há regra de ICMS, e o R4 falha de propósito em vez
     # de estimar. Pedir na conversa custa menos que descobrir a falta na hora de
     # gerar a lista.
-    state_code: Mapped[str] = mapped_column(String(2))
+    state_code: Mapped[str] = mapped_column(CHAR(2))
     whatsapp_e164: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # Texto do representante, **não** SKU. Casar "75/36 urdume" com um artigo é
     # decisão comercial; o ADR-021 registra o que custa amarrar histórico de

@@ -1,6 +1,12 @@
 import os
 
-os.environ.setdefault("CRM_DATABASE_URL", "sqlite+aiosqlite://")
+# Onde a suíte roda. Sem `CRM_TEST_DATABASE_URL` nada muda: SQLite em memória,
+# um banco novo por teste, na mesma velocidade de sempre. Com a variável
+# apontando para um PostgreSQL, a mesma suíte roda contra a engine de produção
+# — é assim que a CI descobre um modelo que só era criável no SQLite.
+TEST_DATABASE_URL = os.environ.get("CRM_TEST_DATABASE_URL", "sqlite+aiosqlite://")
+
+os.environ.setdefault("CRM_DATABASE_URL", TEST_DATABASE_URL)
 os.environ.setdefault("CRM_TENANT_SLUG", "test-tenant")
 os.environ.setdefault("CRM_INTERNAL_HMAC_SECRET", "test-secret")
 
@@ -8,6 +14,7 @@ from dataclasses import dataclass  # noqa: E402
 from uuid import UUID, uuid4  # noqa: E402
 
 from fastapi import FastAPI  # noqa: E402
+from sqlalchemy import inspect  # noqa: E402
 
 from crm_api.core.config import Settings  # noqa: E402
 from crm_api.core.passwords import hash_password  # noqa: E402
@@ -31,7 +38,7 @@ INACTIVE_EMAIL = "desligado@teste.com.br"
 
 def portal_settings(**overrides) -> Settings:
     values = {
-        "database_url": "sqlite+aiosqlite://",
+        "database_url": TEST_DATABASE_URL,
         "tenant_slug": "test-tenant",
         "internal_hmac_secret": "test-secret",
         # O cliente de teste fala HTTP; um cookie `Secure` não seria armazenado.
@@ -39,6 +46,54 @@ def portal_settings(**overrides) -> Settings:
     }
     values.update(overrides)
     return Settings(**values)
+
+
+async def create_schema(engine) -> None:
+    """Deixa o banco no estado inicial para o teste que vai começar.
+
+    Em SQLite `://` cada engine abre um banco em memória só dela, e o
+    isolamento sai de graça: criar as tabelas basta.
+
+    Em PostgreSQL o banco é um só, compartilhado pelos testes em sequência.
+    Escolhi **derrubar e recriar o schema** em vez de reverter transação: os
+    testes falam com a aplicação por HTTP, e cada requisição abre a sua própria
+    sessão pelo `get_session` — não há uma transação de teste para envolver
+    todas elas sem reescrever cada teste. `DROP SCHEMA public CASCADE` é mais
+    curto que `drop_all` e mais completo: leva junto os tipos ENUM
+    (`interaction_kind`, `customer_intake_status`) e qualquer resto que uma
+    versão anterior do modelo tenha deixado.
+
+    Custa uma recriação de esquema por teste, o que é aceitável para um job de
+    CI e nunca é pago por quem roda `pytest` sem a variável.
+    """
+    async with engine.begin() as connection:
+        if connection.dialect.name != "sqlite":
+            await connection.exec_driver_sql("DROP SCHEMA public CASCADE")
+            await connection.exec_driver_sql("CREATE SCHEMA public")
+        await connection.run_sync(Base.metadata.create_all)
+
+
+async def persist(session, objects: list) -> None:
+    """Grava um cenário inteiro respeitando a ordem das chaves estrangeiras.
+
+    O `Session.flush` ordena por dependência de `relationship()`, não por
+    `ForeignKey`. Como os modelos daqui quase não declaram relationship — o
+    acesso é por repositório, não por navegação de objeto —, o flush emite os
+    `INSERT` em ordem arbitrária entre tabelas independentes.
+
+    No SQLite isso nunca doeu porque o SQLite não verifica chave estrangeira
+    (`PRAGMA foreign_keys` nasce desligado). No PostgreSQL o mesmo cenário
+    quebra com `products_tenant_id_fkey`. O produto não tem esse problema: os
+    serviços gravam o pai e o filho em passos separados. É artefato de cenário.
+
+    A ordem certa é a que o `create_all` já usa: `metadata.sorted_tables` vem
+    topologicamente ordenado pelas FKs. Um flush por tabela, na ordem delas.
+    """
+    for table in Base.metadata.sorted_tables:
+        batch = [obj for obj in objects if inspect(obj).mapper.local_table is table]
+        if batch:
+            session.add_all(batch)
+            await session.flush()
 
 
 @dataclass(frozen=True)
@@ -59,8 +114,7 @@ class PortalWorld:
 
 async def build_portal_world(**setting_overrides) -> PortalWorld:
     application = create_app(portal_settings(**setting_overrides))
-    async with application.state.engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+    await create_schema(application.state.engine)
 
     tenant = Tenant(id=uuid4(), name="Tenant de teste", slug="test-tenant")
     password_hash = hash_password(PASSWORD)
@@ -137,7 +191,8 @@ async def build_portal_world(**setting_overrides) -> PortalWorld:
     )
 
     async with application.state.session_factory() as session:
-        session.add_all(
+        await persist(
+            session,
             [
                 tenant,
                 admin,
