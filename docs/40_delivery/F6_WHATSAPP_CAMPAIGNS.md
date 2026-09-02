@@ -152,11 +152,73 @@ auditável localmente, sem que nada seja enviado.
 
 ---
 
-## F6.2 — Resolvedor determinístico de audiência
+## F6.2 — Resolvedor determinístico de audiência — implementada em 2026-09-02
 
-Serviço de leitura que recebe critérios **estruturados** e devolve uma prévia
-reproduzível: o mesmo conjunto de critérios produz a mesma prévia no mesmo
-contexto de dados. Ordem obrigatória de filtragem:
+**Sem migração.** `AudienceRepository` e `AudienceResolver`, verificados por
+`tests/test_campaign_audience.py` (24 testes). A suíte inteira está em 491
+verdes.
+
+Entrega:
+
+- `AudienceCriteria`, critérios estruturados com forma canônica estável — é ela
+  que vira o `criteria_snapshot` do rascunho.
+- `AudienceResolver.resolve`, que aplica a ordem obrigatória de filtragem e
+  devolve a prévia com os três baldes descritos abaixo.
+- `AudiencePreview.to_draft_recipients()`, o encaixe com a F6.1: a prévia vira
+  o público congelável sem que ninguém redigite a lista.
+- Filtro de carteira por grupo, composição/fibra, artigo preferido e UF — o
+  item que estava aberto em D1.
+
+**Cinco decisões tomadas na implementação:**
+
+**A prévia tem três baldes, não dois.** Elegíveis, excluídos e **não
+classificados**. O terceiro existe por causa do ADR-027: um cliente cujos
+artigos preferidos não têm composição cadastrada não é "cliente sem poliéster",
+é cliente sobre quem não dá para afirmar nada. Ele não vira destinatário, não
+conta como exclusão comercial e some da prévia no dia em que alguém completar o
+cadastro. Sem esse balde, a lacuna de cadastro encolheria o público em silêncio
+— exatamente o defeito que esta fase existe para impedir.
+
+**Uma mensagem por cliente, com política explícita de contato.** O contato
+principal ganha; um único contato ativo é escolha inequívoca; vários ativos sem
+principal é ambiguidade real e vira exclusão `CONTATO_AMBIGUO`. Eleger um por
+ordem de cadastro mandaria a mensagem por acaso, e o modelo-alvo pede política
+explícita justamente para que ninguém receba duas vezes nem por engano.
+
+**Critério desconhecido levanta erro; nunca é ignorado.** `from_mapping` recusa
+chave que o domínio não modela. `porte`, `curva_abc`, `potencial` e
+`lista_julgamento` têm mensagem própria — dizer "ainda não foi modelado" é
+acionável, dizer "desconhecido" faz parecer erro de digitação. Grupo, fibra ou
+artigo inexistente também **falha**, em vez de devolver um público menor sem
+explicar por quê.
+
+**Critério vazio não significa "toda a carteira".** Alcançar todo mundo é
+escolha explícita, feita com `include_entire_portfolio`, e não o que sobra de
+um formulário em branco.
+
+**Dentro de um eixo os valores somam; entre eixos de produto eles se cruzam.**
+Dois grupos trazem os artigos de qualquer um dos dois; grupo mais fibra traz os
+artigos que são as duas coisas. A semântica está documentada no dataclass
+porque precisa ser previsível para quem monta a campanha.
+
+Aceite — verificado por `tests/test_campaign_audience.py`:
+
+- Um representante jamais vê destinatário fora da própria carteira, e o
+  `ADMIN` tampouco — a alçada continua pendente da F6.0.
+- Isolamento de tenant e de carteira exercitado **no repositório isolado**,
+  sem passar por rota nem serviço.
+- Cliente sem contato ativo e cliente com contatos ambíguos aparecem como
+  exclusão com motivo, não somem da prévia.
+- Cliente com artigo sem composição sai como não classificado, e não como
+  ausência da fibra.
+- Grupo **não** produz não classificado: não estar num grupo é fato curado por
+  alguém, não lacuna.
+- Piso de percentual de fibra recorta de verdade (92% entra com piso 60, sai
+  com piso 95).
+- A mesma prévia, pedida duas vezes, devolve a mesma lista na mesma ordem.
+- A prévia alimenta o rascunho da F6.1, e os não classificados não entram nele.
+
+A ordem obrigatória de filtragem implementada:
 
 1. tenant;
 2. papel e usuário autenticado;
@@ -172,20 +234,17 @@ e exclusão; motivo de cada exclusão; critérios normalizados; erro claro e
 orientado ao usuário para critério inexistente ou ambíguo — nunca um público
 "plausível" por aproximação.
 
-Limites herdados de D0/D1: `product_families` não substitui grupos; porte,
-curva ABC e potencial **não são inferidos** — só entram como filtro depois de
-existirem como atributo declarado com regra explícita; produto sem composição é
-não classificado, não negativa implícita.
+Limites herdados de D0/D1, todos respeitados: `product_families` não substitui
+grupos; porte, curva ABC e potencial **não são inferidos** — só entram como
+filtro depois de existirem como atributo declarado com regra explícita; produto
+sem composição é não classificado, não negativa implícita.
 
-Aceite mínimo, com testes dedicados:
+O passo 6 é o único não implementado, e de propósito: consentimento é do
+Gateway e chega na F6.4. Enquanto isso, a prévia não afirma nada sobre
+consentimento — não o presume concedido nem negado.
 
-- Um representante jamais vê destinatário fora da própria carteira, verificado
-  na camada de repositório, sem passar por rota nem serviço.
-- Isolamento de tenant em toda consulta.
-- Critério não modelado devolve erro orientado, não resultado vazio silencioso.
-
-Critério de saída: prévia reproduzível, com escopo de carteira provado por
-teste.
+Critério de saída **atingido**: prévia reproduzível, com escopo de carteira
+provado por teste no repositório isolado.
 
 ---
 

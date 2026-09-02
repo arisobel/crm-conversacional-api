@@ -43,6 +43,31 @@ da F6.0; abrir um caminho permissivo até a decisão chegar criaria um poder que
 ela depois teria de revogar, sobre rascunhos que já existiriam. Ler o tenant
 inteiro continua valendo — escrever fora da própria carteira não tem caminho.
 
+### F6.2 — resolvedor de audiência (2026-09-02)
+
+Sem migração. O serviço que transforma critérios estruturados em prévia
+reproduzível, com o filtro de carteira por grupo, composição, artigo preferido
+e UF — o item que estava aberto em D1. Verificado por
+`tests/test_campaign_audience.py` (24 testes); suíte em **491 verdes**.
+
+**A prévia tem três baldes, não dois.** Elegíveis, excluídos com motivo e **não
+classificados**. O terceiro é consequência direta do ADR-027: cliente cujo
+artigo preferido não tem composição cadastrada não é "cliente sem poliéster" —
+é cliente sobre quem não dá para afirmar nada. Ele não vira destinatário e não
+conta como exclusão comercial; some da prévia quando alguém completar o
+cadastro. Sem esse balde, uma lacuna de cadastro encolheria o público em
+silêncio, que é o defeito que a fase inteira existe para impedir.
+
+Duas recusas que valem registro. **Critério vazio não é "toda a carteira"** —
+alcançar todo mundo virou escolha explícita (`include_entire_portfolio`), e não
+o que sobra de um formulário em branco. E **grupo, fibra ou artigo inexistente
+falha**, em vez de devolver um público menor sem dizer por quê.
+
+A política de contato ficou explícita: uma mensagem por cliente, o principal
+ganha, um único ativo é inequívoco, e vários ativos sem principal viram
+exclusão `CONTATO_AMBIGUO`. Eleger um por ordem de cadastro mandaria a
+mensagem por acaso.
+
 ### Verificado em produção em 2026-08-22
 
 Conferido nas variáveis do CapRover e nos logs dos dois serviços após um "olá",

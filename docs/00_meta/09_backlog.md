@@ -485,8 +485,10 @@ integração externa; F6.4 (Gateway) só depois de F6.0 fechada.
 - [x] `fibers` e `product_compositions` implementados na migração `0014`; item
       sem composição é não classificado, nunca negativa implícita.
 - [ ] Aplicar a `0013` e `0014` no PostgreSQL e confirmar nos logs de start.
-- [ ] Implementar filtro de carteira por grupo e por composição/produto
-      preferencial, sempre sob escopo do representante.
+- [x] Implementar filtro de carteira por grupo e por composição/produto
+      preferencial, sempre sob escopo do representante. **Entregue na F6.2 em
+      2026-09-02**, no `AudienceRepository`, com UF como quarto eixo. Dentro de
+      um eixo os valores somam; entre eixos de produto eles se cruzam.
 - [ ] Confirmar se “preferido” significa sinal de compra para segmentação; hoje
       ele seleciona o que entra na tabela do cliente.
 - [ ] Modelar porte como atributo declarado em eixo exclusivo (`eixo + valor`),
@@ -508,8 +510,15 @@ integração externa; F6.4 (Gateway) só depois de F6.0 fechada.
       `contact_id` nulo no PostgreSQL; e nenhum papel cria em nome de outra
       carteira enquanto a alçada da F6.0 não for decidida.
 - [ ] Aplicar a `0015` no PostgreSQL e confirmar nos logs de start.
-- [ ] Implementar prévia determinística: elegíveis, sem contato, sem dado para
-      o critério e exclusões de consentimento retornadas pelo Gateway.
+- [x] Implementar prévia determinística: elegíveis, sem contato, sem dado para
+      o critério. **Entregue na F6.2 em 2026-09-02**, verificada por
+      `tests/test_campaign_audience.py` (24 testes). São **três** baldes e não
+      dois: elegíveis, excluídos com motivo e **não classificados** — artigo
+      sem composição não vira negativa (ADR-027). As exclusões de consentimento
+      continuam com o Gateway e chegam na F6.4.
+- [ ] Definir a política de contato quando houver vários ativos sem principal.
+      A F6.2 exclui com `CONTATO_AMBIGUO` em vez de eleger por ordem de
+      cadastro; se o negócio preferir outra regra, é aqui que ela entra.
 - [x] Criar rascunho idempotente — a corrida é decidida pela unicidade do
       banco, com `SAVEPOINT` para recuperar a campanha que venceu. Confirmar
       continua fora: é F6.3/F6.4.
