@@ -417,12 +417,22 @@ consultar o Gateway.
 | `failure_reason` / `excluded_reason` | text | sim | Resultado auditável, não texto genérico |
 | `status_updated_at` / `created_at` | timestamptz | não | Ordenação e auditoria |
 
-Restrições esperadas: `UNIQUE(campaign_id, customer_id, contact_id)` para a
-fotografia de destinatário, `UNIQUE(tenant_id, gateway_campaign_id)` quando o
-identificador estiver presente e unicidade idempotente para o evento/mensagem
-externa definida no contrato. O modelo deve admitir que um cliente tenha mais
-de um contato, mas a política de seleção precisa ser explícita para não enviar
-duas vezes por acidente.
+Restrições esperadas: unicidade da fotografia de destinatário,
+`UNIQUE(tenant_id, gateway_campaign_id)` quando o identificador estiver
+presente e unicidade idempotente para o evento/mensagem externa definida no
+contrato. O modelo deve admitir que um cliente tenha mais de um contato, mas a
+política de seleção precisa ser explícita para não enviar duas vezes por
+acidente.
+
+**Correção de 2026-09-02, ao implementar a `0015`:** este documento propunha
+`UNIQUE(campaign_id, customer_id, contact_id)` para a fotografia do
+destinatário. Essa forma **não funciona**. No PostgreSQL uma coluna nula não
+deduplica, e `contact_id` é nulo exatamente nas linhas de exclusão sem contato
+elegível — a restrição deixaria entrar duas exclusões do mesmo cliente na mesma
+campanha. A `0015` implementa dois índices parciais no lugar:
+`ux_wcr_contact` sobre `(campaign_id, customer_id, contact_id)` onde há
+contato, e `ux_wcr_customer_without_contact` sobre `(campaign_id, customer_id)`
+onde não há.
 
 ### Critérios, histórico e retenção
 

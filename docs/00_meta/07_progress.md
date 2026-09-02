@@ -22,6 +22,27 @@ auditável, sem nenhuma mensagem enviada.
 Primeira pendência da F6.0 fechada no mesmo dia: **revisão nominal obrigatória
 acima de 350 destinatários** (ADR-029), configurável com padrão 350.
 
+### F6.1 — modelo de campanha (2026-09-02)
+
+**Migração `0015`.** As duas tabelas do modelo-alvo §7, o repositório com
+escopo e o serviço de rascunho — criar, consultar e cancelar. **Nada dispara:**
+não há chamada à Meta nem ao Gateway, e os campos `gateway_*` nascem nulos
+esperando o contrato da F6.4. Verificada por `tests/test_whatsapp_campaigns.py`
+(19 testes); a suíte inteira está em **467 verdes**.
+
+Duas correções ao que o modelo-alvo propunha, ambas descobertas ao escrever o
+DDL:
+
+A unicidade do destinatário **não** pode ser `UNIQUE(campaign_id, customer_id,
+contact_id)`. No PostgreSQL uma coluna nula não deduplica, e essa forma
+deixaria entrar duas exclusões do mesmo cliente sem contato elegível. Ficam
+dois índices parciais, um para cada caso.
+
+E `ADMIN` **não** cria campanha em nome de outra carteira. A alçada é pendência
+da F6.0; abrir um caminho permissivo até a decisão chegar criaria um poder que
+ela depois teria de revogar, sobre rascunhos que já existiriam. Ler o tenant
+inteiro continua valendo — escrever fora da própria carteira não tem caminho.
+
 ### Verificado em produção em 2026-08-22
 
 Conferido nas variáveis do CapRover e nos logs dos dois serviços após um "olá",

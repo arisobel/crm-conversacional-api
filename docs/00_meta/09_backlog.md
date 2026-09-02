@@ -499,16 +499,28 @@ integração externa; F6.4 (Gateway) só depois de F6.0 fechada.
 
 ### D2 — Agregado comercial e prévia no CRM
 
-- [ ] Modelar campanha, destinatário, critérios/template/variáveis congelados,
+- [x] Modelar campanha, destinatário, critérios/template/variáveis congelados,
       referência externa do Gateway e auditoria, conforme o modelo-alvo.
+      **Migração `0015`, implementada em 2026-09-02** (F6.1), verificada por
+      `tests/test_whatsapp_campaigns.py` (19 testes). Duas correções ao
+      modelo-alvo: a unicidade do destinatário são **dois índices parciais**,
+      porque `UNIQUE(campaign_id, customer_id, contact_id)` não deduplica com
+      `contact_id` nulo no PostgreSQL; e nenhum papel cria em nome de outra
+      carteira enquanto a alçada da F6.0 não for decidida.
+- [ ] Aplicar a `0015` no PostgreSQL e confirmar nos logs de start.
 - [ ] Implementar prévia determinística: elegíveis, sem contato, sem dado para
       o critério e exclusões de consentimento retornadas pelo Gateway.
-- [ ] Criar rascunho idempotente e confirmar apenas depois de revisão explícita.
+- [x] Criar rascunho idempotente — a corrida é decidida pela unicidade do
+      banco, com `SAVEPOINT` para recuperar a campanha que venceu. Confirmar
+      continua fora: é F6.3/F6.4.
 - [ ] Exigir revisão nominal no portal acima do limite configurável — **350
       destinatários**, ADR-029; abaixo dele, permitir confirmação
       conversacional somente após executor validado.
 - [ ] Implementar cancelamento que afete apenas rascunho/não iniciado/pendente,
-      preservando o que já ocorreu no canal.
+      preservando o que já ocorreu no canal. **Metade entregue na F6.1:** o
+      cancelamento de rascunho é idempotente e auditado, e campanha confirmada
+      é recusada por este fluxo. A parte que interrompe pendências no canal
+      depende do Gateway e fica com a F6.4.
 - [ ] Definir retenção LGPD para snapshots de campanha e sua relação com o
       expurgo das interações; nenhuma limpeza recebe prazo padrão.
 

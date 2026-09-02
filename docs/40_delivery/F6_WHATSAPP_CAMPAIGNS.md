@@ -78,30 +78,77 @@ Critério de saída: contrato conceitual e decisões de negócio registrados em
 
 ---
 
-## F6.1 — Modelo de campanha no CRM
+## F6.1 — Modelo de campanha no CRM — implementada em 2026-09-02
 
-Implementar o domínio sem qualquer disparo externo. As entidades são as do
-[modelo-alvo §7](../20_domain/DOMAIN_MODEL_TARGET.md):
+**Migração `0015`.** Duas tabelas novas, nada existente é alterado — como a
+`0011`, é das migrações mais baratas da série. Verificada por
+`tests/test_whatsapp_campaigns.py` (19 testes); a suíte inteira está em 467
+verdes.
 
-- `whatsapp_campaigns` — tenant, autor, representante responsável, estado
-  comercial, critérios/público/template/variáveis **congelados**, confirmação,
-  auditoria e identificador externo futuro do Gateway.
-- `whatsapp_campaign_recipients` — campanha, cliente, contato e representante;
-  estado comercial projetado; motivo de exclusão; identificador externo futuro
-  da mensagem; referência de interação/resposta quando aplicável.
+Entrega:
 
-Requisitos:
+- `whatsapp_campaigns` e `whatsapp_campaign_recipients` conforme o
+  [modelo-alvo §7](../20_domain/DOMAIN_MODEL_TARGET.md), com os enums
+  `whatsapp_campaign_status` e `whatsapp_campaign_recipient_status`.
+- `WhatsappCampaignRepository`, com o escopo aplicado **no repositório** — como
+  no `CustomerPortfolioRepository`, e não na rota, que ainda nem existe.
+- `WhatsappCampaignService`: criar rascunho idempotente, consultar com recorte
+  por papel e cancelar rascunho, tudo auditado em `audit_log`.
+- Nenhuma chamada à Meta ou ao Gateway. Os campos `gateway_*` nascem nulos e
+  são o lugar reservado para a correlação da F6.4.
 
-- Snapshots imutáveis após a confirmação; mudança posterior de grupo, carteira
-  ou preferência não reescreve o que foi aprovado.
-- Isolamento por tenant e carteira aplicado no repositório, como em R1.
-- Unicidades do modelo-alvo: `UNIQUE(campaign_id, customer_id, contact_id)` e
-  `UNIQUE(tenant_id, gateway_campaign_id)` quando presente.
-- Migration reversível, testes de integração e documentação atualizados.
-- Nenhuma chamada à Meta ou ao Gateway nesta fase.
+**Quatro decisões tomadas na implementação:**
 
-Critério de saída: é possível criar e consultar um rascunho auditável
-localmente.
+**Nenhum papel cria campanha em nome de outra carteira, `ADMIN` inclusive.** A
+alçada é pendência da F6.0, e a alternativa — abrir um caminho permissivo
+"temporário" — criaria um poder que a decisão depois teria de revogar, sobre
+rascunhos que já existiriam. `ADMIN` e `MANAGER` já **leem** o tenant inteiro;
+o que não existe é caminho de código para escreverem fora da própria carteira.
+
+**A unicidade do destinatário são dois índices parciais, não um `UNIQUE` de
+três colunas.** No PostgreSQL uma coluna nula não deduplica, e o
+`UNIQUE(campaign_id, customer_id, contact_id)` que o modelo-alvo propõe
+deixaria passar duas exclusões do mesmo cliente sem contato elegível. Ficam
+`ux_wcr_contact` (quando há contato) e `ux_wcr_customer_without_contact`
+(quando não há).
+
+**A validação inteira acontece antes de qualquer `add`.** Um rascunho com uma
+linha fora da carteira não é gravado pela metade: o teste confere que a tabela
+continua vazia depois da recusa.
+
+**O modelo não usa o atalho `index=True`.** Ele geraria índices que a `0015`
+não cria, e nomes (`ix_..._campaign_id`) diferentes dos migrados — exatamente a
+divergência que `ops/ci/check_pg_schema.py` existe para impedir. Modelo e
+migração declaram hoje o mesmo conjunto, conferido nome a nome.
+
+Aceite — verificado por `tests/test_whatsapp_campaigns.py`:
+
+- Um representante não monta rascunho com cliente de outra carteira, e a recusa
+  não grava nada.
+- `ADMIN` sem clientes próprios também é recusado — a pendência da F6.0 não é
+  antecipada por código.
+- Reentrega do mesmo comando não abre segunda campanha; a corrida é decidida
+  pela unicidade do banco, com `SAVEPOINT` para recuperar a que venceu.
+- A fotografia sobrevive: renomear o cliente depois não altera o
+  `recipient_snapshot` do que já foi revisado.
+- Representante recebe o mesmo erro para campanha alheia e campanha
+  inexistente, e a lista dele não a inclui.
+- O filtro por representante é ignorado para `REPRESENTATIVE` — o recorte do
+  papel prevalece, como o `owner_user_id` ignorado no cadastro de cliente (R2).
+- Isolamento de tenant exercitado **no repositório isolado**, sem passar por
+  rota nem serviço.
+- Cancelar rascunho é idempotente e grava uma única entrada na trilha; campanha
+  confirmada não é cancelável por este fluxo — isso é F6.4, com o Gateway.
+- Exclusão exige motivo, linha sem contato só existe como exclusão, e rascunho
+  inteiramente excluído é recusado.
+
+Pendências: aplicar a `0015` contra PostgreSQL — ela roda sozinha no próximo
+deploy pelo `docker-entrypoint.sh`; confirmar nos logs de start. A reversão
+**falha de propósito** se houver campanha fora de `DRAFT`/`CANCELLED`: apagar
+as tabelas perderia o registro do que foi aprovado.
+
+Critério de saída **atingido**: é possível criar e consultar um rascunho
+auditável localmente, sem que nada seja enviado.
 
 ---
 

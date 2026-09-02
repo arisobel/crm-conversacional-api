@@ -6,10 +6,12 @@ outra coisa que roda em produção, porque o `docker-entrypoint.sh` chama
 
 Este script fecha esse buraco em três frentes:
 
-1. **Estrutura.** As invariantes da `0014` existem no banco migrado, e com a
-   forma declarada: o `CHECK` do percentual, a UNIQUE por
-   `(product_id, fiber_id)` e o `ON DELETE CASCADE` do artigo. São as três
-   coisas de que o serviço depende sem checar.
+1. **Estrutura.** As invariantes das migrações existem no banco migrado, e com
+   a forma declarada: da `0014`, o `CHECK` do percentual, a UNIQUE por
+   `(product_id, fiber_id)` e o `ON DELETE CASCADE` do artigo; da `0015`, a
+   unicidade que decide a corrida de idempotência do rascunho e os dois índices
+   parciais do destinatário. São as coisas de que os serviços dependem sem
+   checar.
 
 2. **Criabilidade.** `Base.metadata.create_all` roda sem erro no PostgreSQL.
    Parece óbvio; não era. Até a fatia 1.5 o modelo de `customers` carregava um
@@ -52,6 +54,10 @@ from crm_api.models.pricing import PriceList, PriceListItem  # noqa: E402, F401
 from crm_api.models.tax import IcmsRule  # noqa: E402, F401
 from crm_api.models.textile import Fiber, ProductComposition  # noqa: E402, F401
 from crm_api.models.user import User  # noqa: E402, F401
+from crm_api.models.whatsapp_campaign import (  # noqa: E402, F401
+    WhatsappCampaign,
+    WhatsappCampaignRecipient,
+)
 
 # O texto que a `0001` produziu no banco de produção. Está aqui como âncora: se
 # um dia um dos dois lados mudar, o job cai dizendo qual deles saiu do lugar.
@@ -87,6 +93,58 @@ class Relatorio:
             print(f"        observado: {observado!r}")
 
 
+async def _confere_campanhas(conexao, relatorio: Relatorio) -> None:
+    """As guardas da `0015` de que o serviço de campanha depende sem checar.
+
+    A idempotência do rascunho é ler-depois-escrever no serviço: quem decide a
+    corrida é a unicidade daqui. E a unicidade do destinatário são **dois**
+    índices parciais, não um `UNIQUE` de três colunas — no PostgreSQL, uma
+    coluna nula não deduplica, e um `UNIQUE(campaign_id, customer_id,
+    contact_id)` deixaria passar duas exclusões do mesmo cliente sem contato.
+    """
+    idempotencia = await conexao.scalar(
+        text(
+            "SELECT indexdef FROM pg_indexes "
+            "WHERE indexname = 'ux_whatsapp_campaigns_idempotency'"
+        )
+    )
+    relatorio.afirma(
+        "ux_whatsapp_campaigns_idempotency decide a corrida do rascunho",
+        idempotencia is not None and "UNIQUE" in idempotencia,
+        idempotencia,
+    )
+
+    for indice, coluna in (
+        ("ux_wcr_contact", "contact_id IS NOT NULL"),
+        ("ux_wcr_customer_without_contact", "contact_id IS NULL"),
+    ):
+        definicao = await conexao.scalar(
+            text("SELECT indexdef FROM pg_indexes WHERE indexname = :nome").bindparams(
+                nome=indice
+            )
+        )
+        relatorio.afirma(
+            f"{indice} é UNIQUE parcial em ({coluna})",
+            definicao is not None
+            and "UNIQUE" in definicao
+            and coluna in definicao,
+            definicao,
+        )
+
+    contato = await conexao.scalar(
+        text(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conname = 'ck_wcr_contact' "
+            "AND conrelid = 'whatsapp_campaign_recipients'::regclass"
+        )
+    )
+    relatorio.afirma(
+        "ck_wcr_contact recusa destinatário elegível sem contato",
+        contato is not None,
+        contato,
+    )
+
+
 async def _confere_estrutura(url: str, relatorio: Relatorio) -> str:
     engine = create_async_engine(url)
     try:
@@ -96,8 +154,8 @@ async def _confere_estrutura(url: str, relatorio: Relatorio) -> str:
             print(f"\nBanco migrado — PostgreSQL {versao}, alembic_version={revisao}")
 
             relatorio.afirma(
-                "a cabeça migrada é a 0014",
-                revisao == "0014_product_compositions",
+                "a cabeça migrada é a 0015",
+                revisao == "0015_whatsapp_campaigns",
                 revisao,
             )
 
@@ -161,6 +219,8 @@ async def _confere_estrutura(url: str, relatorio: Relatorio) -> str:
                 indices == _INDICES_DA_COMPOSICAO,
                 indices,
             )
+
+            await _confere_campanhas(conexao, relatorio)
 
             uf = await conexao.scalar(_CHECK_DE_UF)
             relatorio.afirma("o CHECK de UF migrado é o da 0001", uf == UF_ESPERADA, uf)
