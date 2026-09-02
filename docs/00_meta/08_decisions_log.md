@@ -541,3 +541,23 @@ O ADR não fecha o limite, a alçada comercial de confirmação/cancelamento, a
 visibilidade das listas de julgamento, o catálogo de templates, a política de
 frequência, a retenção LGPD nem o formato final dos endpoints. Esses itens
 permanecem pendências de negócio/contrato, não decisões aceitas.
+
+O limite de revisão nominal foi fechado depois, no ADR-029. As demais
+pendências continuam abertas.
+
+## ADR-029 — Revisão nominal obrigatória acima de 350 destinatários
+
+**Status:** aceita em 2026-09-02. Complementa o ADR-028; fecha a primeira
+pendência da fase F6.0 do [plano F6](../40_delivery/F6_WHATSAPP_CAMPAIGNS.md).
+
+Uma campanha com **mais de 350 destinatários** só pode ser confirmada no
+portal, com revisão nominal da lista congelada. Até 350, a confirmação
+conversacional pelo WhatsApp continua admissível — mas somente quando o
+executor conversacional estiver validado (F6.5); até lá, toda confirmação é
+pelo portal, qualquer que seja o tamanho do público.
+
+O valor entra como configuração do CRM (proposta:
+`CRM_CAMPAIGN_NOMINAL_REVIEW_LIMIT`, padrão `350`), não como constante no
+código: mudá-lo é decisão comercial e não deve exigir alteração de código. A
+verificação usa o público **elegível congelado no rascunho** no momento da
+confirmação — não a contagem da prévia inicial, que pode ter mudado.

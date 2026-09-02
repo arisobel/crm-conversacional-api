@@ -26,6 +26,7 @@ Memória operacional do CRM Conversacional API.
 9. [Contrato do projeto](00_meta/AGENT_SKILL_PROJECT.md)
 10. [Manifesto](10_product/BUSINESS_FEATURE_MANIFESTO.md)
 11. [Campanhas de WhatsApp](10_product/WHATSAPP_CAMPAIGNS.md)
+12. [Entrega F6 — campanhas de WhatsApp](40_delivery/F6_WHATSAPP_CAMPAIGNS.md)
 
 ### Referência do que já está implementado
 

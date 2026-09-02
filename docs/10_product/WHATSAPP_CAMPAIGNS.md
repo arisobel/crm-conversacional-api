@@ -83,7 +83,8 @@ Toda escrita segue a sequência abaixo e é auditável:
 1. Resolver critérios e retornar apenas prévia, contagens e exclusões.
 2. Criar rascunho com critérios, template e variáveis congelados.
 3. Revisar nominalmente os destinatários quando o público superar o limite
-   configurável; para público menor, a confirmação pode ocorrer pelo WhatsApp.
+   configurável — **350 destinatários** (ADR-029); para público menor, a
+   confirmação pode ocorrer pelo WhatsApp quando houver executor validado.
 4. Confirmar explicitamente, com chave de idempotência e nova validação de
    autorização no CRM.
 5. O Gateway revalida consentimento antes de cada envio, executa o lote e envia
@@ -136,7 +137,9 @@ Gateway ainda não sabe executar.
 
 ## Riscos e decisões pendentes
 
-- Limite que exige revisão nominal no portal e a alçada de confirmação/cancelamento.
+- ~~Limite que exige revisão nominal no portal~~ — decidido em 2026-09-02:
+  **350 destinatários** (ADR-029). A alçada de confirmação/cancelamento acima
+  da própria carteira permanece aberta.
 - Regra de visibilidade e compartilhamento das listas de julgamento.
 - Significado comercial de produto “preferido” para segmentação.
 - Catálogo de templates permitidos, variáveis, idioma e política de frequência.
@@ -149,6 +152,12 @@ Gateway ainda não sabe executar.
   antes de qualquer implementação integrada.
 
 ## Ordem de implementação proposta
+
+O plano de entrega vigente é o [F6](../40_delivery/F6_WHATSAPP_CAMPAIGNS.md),
+registrado em 2026-09-02 a partir do roteiro aprovado. Ele mantém as etapas
+abaixo, com um ajuste de ordem: o portal (F6.3) pode ser entregue **antes** da
+integração com o Gateway, com a confirmação bloqueada ou simulada — nunca
+apresentando "enviado" para o que é apenas rascunho.
 
 1. Fechar as pendências de negócio, política de retenção e contrato entre os
    dois serviços.

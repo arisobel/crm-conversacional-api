@@ -461,6 +461,9 @@ Frente documental aberta em 2026-08-31. Substitui o recorte estreito de
 "disparo de preço" por campanhas comerciais auditáveis, sem apagar as decisões
 úteis: produto/grupo, aviso de queda e confirmação humana continuam casos da
 mesma capacidade. Especificação: [Campanhas de WhatsApp](../10_product/WHATSAPP_CAMPAIGNS.md).
+Plano de entrega faseado, registrado em 2026-09-02:
+[F6](../40_delivery/F6_WHATSAPP_CAMPAIGNS.md) — F6.1/F6.2 podem começar sem
+integração externa; F6.4 (Gateway) só depois de F6.0 fechada.
 
 ### D0 — Limites já fechados
 
@@ -501,8 +504,9 @@ mesma capacidade. Especificação: [Campanhas de WhatsApp](../10_product/WHATSAP
 - [ ] Implementar prévia determinística: elegíveis, sem contato, sem dado para
       o critério e exclusões de consentimento retornadas pelo Gateway.
 - [ ] Criar rascunho idempotente e confirmar apenas depois de revisão explícita.
-- [ ] Exigir revisão nominal no portal acima do limite configurável; abaixo
-      dele, permitir confirmação conversacional somente após executor validado.
+- [ ] Exigir revisão nominal no portal acima do limite configurável — **350
+      destinatários**, ADR-029; abaixo dele, permitir confirmação
+      conversacional somente após executor validado.
 - [ ] Implementar cancelamento que afete apenas rascunho/não iniciado/pendente,
       preservando o que já ocorreu no canal.
 - [ ] Definir retenção LGPD para snapshots de campanha e sua relação com o

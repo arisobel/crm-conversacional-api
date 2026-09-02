@@ -1,12 +1,26 @@
 # Progresso central
 
-Atualizado em: 2026-08-22
+Atualizado em: 2026-09-02
 
 ## Estado atual
 
 **Fase ativa:** F5 e W concluídas do lado do CRM. **R0 a R6 e W1 a W7
-implementados e implantados.** Frente aberta: **D — disparo para grupo de
-clientes** (ver [backlog](09_backlog.md)).
+implementados e implantados.** Frente aberta: **D — campanhas de WhatsApp**
+(ver [backlog](09_backlog.md)).
+
+### F6 — plano de entrega de campanhas registrado (2026-09-02)
+
+O roteiro aprovado de campanhas virou o plano de entrega
+[F6_WHATSAPP_CAMPAIGNS](../40_delivery/F6_WHATSAPP_CAMPAIGNS.md): seis fases
+(F6.0 decisões → F6.1 modelo → F6.2 resolvedor de audiência → F6.3 portal →
+F6.4 integração com o Gateway → F6.5 conversacional), cada uma com critério de
+saída. Nada implementado ainda. F6.1 e F6.2 podem começar sem integração
+externa; F6.4 exige F6.0 fechada. A primeira entrega está pronta quando um
+representante gera prévia restrita à própria carteira e salva um rascunho
+auditável, sem nenhuma mensagem enviada.
+
+Primeira pendência da F6.0 fechada no mesmo dia: **revisão nominal obrigatória
+acima de 350 destinatários** (ADR-029), configurável com padrão 350.
 
 ### Verificado em produção em 2026-08-22
 
