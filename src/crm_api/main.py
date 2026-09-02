@@ -11,6 +11,7 @@ from crm_api.api.router import api_router
 from crm_api.core.config import Settings, get_settings
 from crm_api.core.database import create_session_factory
 from crm_api.core.rate_limit import SlidingWindowRateLimiter
+from crm_api.web.campaign_routes import router as campaign_router
 from crm_api.web.dependencies import STATIC_DIR, PortalRedirect
 from crm_api.web.routes import router as portal_router
 
@@ -97,6 +98,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(api_router)
     app.include_router(portal_router)
+    app.include_router(campaign_router)
     app.mount(
         "/portal/static", StaticFiles(directory=str(STATIC_DIR)), name="portal-static"
     )

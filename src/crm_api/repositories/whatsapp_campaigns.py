@@ -132,6 +132,40 @@ class WhatsappCampaignRepository:
             )
         )
 
+    async def campaigns_of_customer(
+        self,
+        tenant_id: uuid.UUID,
+        customer_id: uuid.UUID,
+        *,
+        representative_user_id: uuid.UUID | None = None,
+        limit: int = 20,
+    ) -> list[tuple[WhatsappCampaign, WhatsappCampaignRecipient]]:
+        """As campanhas de que este cliente participou, para a ficha dele.
+
+        O escopo é o mesmo da lista: um representante só vê as campanhas de que
+        é responsável, mesmo abrindo a ficha de um cliente seu. Uma campanha de
+        outra carteira que tenha alcançado este cliente não aparece — quem a
+        criou é que responde por ela.
+        """
+        statement = (
+            select(WhatsappCampaign, WhatsappCampaignRecipient)
+            .join(
+                WhatsappCampaignRecipient,
+                WhatsappCampaignRecipient.campaign_id == WhatsappCampaign.id,
+            )
+            .where(
+                WhatsappCampaign.tenant_id == tenant_id,
+                WhatsappCampaignRecipient.customer_id == customer_id,
+            )
+            .order_by(WhatsappCampaign.created_at.desc())
+            .limit(limit)
+        )
+        if representative_user_id is not None:
+            statement = statement.where(
+                WhatsappCampaign.representative_user_id == representative_user_id
+            )
+        return list((await self._session.execute(statement)).tuples().all())
+
     # ------------------------------------------------- consulta de referência
 
     async def customers_by_ids(

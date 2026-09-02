@@ -40,6 +40,51 @@ def rotulo_meio(canal: str | None) -> str:
 
 templates.env.globals["rotulo_meio"] = rotulo_meio
 
+# Rótulos dos eixos de critério de campanha. O snapshot guarda as chaves
+# técnicas e os ids — é ele que precisa explicar a campanha daqui a um ano —,
+# mas nenhuma dessas duas coisas é o que alguém quer ler numa tela.
+_ROTULOS_DE_CRITERIO = {
+    "product_group_ids": "Grupos de artigo",
+    "fiber_codes": "Fibras",
+    "min_fiber_percent": "Percentual mínimo da fibra",
+    "product_ids": "Artigos",
+    "state_codes": "UFs",
+    "include_entire_portfolio": "Alcance",
+}
+
+
+def criterios_legiveis(
+    snapshot: dict | None, nomes_de_grupo: dict[str, str] | None = None
+) -> list[tuple[str, str]]:
+    """Traduz o `criteria_snapshot` em pares `(rótulo, valor)` para a tela.
+
+    Duas conversões acontecem aqui e **não** no snapshot: a chave técnica vira
+    rótulo e o id de grupo vira o nome atual dele. O snapshot continua com os
+    ids porque é ele que precisa continuar verdadeiro se alguém renomear o
+    grupo depois — o nome é conveniência de leitura, o id é a prova.
+
+    Grupo apagado ou de outro tenant cai no próprio id, que é feio mas honesto:
+    melhor mostrar um identificador do que sumir com o critério da tela.
+    """
+    nomes = nomes_de_grupo or {}
+    saida: list[tuple[str, str]] = []
+    for chave, valor in (snapshot or {}).items():
+        rotulo = _ROTULOS_DE_CRITERIO.get(chave, chave)
+        if chave == "include_entire_portfolio":
+            saida.append((rotulo, "toda a carteira"))
+        elif chave == "product_group_ids":
+            saida.append(
+                (rotulo, ", ".join(nomes.get(str(item), str(item)) for item in valor))
+            )
+        elif isinstance(valor, list):
+            saida.append((rotulo, ", ".join(str(item) for item in valor)))
+        else:
+            saida.append((rotulo, str(valor)))
+    return saida
+
+
+templates.env.globals["criterios_legiveis"] = criterios_legiveis
+
 LOGIN_PATH = "/portal/login"
 
 

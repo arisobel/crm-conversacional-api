@@ -1,0 +1,187 @@
+﻿{% extends "base.html" %}
+{% block title %}Nova campanha{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <div>
+    <h1>Nova campanha</h1>
+    <p class="dica">
+      Monte o critério, revise nominalmente quem entra e salve como rascunho.
+      Nenhuma mensagem é enviada nesta tela.
+    </p>
+  </div>
+  <a href="/portal/campaigns">Voltar</a>
+</div>
+
+<section class="painel">
+  <h2>1. Critérios</h2>
+  <p class="dica">
+    O público é resolvido de forma determinística e sempre dentro da sua carteira.
+    Critério que o cadastro não modela é recusado com explicação — nada é deduzido.
+  </p>
+
+  <form method="post" action="/portal/campaigns/previa" class="formulario">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <label for="product_group_ids">Grupos de artigo</label>
+    <select id="product_group_ids" name="product_group_ids" multiple size="5">
+      {% for grupo in grupos %}
+      <option value="{{ grupo.id }}"
+        {% if grupo.id|string in criterios_form.get('product_group_ids', [])|map('string')|list %}selected{% endif %}>
+        {{ grupo.name }}
+      </option>
+      {% endfor %}
+    </select>
+    <p class="dica">Vários grupos somam. Grupo é curadoria: não estar nele é um fato.</p>
+
+    <label for="fiber_codes">Fibras</label>
+    <select id="fiber_codes" name="fiber_codes" multiple size="5">
+      {% for fibra in fibras %}
+      <option value="{{ fibra.code }}"
+        {% if fibra.code in criterios_form.get('fiber_codes', []) %}selected{% endif %}>
+        {{ fibra.code }} — {{ fibra.name }}
+      </option>
+      {% endfor %}
+    </select>
+
+    <label for="min_fiber_percent">Percentual mínimo da fibra</label>
+    <input id="min_fiber_percent" name="min_fiber_percent" inputmode="decimal"
+           value="{{ criterios_form.get('min_fiber_percent', '') }}"
+           placeholder="ex.: 60">
+
+    <label for="state_codes">UFs</label>
+    <input id="state_codes" name="state_codes"
+           value="{{ criterios_form.get('state_codes', '') }}"
+           placeholder="ex.: SP, RS">
+
+    <label class="inline">
+      <input type="checkbox" name="include_entire_portfolio" value="1"
+             {% if criterios_form.get('include_entire_portfolio') %}checked{% endif %}>
+      Toda a minha carteira
+    </label>
+    <p class="dica">
+      Alcançar todo mundo é escolha explícita. Um formulário em branco não
+      significa "todos" — ele é recusado.
+    </p>
+
+    <button type="submit">Gerar prévia</button>
+  </form>
+</section>
+
+{% if previa %}
+<section class="painel">
+  <h2>2. Revisão do público</h2>
+
+  <p class="dica">
+    Critérios normalizados:
+    {% for rotulo, valor in criterios_legiveis(previa.normalized_criteria, nomes_de_grupo) %}
+    <span class="etiqueta">{{ rotulo }}: {{ valor }}</span>
+    {% endfor %}
+  </p>
+
+  <ul class="contagens">
+    <li><strong>{{ previa.counts['eligible'] }}</strong> elegíveis</li>
+    <li><strong>{{ previa.counts['excluded'] }}</strong> excluídos</li>
+    <li><strong>{{ previa.counts['unclassified'] }}</strong> não classificados</li>
+  </ul>
+
+  {% if previa.counts['total'] > 350 %}
+  <p class="aviso erro">
+    Este público tem mais de 350 destinatários. Acima desse limite a confirmação
+    exige revisão nominal aqui no portal (ADR-029).
+  </p>
+  {% endif %}
+
+  {% if previa.eligible %}
+  <h3>Elegíveis</h3>
+  <table>
+    <thead><tr><th>Cliente</th><th>UF</th><th>Contato</th></tr></thead>
+    <tbody>
+      {% for membro in previa.eligible %}
+      <tr>
+        <td><a href="/portal/customers/{{ membro.customer.id }}">{{ membro.customer.legal_name }}</a></td>
+        <td>{{ membro.customer.state_code }}</td>
+        <td>{{ membro.contact.name }} · {{ membro.contact.whatsapp_e164 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if previa.excluded %}
+  <h3>Excluídos</h3>
+  <p class="dica">Casam com o critério, mas não podem receber. Ficam registrados no rascunho.</p>
+  <table>
+    <thead><tr><th>Cliente</th><th>Motivo</th></tr></thead>
+    <tbody>
+      {% for membro in previa.excluded %}
+      <tr>
+        <td><a href="/portal/customers/{{ membro.customer.id }}">{{ membro.customer.legal_name }}</a></td>
+        <td>{{ membro.excluded_reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if previa.unclassified %}
+  <h3>Não classificados</h3>
+  <p class="dica">
+    Estes clientes preferem artigos <strong>sem composição cadastrada</strong>.
+    Isso não quer dizer que não sejam do perfil — quer dizer que não dá para
+    afirmar. Eles não entram no rascunho; complete a composição do artigo no
+    catálogo, ou alcance-os por outro eixo.
+  </p>
+  <ul>
+    {% for cliente in previa.unclassified %}
+    <li><a href="/portal/customers/{{ cliente.id }}">{{ cliente.legal_name }}</a></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section class="painel">
+  <h2>3. Salvar rascunho</h2>
+  <p class="dica">
+    O template da Meta <strong>não é escolhido aqui</strong>: o catálogo de
+    templates aprovados é do Gateway e ainda não está integrado. O rascunho
+    guarda os critérios, o público e a auditoria; a escolha do template e a
+    confirmação vêm com a integração.
+  </p>
+
+  {% if previa.counts['eligible'] == 0 %}
+  <p class="aviso erro">
+    Nenhum destinatário elegível: não há rascunho a salvar. Ajuste os critérios.
+  </p>
+  {% else %}
+  <form method="post" action="/portal/campaigns" class="formulario">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <!-- Os critérios seguem de novo, e o rascunho é montado re-resolvendo-os.
+         A lista revisada acima não é transportada: ela viraria uma segunda
+         fonte de verdade capaz de divergir da primeira. -->
+    {% for grupo_id in criterios_form.get('product_group_ids', []) %}
+    <input type="hidden" name="product_group_ids" value="{{ grupo_id }}">
+    {% endfor %}
+    {% for codigo in criterios_form.get('fiber_codes', []) %}
+    <input type="hidden" name="fiber_codes" value="{{ codigo }}">
+    {% endfor %}
+    <input type="hidden" name="min_fiber_percent" value="{{ criterios_form.get('min_fiber_percent', '') }}">
+    <input type="hidden" name="state_codes" value="{{ criterios_form.get('state_codes', '') }}">
+    {% if criterios_form.get('include_entire_portfolio') %}
+    <input type="hidden" name="include_entire_portfolio" value="1">
+    {% endif %}
+
+    <label for="idempotency_key">Identificação do pedido</label>
+    <input id="idempotency_key" name="idempotency_key" required maxlength="128"
+           value="portal-{{ current_user.user_id }}-{{ previa.counts['total'] }}">
+    <p class="dica">
+      É a chave que impede o mesmo pedido de virar duas campanhas se você clicar
+      duas vezes ou a página for reenviada.
+    </p>
+
+    <button type="submit">Salvar rascunho</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

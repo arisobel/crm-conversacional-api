@@ -248,10 +248,81 @@ provado por teste no repositório isolado.
 
 ---
 
-## F6.3 — Portal de campanhas
+## F6.3 — Portal de campanhas — implementada em 2026-09-02
 
-Experiência inspirada no CKJ-app, sobre o domínio do CRM. Sequência mínima de
-telas:
+**Sem migração.** Roteador próprio em `web/campaign_routes.py`, três telas e a
+seção na ficha do cliente. Verificada por `tests/test_portal_campaigns.py`
+(16 testes). A suíte inteira está em 507 verdes.
+
+Entrega:
+
+| Tela | Rota | Conteúdo |
+|---|---|---|
+| Lista | `/portal/campaigns` | Campanhas do escopo, filtro por situação |
+| Nova | `/portal/campaigns/nova` | Critérios a partir do que o cadastro tem |
+| Revisão | `POST /portal/campaigns/previa` | Os três baldes, nominalmente; não grava |
+| Detalhe | `/portal/campaigns/{id}` | Snapshots, destinatários, cancelamento |
+| Ficha do cliente | seção nova | De quais campanhas ele participou |
+
+**Cinco decisões tomadas na implementação:**
+
+**Não existe botão de confirmar, e a tela diz por quê.** A campanha para no
+rascunho. Nenhum estado é apresentado como "enviado", e o detalhe explica que
+`PENDING` ali significa "congelado no rascunho" — não há fila de envio no CRM.
+
+**O template não é escolhido no portal.** O catálogo de templates aprovados na
+Meta é do Gateway e não existe aqui; o `template_snapshot` grava
+`{"status": "PENDENTE_CATALOGO_GATEWAY"}`. A alternativa — um campo de texto
+para digitar o nome do template — fabricaria uma referência que a Meta não
+aprovou, e a tela ficaria mentindo sobre estar pronta.
+
+**O rascunho é montado re-resolvendo os critérios, não a partir da lista
+revisada.** Transportar a lista criaria uma segunda fonte de verdade capaz de
+divergir da primeira sem ninguém perceber. O que a revisão garante é que a
+pessoa viu o resultado daqueles critérios; o que o rascunho congela é o
+resultado deles no instante da criação. Um teste força destinatários alheios no
+POST e confirma que eles são ignorados.
+
+**Erro de critério volta na própria resposta, não pela query string.** As
+mensagens do resolvedor são a informação útil ("porte ainda não é atributo do
+cliente") e não cabem num código. Como a página é devolvida no POST, o texto
+não viaja pela URL e não abre o canal de injeção que `messages.py` evita. A
+exceção é `InvalidStateCode`, cuja mensagem é interna e em inglês: essa usa o
+código `uf-invalida`, respeitando o aceite de R6a.
+
+**`ADMIN` e `MANAGER` leem o tenant e não cancelam rascunho alheio.** O botão
+não aparece e o POST forjado não tem efeito — a alçada continua sendo pendência
+da F6.0.
+
+**Um defeito encontrado rodando o app, que os testes não pegaram:** a tela
+mostrava `product_group_ids: ['1a25b79f-…']`, com a chave técnica e o UUID
+crus. O snapshot continua guardando o id — é ele que segue verdadeiro se alguém
+renomear o grupo —, mas a tela passou a exibir rótulo e nome
+(`criterios_legiveis`). Há teste travando isso agora.
+
+Aceite — verificado por `tests/test_portal_campaigns.py`:
+
+- A prévia não grava nada; a lista de campanhas continua vazia depois dela.
+- Cliente de outra carteira não aparece na prévia nem na lista.
+- Destinatário forjado no POST é ignorado: o público congelado é o do
+  resolvedor.
+- Mesma chave de idempotência não cria duas campanhas; POST sem CSRF não cria
+  nenhuma.
+- Representante recebe "não encontrado" para campanha alheia, igual a
+  inexistente.
+- Gestão acompanha o tenant, mas não vê nem exerce o cancelamento alheio.
+- UF inválida aparece em português, e a mensagem interna em inglês não vaza.
+- Grupo inexistente explica o motivo, em vez de devolver lista vazia.
+- A campanha aparece na ficha do cliente, e a ficha sem campanha diz isso.
+
+Pendências: a revisão nominal acima de 350 (ADR-029) é hoje apenas um **aviso**
+na tela — não há confirmação a bloquear enquanto a F6.4 não existir. O filtro da
+lista por representante, template e segmento fica para quando houver volume.
+
+Critério de saída **atingido**: o representante constrói e revisa a campanha, e
+a gestão acompanha o tenant.
+
+A sequência original planejada, para referência:
 
 1. lista de campanhas por período, situação, representante, template e segmento;
 2. criar prévia de audiência;
@@ -262,11 +333,9 @@ telas:
 6. referência da campanha na ficha/timeline do cliente, com navegação
    campanha → ficha.
 
-Nesta fase a confirmação permanece **bloqueada ou simulada** até F6.4. Nunca
-apresentar "enviado" quando existe apenas rascunho.
-
-Critério de saída: o representante constrói e revisa sua campanha;
-`ADMIN`/`MANAGER` acompanham o tenant conforme a alçada decidida em F6.0.
+A confirmação ficou **bloqueada**, não simulada: não existe botão nem rota que
+a exerça. Simular criaria um estado `CONFIRMED` que nada honraria, e a próxima
+pessoa teria de descobrir sozinha que aquilo não significava nada.
 
 ---
 

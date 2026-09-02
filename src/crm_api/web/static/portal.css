@@ -181,6 +181,22 @@ button.link {
 .timeline .canal { font-size: 12px; color: var(--tinta-fraca); margin-left: 8px; }
 .timeline p { margin: 4px 0 0; white-space: pre-wrap; }
 
+/* ----------------------------------------------------------- campanhas */
+
+/* As três contagens da prévia lado a lado. Elas são a leitura de um segundo
+   antes de descer para as listas nominais, e empilhadas perderiam a
+   comparação — que é justamente o que a pessoa está conferindo. */
+.contagens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+.contagens strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.contagens li { color: var(--tinta-fraca); font-size: 13px; }
+
 /* ------------------------------------------------------- lista de preço */
 
 .numero { text-align: right; font-variant-numeric: tabular-nums; }

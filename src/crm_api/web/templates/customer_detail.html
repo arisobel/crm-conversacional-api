@@ -269,6 +269,34 @@
 </section>
 
 <section class="painel">
+  <h2>Campanhas</h2>
+  {% if campanhas %}
+  <table class="lista">
+    <thead>
+      <tr><th>Criada em</th><th>Situação da campanha</th><th>Situação deste cliente</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for campanha, participacao in campanhas %}
+      <tr>
+        <td>{{ campanha.created_at.strftime('%d/%m/%Y') }}</td>
+        <td>{{ campanha.status.value }}</td>
+        <td>
+          {{ participacao.status.value }}
+          {% if participacao.excluded_reason %}
+          <span class="dica">({{ participacao.excluded_reason }})</span>
+          {% endif %}
+        </td>
+        <td><a href="/portal/campaigns/{{ campanha.id }}">Abrir campanha</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="vazio">Este cliente não participou de nenhuma campanha no seu escopo.</p>
+  {% endif %}
+</section>
+
+<section class="painel">
   <h2>Histórico de interações</h2>
 
   <form method="post" action="/portal/customers/{{ cliente.id }}/notas" class="form-nota">

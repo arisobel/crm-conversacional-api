@@ -1,0 +1,63 @@
+﻿{% extends "base.html" %}
+{% block title %}Campanhas{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <div>
+    <h1>Campanhas de WhatsApp</h1>
+    <p class="dica">{{ total }} campanha(s) no seu escopo.</p>
+  </div>
+  <a href="/portal/campaigns/nova" class="botao">Nova campanha</a>
+</div>
+
+<p class="aviso">
+  O envio ainda não existe. Nesta etapa a campanha chega a <strong>rascunho</strong>:
+  o público fica congelado e auditável, e nenhuma mensagem sai do CRM. A confirmação
+  e o disparo dependem da integração com o Gateway.
+</p>
+
+<form method="get" action="/portal/campaigns" class="filtros">
+  <label for="situacao">Situação</label>
+  <select id="situacao" name="situacao">
+    <option value="">Todas</option>
+    {% for estado in situacoes %}
+    <option value="{{ estado }}" {% if situacao == estado %}selected{% endif %}>{{ estado }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Filtrar</button>
+</form>
+
+{% if campanhas %}
+<table>
+  <thead>
+    <tr>
+      <th>Criada em</th>
+      <th>Situação</th>
+      <th>Critérios</th>
+      <th>Público</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for campanha in campanhas %}
+    <tr>
+      <td>{{ campanha.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+      <td>{{ campanha.status.value }}</td>
+      <td class="dica">
+        {% for rotulo, valor in criterios_legiveis(campanha.criteria_snapshot, nomes_de_grupo) %}
+        <span class="etiqueta">{{ rotulo }}: {{ valor }}</span>
+        {% endfor %}
+      </td>
+      <td>
+        {{ campanha.audience_summary_snapshot.get('eligible', 0) }} elegível(is),
+        {{ campanha.audience_summary_snapshot.get('excluded', 0) }} excluído(s)
+      </td>
+      <td><a href="/portal/campaigns/{{ campanha.id }}">Abrir</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vazio">Nenhuma campanha no seu escopo ainda.</p>
+{% endif %}
+{% endblock %}

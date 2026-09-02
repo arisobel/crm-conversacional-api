@@ -39,6 +39,7 @@ from crm_api.repositories.portfolio import (
 from crm_api.repositories.price_entries import PriceEntryRepository
 from crm_api.repositories.price_lists import PriceListRepository
 from crm_api.repositories.users import SessionRepository, UserRepository
+from crm_api.repositories.whatsapp_campaigns import WhatsappCampaignRepository
 from crm_api.services.auth import AuthenticationFailed, normalize_email
 from crm_api.services.catalog import (
     ArticleNotFound,
@@ -111,14 +112,9 @@ from crm_api.services.users import (
     WhatsappAlreadyUsed,
     WrongCurrentPassword,
 )
-from crm_api.web import messages
-from crm_api.web.csrf import (
-    CSRF_FIELD_NAME,
-    attach_csrf_cookie,
-    csrf_is_valid,
-    current_or_new_token,
-)
-from crm_api.web.dependencies import LOGIN_PATH, PortalRedirect, portal_user, templates
+from crm_api.web.csrf import CSRF_FIELD_NAME, csrf_is_valid
+from crm_api.web.dependencies import LOGIN_PATH, PortalRedirect, portal_user
+from crm_api.web.rendering import redirect, render
 
 router = APIRouter(prefix="/portal", tags=["Portal"])
 
@@ -202,44 +198,11 @@ def _codigo_do_erro(error: Exception) -> str:
     raise error
 
 
-def _redirect(destino: str, codigo: str | None = None) -> RedirectResponse:
-    # 303 força o navegador a trocar o POST por um GET, encerrando o ciclo de
-    # reenvio ao atualizar a página.
-    if not codigo:
-        return RedirectResponse(destino, status_code=303)
-    # O destino pode já levar query string própria — a publicação volta para a
-    # competência que acabou de publicar.
-    separador = "&" if "?" in destino else "?"
-    return RedirectResponse(f"{destino}{separador}m={codigo}", status_code=303)
-
-
-def _render(
-    request: Request,
-    template: str,
-    contexto: dict,
-    *,
-    current_user: CurrentUser | None = None,
-    mensagem: str | None = None,
-    erro_direto: str | None = None,
-    status_code: int = 200,
-) -> Response:
-    settings: Settings = request.app.state.settings
-    token = current_or_new_token(request)
-    aviso, erro = messages.resolve(mensagem)
-    resposta = templates.TemplateResponse(
-        request,
-        template,
-        {
-            **contexto,
-            "current_user": current_user,
-            "csrf_token": token,
-            "aviso": aviso,
-            "erro": erro_direto or erro,
-        },
-        status_code=status_code,
-    )
-    attach_csrf_cookie(resposta, token, secure=settings.session_cookie_secure)
-    return resposta
+# Moradia definitiva em `web/rendering.py`, compartilhada com o roteador de
+# campanhas. Os nomes privados continuam aqui como alias para não reescrever as
+# dezenas de chamadas deste módulo.
+_redirect = redirect
+_render = render
 
 
 def _admin_service(request: Request, session: AsyncSession) -> CustomerAdminService:
@@ -672,12 +635,24 @@ async def pagina_cliente(
         else set()
     )
 
+    # As campanhas de que este cliente participou. O escopo é o mesmo da lista
+    # de campanhas: um representante vê as de que é responsável, mesmo na ficha
+    # de um cliente seu — quem criou a campanha é que responde por ela.
+    campanhas_do_cliente = await WhatsappCampaignRepository(session).campaigns_of_customer(
+        current_user.tenant_id,
+        customer_id,
+        representative_user_id=(
+            current_user.user_id if current_user.role is UserRole.REPRESENTATIVE else None
+        ),
+    )
+
     return _render(
         request,
         "customer_detail.html",
         {
             "cliente": cliente,
             "titular": dono,
+            "campanhas": campanhas_do_cliente,
             "contatos": await servico.list_contacts(escopo, customer_id),
             "localidades": await servico.list_locations(escopo, customer_id),
             "preferidos": preferidos,

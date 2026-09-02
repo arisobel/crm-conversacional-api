@@ -64,6 +64,18 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
         "disparo sem ninguém perceber.",
     ),
     "grupo-inexistente": ("erro", "Grupo não encontrado."),
+    "campanha-criada": (
+        "ok",
+        "Rascunho de campanha salvo. Nada foi enviado: o público ficou "
+        "congelado para revisão, e a confirmação depende da integração com o "
+        "Gateway.",
+    ),
+    "campanha-cancelada": ("ok", "Rascunho cancelado. O público revisado fica registrado."),
+    "campanha-nao-cancelavel": (
+        "erro",
+        "Só rascunho pode ser cancelado por aqui. Campanha já confirmada é "
+        "interrompida pelo Gateway, que é quem controla a fila de envio.",
+    ),
     "senha-redefinida": (
         "ok",
         "Senha redefinida. As sessões abertas do usuário foram encerradas e "

@@ -550,12 +550,22 @@ integração externa; F6.4 (Gateway) só depois de F6.0 fechada.
 
 ### D4 — Portal e ficha do cliente
 
-- [ ] Listar campanhas por período, situação, representante, template e
-      segmentos, aplicando escopo de carteira no repositório.
-- [ ] Exibir detalhe com destinatários, exclusão por falta de consentimento,
-      resultados, pedido, filtros, template, variáveis e confirmação.
-- [ ] Ligar campanha e destinatário à ficha/timeline do cliente, incluindo
-      mensagem e resposta relacionadas.
+**Entregue na F6.3 em 2026-09-02**, verificado por
+`tests/test_portal_campaigns.py` (16 testes). Sem migração.
+
+- [x] Listar campanhas com escopo aplicado no repositório e filtro por situação.
+      Filtro por período, representante, template e segmento fica para quando
+      houver volume que o justifique.
+- [x] Exibir detalhe com destinatários, motivo de exclusão, critérios e template
+      congelados. A exclusão **por consentimento** e os resultados de envio
+      dependem do Gateway e chegam na F6.4.
+- [x] Ligar campanha e destinatário à ficha do cliente, com navegação nos dois
+      sentidos. Mensagem e resposta relacionadas dependem da F6.4.
+- [x] Telas de criação: critérios, prévia com os três baldes e criação de
+      rascunho. **A confirmação ficou bloqueada, não simulada** — não há botão
+      nem rota que a exerça.
+- [ ] O aviso de revisão nominal acima de 350 (ADR-029) é hoje só um alerta na
+      tela; ele vira bloqueio quando existir confirmação para bloquear (F6.4).
 - [ ] Medir e apresentar limitações/erros operacionais sem apresentar a projeção
       do CRM como fonte de verdade do canal.
 

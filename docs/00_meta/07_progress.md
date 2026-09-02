@@ -68,6 +68,31 @@ ganha, um único ativo é inequívoco, e vários ativos sem principal viram
 exclusão `CONTATO_AMBIGUO`. Eleger um por ordem de cadastro mandaria a
 mensagem por acaso.
 
+### F6.3 — portal de campanhas (2026-09-02)
+
+Sem migração. Lista, criação com prévia, detalhe e a seção na ficha do cliente,
+em roteador próprio (`web/campaign_routes.py`). Verificado por
+`tests/test_portal_campaigns.py` (16 testes); suíte em **507 verdes**.
+
+**A confirmação ficou bloqueada, não simulada.** Não existe botão nem rota que
+a exerça. Simular criaria um `CONFIRMED` que nada honra, e a próxima pessoa
+teria de descobrir sozinha que aquele estado não significava nada. Pela mesma
+razão o template não é escolhido aqui: o catálogo aprovado na Meta é do
+Gateway, e um campo de texto para digitá-lo fabricaria uma referência que não
+existe. O `template_snapshot` grava `PENDENTE_CATALOGO_GATEWAY` e a tela diz
+por quê.
+
+O rascunho é montado **re-resolvendo os critérios**, nunca a partir da lista
+revisada na tela: transportá-la criaria uma segunda fonte de verdade capaz de
+divergir da primeira em silêncio. Um teste força destinatários alheios no POST
+e confirma que são ignorados.
+
+**Um defeito que só apareceu rodando o app**, e que a suíte inteira não pegava:
+a tela mostrava `product_group_ids: ['1a25b79f-…']` — chave técnica e UUID
+crus. O snapshot continua com o id, que é a prova auditável; a tela passou a
+mostrar rótulo e nome. Vale como lembrete de que teste de rota confere
+comportamento, não legibilidade.
+
 ### Verificado em produção em 2026-08-22
 
 Conferido nas variáveis do CapRover e nos logs dos dois serviços após um "olá",

@@ -1,0 +1,99 @@
+﻿{% extends "base.html" %}
+{% block title %}Campanha{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <div>
+    <h1>Campanha · {{ campanha.status.value }}</h1>
+    <p class="dica">Criada em {{ campanha.created_at.strftime('%d/%m/%Y %H:%M') }}.</p>
+  </div>
+  <a href="/portal/campaigns">Voltar</a>
+</div>
+
+{% if campanha.status.value == 'DRAFT' %}
+<p class="aviso">
+  Rascunho. <strong>Nada foi enviado</strong> e nenhuma mensagem sairá deste
+  estado: a confirmação depende da integração com o Gateway, que também é quem
+  valida o consentimento antes de cada envio.
+</p>
+{% elif campanha.status.value == 'CANCELLED' %}
+<p class="aviso">Campanha cancelada. O público congelado fica registrado para auditoria.</p>
+{% endif %}
+
+<section class="painel">
+  <h2>Critérios congelados</h2>
+  <p class="dica">
+    É a fotografia do que foi aprovado. Mudanças posteriores no cadastro não a
+    reescrevem.
+  </p>
+  <ul>
+    {% for rotulo, valor in criterios_legiveis(campanha.criteria_snapshot, nomes_de_grupo) %}
+    <li><strong>{{ rotulo }}:</strong> {{ valor }}</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="painel">
+  <h2>Template</h2>
+  {% if campanha.template_snapshot.get('status') == 'PENDENTE_CATALOGO_GATEWAY' %}
+  <p class="dica">
+    Pendente. O catálogo de templates aprovados na Meta é mantido pelo Gateway e
+    ainda não está integrado ao CRM — por isso nenhum identificador de template
+    foi registrado nesta campanha.
+  </p>
+  {% else %}
+  <ul>
+    {% for chave, valor in campanha.template_snapshot.items() %}
+    <li><strong>{{ chave }}:</strong> {{ valor }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section class="painel">
+  <h2>Destinatários</h2>
+  <p class="dica">
+    {{ campanha.audience_summary_snapshot.get('eligible', 0) }} elegível(is) e
+    {{ campanha.audience_summary_snapshot.get('excluded', 0) }} excluído(s) na
+    revisão.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Cliente</th><th>Contato</th><th>Situação</th><th>Motivo</th></tr>
+    </thead>
+    <tbody>
+      {% for linha in destinatarios %}
+      <tr>
+        <td>
+          <a href="/portal/customers/{{ linha.customer_id }}">
+            {{ linha.recipient_snapshot.get('legal_name', linha.customer_id) }}
+          </a>
+        </td>
+        <td>{{ linha.recipient_snapshot.get('whatsapp_e164', '—') }}</td>
+        <td>{{ linha.status.value }}</td>
+        <td>{{ linha.excluded_reason or linha.failure_reason or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="dica">
+    <code>PENDING</code> aqui significa "congelado no rascunho, ainda não
+    enviado" — não há fila de envio no CRM.
+  </p>
+</section>
+
+{% if pode_cancelar %}
+<section class="painel">
+  <h2>Cancelar</h2>
+  <p class="dica">
+    Cancelar um rascunho o encerra sem apagá-lo: os critérios e o público
+    revisado continuam registrados.
+  </p>
+  <form method="post" action="/portal/campaigns/{{ campanha.id }}/cancelar" class="formulario">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="link">Cancelar rascunho</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}
