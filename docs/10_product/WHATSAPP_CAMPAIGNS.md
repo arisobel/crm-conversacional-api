@@ -157,12 +157,13 @@ e não substitui a direção preferencial do Plano A.
 | `REPRESENTATIVE` | Criar prévia e acompanhar somente campanhas próprias e clientes cuja `owner_user_id` seja o seu. Nunca pode incluir cliente de outra carteira. |
 | `MANAGER` e `ADMIN` | Acompanhar todas as campanhas do tenant e filtrar por representante. A permissão de criar, confirmar e cancelar acima da própria carteira será definida junto à alçada comercial. |
 
-A futura tela lista por período, situação, representante, template e segmentos.
-O detalhe mostra público, critérios, template, variáveis, contagens e os
-destinatários. Cada destinatário informa `PENDING`, `SENT`, `DELIVERED`,
-`READ` ou `FAILED`, resposta quando houver e exclusão por falta de consentimento.
-A navegação campanha → ficha do cliente e a seção de campanhas na ficha são
-requisitos de aceite, não recursos opcionais da interface.
+O portal já oferece lista de campanhas no escopo do usuário, com filtro por
+situação, criação e revisão de prévia, detalhe do rascunho com seus snapshots e
+destinatários, cancelamento de rascunho e seção de campanhas na ficha do cliente.
+Filtros da lista por período, representante, template e segmento permanecem
+evolução para quando houver volume. Status de envio, respostas, consentimento e
+o catálogo operacional de templates dependem da integração CRM → Gateway (F6.4)
+e não são apresentados como envio já executado pelo CRM.
 
 ## Público e segmentação
 
@@ -174,7 +175,7 @@ suposição.
 
 | Eixo | Situação | Uso na campanha |
 |---|---|---|
-| `product_groups` | Implementado: N↔N entre artigo e grupo, do tenant | Eixo de produto preferencial. Reutiliza grupos como poliéster e alta-tenacidade; não usa `product_families`, que é layout da tabela. Falta implementar o filtro de clientes por grupo. |
+| `product_groups` | Implementado: N↔N entre artigo e grupo, do tenant | Eixo de produto preferencial. Reutiliza grupos como poliéster e alta-tenacidade; não usa `product_families`, que é layout da tabela. O filtro determinístico de audiência por grupo já está implementado. |
 | Produtos preferenciais | Implementado em `customer_preferred_products` | Permite selecionar clientes ligados aos artigos/grupos escolhidos; antes do envio é preciso confirmar o significado comercial de “preferido” como sinal de compra. |
 | Fibra/composição | Implementado em `fibers` e `product_compositions` | Pode compor segmentos como “clientes de poliéster” por meio dos produtos. Produto sem composição é **não classificado**, não evidência de ausência da fibra. |
 | Porte | Não modelado | Será atributo declarado em eixo exclusivo, por exemplo `porte=grande|pequeno`; nunca será inferido de compra, oferta ou volume inexistente. |
