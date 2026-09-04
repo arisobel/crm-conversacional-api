@@ -4,8 +4,11 @@ Plano de entrega da frente **D** do [backlog](../00_meta/09_backlog.md), sobre a
 [especificação de campanhas](../10_product/WHATSAPP_CAMPAIGNS.md), o
 [modelo-alvo §7](../20_domain/DOMAIN_MODEL_TARGET.md) e o
 [ADR-028](../00_meta/08_decisions_log.md). Registrado em 2026-09-02 a partir do
-roteiro aprovado de campanhas. **Nada aqui está implementado; o envio de
-campanhas não existe no CRM-API.**
+roteiro aprovado de campanhas. **F6.1, F6.2 e F6.3 estão implementadas:** o
+CRM possui modelo de campanha, resolvedor determinístico de audiência e portal
+para prévia/rascunho, ainda sem envio integrado. F6.4 — integração CRM ↔ Gateway
+— permanece pendente e condicionada ao gate técnico descrito abaixo. F6.5 é
+posterior à integração e usa o motor já validado pelo portal.
 
 ## Regra arquitetural central
 
@@ -37,16 +40,30 @@ público feita por LLM.
 ## Sequência
 
 ```text
-F6.0 decisões e contrato conceitual ─┐
-F6.1 modelo de campanha no CRM ──────┼─ F6.3 portal de campanhas ─┐
-F6.2 resolvedor de audiência ────────┘                            ├─ F6.5 comandos conversacionais
-                     F6.0 fechada ── F6.4 integração com o Gateway┘
+F6.1 modelo de campanha ───────┐
+F6.2 resolvedor de audiência ───┼─ F6.3 portal de campanhas
+                                |
+                                v
+                         PoC Coexistence
+                            /       \
+                          GO        NO-GO
+                          |           |
+                          v           v
+                      Plano A      Plano B
+                          \           /
+                           \         /
+                            v       v
+                     F6.4 CRM ↔ Gateway
+                              |
+                              v
+                           F6.5 comandos
 ```
 
-F6.1 e F6.2 podem começar imediatamente e não dependem de F6.0 — elas não criam
-integração externa. F6.3 entrega o portal com a confirmação **bloqueada ou
-simulada**. F6.4 só começa com F6.0 fechada. F6.5 é o último incremento e usa o
-motor já validado pelo portal.
+F6.1, F6.2 e F6.3 materializam o motor comercial e não dependem da estratégia
+de sender. F6.3 entrega o portal com a confirmação bloqueada. F6.4 só começa com
+F6.0 fechada; a implementação definitiva do sender do Plano A dentro de F6.4
+depende também do gate de Coexistence. F6.5 é o último incremento e usa o motor
+já validado pelo portal.
 
 Correspondência com o backlog: F6.0 ≈ pendências de D0/D1; F6.1 ≈ D2 (modelo);
 F6.2 ≈ D1 (filtros) + D2 (prévia); F6.3 ≈ D4; F6.4 ≈ D3; F6.5 ≈ D5. Os casos
@@ -58,9 +75,6 @@ comerciais de D6 (aviso de queda de preço) atravessam F6.2 em diante.
 
 **Ainda não implementar envio.** Entregas, todas documentais:
 
-- [ ] Corrigir referências documentais ao Gateway e registrar a versão/commit
-      consultado — a cópia local analisada não contém
-      `whatsapp-marketing-broadcast-v1.md` nem `meta_whatsapp_campaigns.js`.
 - [ ] Definir um único vocabulário para os endpoints internos CRM ↔ Gateway.
       Não criar endpoint de integração definitivo antes desta decisão.
 - [x] Limite de destinatários que exige confirmação nominal no portal:
@@ -142,10 +156,9 @@ Aceite — verificado por `tests/test_whatsapp_campaigns.py`:
 - Exclusão exige motivo, linha sem contato só existe como exclusão, e rascunho
   inteiramente excluído é recusado.
 
-Pendências: aplicar a `0015` contra PostgreSQL — ela roda sozinha no próximo
-deploy pelo `docker-entrypoint.sh`; confirmar nos logs de start. A reversão
-**falha de propósito** se houver campanha fora de `DRAFT`/`CANCELLED`: apagar
-as tabelas perderia o registro do que foi aprovado.
+A migration `0015` está aplicada conforme confirmação do responsável do projeto.
+A reversão **falha de propósito** se houver campanha fora de
+`DRAFT`/`CANCELLED`: apagar as tabelas perderia o registro do que foi aprovado.
 
 Critério de saída **atingido**: é possível criar e consultar um rascunho
 auditável localmente, sem que nada seja enviado.
@@ -341,15 +354,82 @@ pessoa teria de descobrir sozinha que aquilo não significava nada.
 
 ## F6.4 — Contrato e integração com o Gateway
 
-Só começa com F6.0 fechada. Fluxos mínimos:
+Só começa com F6.0 fechada. F6.4 não pode pressupor que toda campanha sai de
+uma única linha WABA central: o contrato precisa representar o dono comercial da
+campanha (`campaign_owner = representante`, conceitualmente), enquanto o Gateway
+resolve a identidade técnica autorizada de envio.
+
+O CRM não envia token Meta, credencial, WABA arbitrária nem `phone_number_id`
+escolhido comercialmente. Ele informa a identidade comercial necessária; o
+Gateway resolve linha, integração e sender. A forma física desse identificador
+permanece aberta ao contrato — não é definida nesta fase.
+
+### Gate técnico — WhatsApp Coexistence
+
+A implementação definitiva do sender do Plano A depende de evidência prática no
+Gateway. Os critérios mínimos de GO são:
+
+- mesma linha utilizável no WhatsApp Business App e na Cloud API;
+- envio por API pela linha correta e mensagem visível no aplicativo;
+- inbound do cliente recebido pelo Gateway;
+- outbound manual observável por echo;
+- correlação suficiente da conversa;
+- sender preservado.
+
+O detalhamento conceitual está em
+[WhatsApp Coexistence e conversa híbrida do representante](../30_architecture/WHATSAPP_REPRESENTATIVE_COEXISTENCE.md)
+e a evidência de origem em
+[Fonte — Plano A / Plano B WhatsApp](../90_references/CRM_TEXTIL_FONTE_PLANO_A_B_WHATSAPP.md).
+Este gate não reproduz o roteiro P0–P12 nem declara Coexistence implementado.
+
+### Estratégias de sender após o gate
+
+**GO — Plano A.** Conceitualmente, `sender_strategy = REPRESENTATIVE_LINE`: o
+CRM confirma a campanha com a identidade comercial do representante e o Gateway
+resolve o vínculo técnico autorizado entre representante e linha WhatsApp.
+
+```text
+CRM
+ |
+ | campanha confirmada + identidade comercial do representante
+ v
+Gateway
+ |
+ | resolve vínculo técnico autorizado
+ | representante -> whatsapp_line
+ v
+Meta
+ |
+ v
+Cliente
+```
+
+**NO-GO — Plano B.** Conceitualmente, `sender_strategy = CENTRAL_WABA`: o
+Gateway usa a linha WABA central configurada. O fallback não altera audiência,
+campanha, recipients, snapshots ou confirmação; muda somente a estratégia
+operacional de sender no Gateway.
+
+F6.4 continua tendo um único contrato de campanha. O Gateway resolve a estratégia
+de transporte e deve registrá-la de forma auditável.
+
+Se o Plano A estiver ativo e o Gateway não conseguir resolver linha válida para
+o representante, a campanha não pode cair silenciosamente para a linha central.
+O fallback precisa ser explícito, configurado e auditável, ou a operação deve
+falhar de forma controlada.
+
+### Fluxos mínimos
 
 1. CRM consulta o catálogo de templates permitidos no Gateway;
 2. CRM solicita/recebe prévia de elegibilidade por consentimento;
-3. CRM confirma a campanha e envia comando assinado e idempotente ao Gateway;
-4. Gateway devolve a identificação de correlação da campanha;
-5. Gateway envia eventos de status ao CRM (`PENDING`, `SENT`, `DELIVERED`,
+3. CRM confirma a campanha;
+4. CRM envia comando comercial assinado e idempotente ao Gateway;
+5. Gateway identifica a estratégia de sender;
+6. no Plano A, Gateway resolve linha autorizada vinculada ao representante;
+7. no Plano B, Gateway usa linha central configurada;
+8. Gateway executa a campanha e devolve a identificação de correlação;
+9. Gateway envia eventos de status ao CRM (`PENDING`, `SENT`, `DELIVERED`,
    `READ`, `FAILED` e resposta);
-6. CRM atualiza projeção e ficha do cliente de forma idempotente.
+10. CRM atualiza projeção e ficha do cliente de forma idempotente.
 
 Cancelar afeta apenas rascunho, campanha não iniciada ou a parte pendente; o
 que a Meta já aceitou é fato histórico.
@@ -362,15 +442,30 @@ Testes obrigatórios de integração:
 - consentimento revogado entre prévia e envio;
 - cancelamento com parte dos destinatários já enviada;
 - tentativa de representante alcançar carteira de outro representante.
+- representante com linha válida;
+- representante sem linha ou com linha desativada;
+- linha pertencente a outro representante ou tenant;
+- Plano A selecionado com sender inválido;
+- reentrega idempotente que não troca o sender;
+- campanha congelada que não muda de representante por alteração posterior de carteira;
+- fallback central somente quando explicitamente autorizado.
 
-Critério de saída: a campanha confirmada é executada exclusivamente pelo
-Gateway e aparece corretamente no CRM.
+F6.4 trata envio da campanha, sender, status e resposta correlacionada. Não trata
+`HUMAN_ACTIVE`, `BOT_ACTIVE`, `BOT_ASSIST`, `WAITING_HUMAN`, reassunção, timeout,
+handoff ou capabilities customer-facing; esses itens pertencem à futura F7.
+
+Critério de saída: uma campanha confirmada no CRM é executada exclusivamente pelo
+Gateway, usando estratégia de sender explicitamente resolvida e auditável; no
+Plano A, pela identidade técnica autorizada do representante; no Plano B, pela
+linha central configurada. Status e respostas retornam de forma idempotente à
+projeção do CRM.
 
 ---
 
 ## F6.5 — Comandos conversacionais no WhatsApp
 
-Último incremento; usa o motor já validado pelo portal. Exemplo:
+Último incremento; usa o motor já validado pelo portal e não absorve a conversa
+híbrida posterior à campanha, que pertence à futura F7. Exemplo:
 
 > "Enviar a promoção do fio 75/36 para meus clientes de poliéster."
 
