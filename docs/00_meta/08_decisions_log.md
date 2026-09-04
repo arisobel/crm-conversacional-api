@@ -561,3 +561,32 @@ O valor entra como configuração do CRM (proposta:
 código: mudá-lo é decisão comercial e não deve exigir alteração de código. A
 verificação usa o público **elegível congelado no rascunho** no momento da
 confirmação — não a contagem da prévia inicial, que pode ter mudado.
+
+## ADR-030 — Plano A usa preferencialmente a identidade WhatsApp do representante
+
+**Status:** aceita em 2026-09-04. Complementa o ADR-028 e orienta F6.4.
+
+O motor comercial de campanhas continua único no CRM: ele identifica o
+representante, aplica carteira e permissões, resolve audiência, congela snapshots
+e confirma a campanha. A estratégia de sender não cria segundo motor.
+
+**Decisão:** o Plano A é a direção preferencial. Em uma campanha confirmada, o
+CRM informa a identidade comercial do representante; o Gateway resolve a linha
+técnica WhatsApp autorizada e realiza o envio pela identidade WhatsApp Business
+do representante. O CRM não escolhe `phone_number_id`, não envia credenciais e
+não indica WABA arbitrária.
+
+O Plano B, pela linha WABA central, permanece fallback explícito. Se o Plano A
+estiver ativo e o Gateway não resolver linha válida para o representante, a
+campanha não pode cair silenciosamente para a linha central: o fallback exige
+configuração e auditoria, ou a operação falha de forma controlada.
+
+A implementação definitiva do Plano A depende do gate técnico de WhatsApp
+Coexistence definido em [F6.4](../40_delivery/F6_WHATSAPP_CAMPAIGNS.md) e na
+[arquitetura de Coexistence](../30_architecture/WHATSAPP_REPRESENTATIVE_COEXISTENCE.md).
+O Gateway continua autoridade do canal; o CRM continua autoridade comercial.
+
+Esta decisão não fecha timeout, horários, schema, persistência, payload de
+`smb_message_echoes`, capabilities customer-facing, endpoint, lock, mídia ou
+retenção LGPD. A conversa híbrida e prioridade humana permanecem no blueprint
+F7 até o fechamento de F7.0.

@@ -1,6 +1,6 @@
 # Progresso central
 
-Atualizado em: 2026-09-02
+Atualizado em: 2026-09-04
 
 ## Estado atual
 
@@ -8,16 +8,15 @@ Atualizado em: 2026-09-02
 implementados e implantados.** Frente aberta: **D — campanhas de WhatsApp**
 (ver [backlog](09_backlog.md)).
 
-### F6 — plano de entrega de campanhas registrado (2026-09-02)
+### F6 — campanhas de WhatsApp (reconciliada em 2026-09-04)
 
-O roteiro aprovado de campanhas virou o plano de entrega
-[F6_WHATSAPP_CAMPAIGNS](../40_delivery/F6_WHATSAPP_CAMPAIGNS.md): seis fases
-(F6.0 decisões → F6.1 modelo → F6.2 resolvedor de audiência → F6.3 portal →
-F6.4 integração com o Gateway → F6.5 conversacional), cada uma com critério de
-saída. Nada implementado ainda. F6.1 e F6.2 podem começar sem integração
-externa; F6.4 exige F6.0 fechada. A primeira entrega está pronta quando um
-representante gera prévia restrita à própria carteira e salva um rascunho
-auditável, sem nenhuma mensagem enviada.
+O plano [F6_WHATSAPP_CAMPAIGNS](../40_delivery/F6_WHATSAPP_CAMPAIGNS.md) possui
+F6.1 (modelo), F6.2 (resolvedor de audiência) e F6.3 (portal) implementadas no
+CRM, ainda sem envio integrado. F6.4 é a próxima integração relevante: depende
+de F6.0 fechada e do gate técnico de Coexistence para definir o sender do Plano
+A. Plano A — linha WhatsApp do representante — é a direção preferencial; Plano
+B — linha WABA central — permanece fallback explícito. F6.5 continua posterior
+à integração e usa o motor já validado pelo portal.
 
 Primeira pendência da F6.0 fechada no mesmo dia: **revisão nominal obrigatória
 acima de 350 destinatários** (ADR-029), configurável com padrão 350.
@@ -92,6 +91,15 @@ a tela mostrava `product_group_ids: ['1a25b79f-…']` — chave técnica e UUID
 crus. O snapshot continua com o id, que é a prova auditável; a tela passou a
 mostrar rótulo e nome. Vale como lembrete de que teste de rota confere
 comportamento, não legibilidade.
+
+### F7 — blueprint de conversação híbrida registrado (2026-09-04)
+
+Planejamento documental concluído em
+[F7_WHATSAPP_HYBRID_CONVERSATION](../40_delivery/F7_WHATSAPP_HYBRID_CONVERSATION.md);
+nenhuma implementação iniciou. O gate de entrada exige PoC Coexistence favorável,
+F6.4 funcional, sender do representante resolvido, eventos e correlação
+suficientes, autoria manual detectável e política customer-facing aprovada. O
+primeiro marco futuro é observabilidade/autoria sem resposta automática.
 
 ### Verificado em produção em 2026-08-22
 
@@ -287,9 +295,12 @@ vier de `price_entries`.
 
 ## Em andamento
 
-- **Frente D — disparo para grupo de clientes.** Em desenho; nada em código.
-  Decidido: segmentação em dois eixos (material e porte), remetente é a linha
-  BPTI, template da Meta em aprovação, disparo por link como caminho secundário.
+- **Frente D — campanhas de WhatsApp.** F6.1–F6.3 implementadas; F6.4 permanece
+  pendente para o gate Coexistence, estratégia de sender e integração CRM ↔
+  Gateway. Plano A é preferencial e Plano B é fallback; nenhum envio integrado
+  foi iniciado no CRM.
+- **F7 — conversação híbrida.** Blueprint documentado; implementação não
+  iniciada e bloqueada pelo gate de entrada registrado no plano F7.
 - **Frente N — conversa representante × cliente na ficha.** N1 (nota manual)
   implementada em 22/08 pela migração `0012`; N2 (envio pelo portal) depende da
   rota de envio CRM → Gateway, compartilhada com o disparo.

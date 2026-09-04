@@ -462,8 +462,9 @@ Frente documental aberta em 2026-08-31. Substitui o recorte estreito de
 úteis: produto/grupo, aviso de queda e confirmação humana continuam casos da
 mesma capacidade. Especificação: [Campanhas de WhatsApp](../10_product/WHATSAPP_CAMPAIGNS.md).
 Plano de entrega faseado, registrado em 2026-09-02:
-[F6](../40_delivery/F6_WHATSAPP_CAMPAIGNS.md) — F6.1/F6.2 podem começar sem
-integração externa; F6.4 (Gateway) só depois de F6.0 fechada.
+[F6](../40_delivery/F6_WHATSAPP_CAMPAIGNS.md) — F6.1 (modelo), F6.2 (audiência)
+e F6.3 (portal) estão entregues. F6.4 permanece aberta após F6.0 e depende do
+gate de Coexistence para definir sender; F6.5 continua posterior à integração.
 
 ### D0 — Limites já fechados
 
@@ -535,18 +536,17 @@ integração externa; F6.4 (Gateway) só depois de F6.0 fechada.
 
 ### D3 — Contratos e execução no Gateway
 
-- [ ] Fechar ADR de comandos CRM → Gateway e eventos Gateway → CRM, com HMAC,
-      correlação, idempotência, replay, tentativa parcial e reconciliação.
-- [ ] Implementar catálogo operacional dos templates Meta permitidos e validação
-      de variáveis; o CRM não cria template.
-- [ ] Implementar prévia e revalidação imediatamente anterior ao envio de
-      consentimento/opt-out no Gateway.
-- [ ] Implementar fila, rate limit, estado por destinatário e cancelamento de
-      pendências no Gateway, sem bloquear webhooks existentes.
-- [ ] Emitir ao CRM eventos idempotentes de campanha, destinatário, mensagem,
-      estado (`PENDING`, `SENT`, `DELIVERED`, `READ`, `FAILED`) e resposta.
-- [ ] Confirmar no repositório do Gateway o plano e módulo de campanhas: eles
-      não existem na cópia local analisada neste repositório.
+- [ ] Executar o PoC de WhatsApp Coexistence e registrar GO/NO-GO para o Plano A.
+- [ ] Fechar o contrato CRM → Gateway e eventos Gateway → CRM, com HMAC,
+      correlação, idempotência, replay, tentativa parcial e reconciliação, sem
+      fechar endpoint ou payload antes da F6.0.
+- [ ] Resolver no Gateway a estratégia de sender: Plano A pela linha autorizada
+      do representante; Plano B pela linha WABA central como fallback explícito.
+      Falha de linha do representante não pode fazer fallback silencioso.
+- [ ] Integrar catálogo operacional de templates, elegibilidade/revalidação de
+      consentimento, confirmação e execução de campanha; o CRM não cria template.
+- [ ] Integrar eventos idempotentes de campanha, destinatário, mensagem, status
+      (`PENDING`, `SENT`, `DELIVERED`, `READ`, `FAILED`) e resposta ao CRM.
 
 ### D4 — Portal e ficha do cliente
 
@@ -592,6 +592,25 @@ integração externa; F6.4 (Gateway) só depois de F6.0 fechada.
 - [ ] O template, idioma, variáveis e eventual fluxo de resposta do aviso de
       queda são decisões comerciais e operacionais do Gateway, não texto livre
       criado pelo CRM.
+
+## F7 — Conversação híbrida Representante ↔ Cliente
+
+Blueprint: [F7_WHATSAPP_HYBRID_CONVERSATION](../40_delivery/F7_WHATSAPP_HYBRID_CONVERSATION.md).
+Não iniciar implementação dependente de F7 enquanto o gate de entrada não estiver
+satisfeito: PoC Coexistence favorável, F6.4 funcional, sender do representante
+resolvido, eventos suficientes, correlação Cliente ↔ Representante ↔ Linha,
+autoria manual detectável e política customer-facing aprovada.
+
+- [ ] F7.0 — decisões e contrato conceitual.
+- [ ] F7.1 — observação e autoria.
+- [ ] F7.2 — contexto e estado.
+- [ ] F7.3 — prioridade humana.
+- [ ] F7.4 — capabilities customer-facing.
+- [ ] F7.5 — `BOT_ACTIVE` controlado.
+- [ ] F7.6 — handoff por política.
+- [ ] F7.7 — reassunção.
+- [ ] F7.8 — timeline e supervisão.
+- [ ] F7.9 — mídias.
 
 ## Pendências herdadas
 
