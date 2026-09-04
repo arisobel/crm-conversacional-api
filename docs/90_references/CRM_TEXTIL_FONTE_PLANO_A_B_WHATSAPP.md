@@ -1,11 +1,22 @@
 # CRM-Têxtil / Gateway — Fonte de Projeto
 ## Comunicação Representante ↔ Cliente via WhatsApp
 
-**Status:** fonte de decisão e roteiro técnico  
+**Classificação:** documento de origem / referência de projeto\
+**Natureza:** não normativa\
 **Data de consolidação:** 2026-09-03  
 **Repositórios de referência:**
 - `arisobel/crm-conversacional-api` — **CRM-api**
 - `arisobel/whatsapp-webhook-caprover` — **Gateway**
+
+> Este documento registra a discussão que originou a direção de WhatsApp
+> Representante ↔ Cliente, incluindo Plano A, Plano B, Coexistence,
+> campanhas e conversação híbrida.
+>
+> Ele não substitui as fontes canônicas de produto, arquitetura, delivery,
+> progresso, decisões ou backlog.
+>
+> Quando houver divergência, prevalecem os documentos definidos em
+> `docs/00_meta/AGENT_SKILL_ORCHESTRATION.md`.
 
 ---
 

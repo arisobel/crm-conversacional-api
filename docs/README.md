@@ -12,6 +12,7 @@ Memória operacional do CRM Conversacional API.
 | `30_architecture` | Arquitetura e contrato da API |
 | `40_delivery` | Blueprints das fases de entrega |
 | `50_validation` | Critérios e evidências de validação |
+| `90_references` | Documentos de origem, referências e materiais não operacionais |
 
 ## Leitura obrigatória antes de implementar
 
@@ -34,6 +35,12 @@ Memória operacional do CRM Conversacional API.
 - [Entrega F1 — tabela vigente no WhatsApp](40_delivery/F1_PRICE_LIST_GATEWAY.md)
 - [Manifesto por ator no WhatsApp](30_architecture/WHATSAPP_ACTOR_MANIFEST.md) — desenho, nada implementado
 - [Backlog da interface administrativa](40_delivery/ADMIN_INTERFACE_BACKLOG.md)
+
+### Documentos de origem e referência
+
+- [Fonte — Plano A / Plano B WhatsApp](90_references/CRM_TEXTIL_FONTE_PLANO_A_B_WHATSAPP.md)
+  — consolidação da discussão sobre campanhas, Coexistence e conversação
+  híbrida; não substitui especificações, ADRs, backlog ou blueprints.
 
 ### Congelado
 
