@@ -123,10 +123,10 @@ class GatewayWhatsappOnboardingClient:
     async def resume_onboarding(
         self, onboarding_id: str, *, idempotency_key: str
     ) -> GatewayOnboarding:
+        """Retoma o trabalho server-side; o Gateway pode não pedir nova interação Meta."""
         return await self._request(
             "POST",
             f"/internal/meta/whatsapp/onboardings/{onboarding_id}/resume",
             body={},
             idempotency_key=idempotency_key,
-            launch_required=True,
         )

@@ -197,7 +197,7 @@ class WhatsappConnectionService:
         role: UserRole,
         representative_id: uuid.UUID,
         request_id: str | None = None,
-    ) -> tuple[RepresentativeWhatsappConnection, str]:
+    ) -> tuple[RepresentativeWhatsappConnection, str | None]:
         connection = await self.get(
             tenant_id=tenant_id,
             actor_id=actor_id,
@@ -217,4 +217,4 @@ class WhatsappConnectionService:
         )
         self._apply(connection, data)
         self._audit_event(connection, actor_id, "WHATSAPP_CONNECTION_RESUMED", request_id)
-        return connection, data.launch_url or ""
+        return connection, data.launch_url

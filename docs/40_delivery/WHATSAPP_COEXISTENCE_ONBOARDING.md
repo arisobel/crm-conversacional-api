@@ -19,7 +19,7 @@ O CRM é dono de tenant, usuário, RBAC, vínculo comercial, UX e auditoria. O G
 - Cliente privado com Bearer token server-side, timeout e resposta sanitizada.
 - API de sessão: `POST`/`GET /api/v1/representatives/{user_id}/whatsapp-connection` e `POST .../resume`.
 - Representante acessa somente a própria conexão; `ADMIN` e `MANAGER` operam somente o mesmo tenant.
-- Popup no clique e polling a cada três segundos, no máximo cinco minutos, até estado terminal.
+- Popup somente quando o Gateway retornar `launch_url`; um resume sem URL continua server-side e o polling segue a cada três segundos, no máximo cinco minutos, até estado terminal.
 - Auditoria de início, conclusão, falha, conflito, ação requerida e retomada, sem URLs ou segredos.
 
 ## Estados

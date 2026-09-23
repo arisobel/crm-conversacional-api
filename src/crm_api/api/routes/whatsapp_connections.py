@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.api.authentication import CurrentUser, get_current_user
+from crm_api.core.config import Settings
 from crm_api.core.database import get_session
 from crm_api.models.whatsapp_connection import RepresentativeWhatsappConnection
 from crm_api.repositories.audit import AuditRepository
@@ -67,6 +68,14 @@ def _csrf(request: Request) -> None:
         raise HTTPException(400, "csrf validation failed")
 
 
+def _full_launch_url(settings: Settings, launch_url: str | None) -> str | None:
+    """A URL só é entregue quando o Gateway realmente a retornou."""
+    if launch_url is None:
+        return None
+    # O cliente do Gateway só aceita URL relativa e requer base configurada.
+    return f"{settings.whatsapp_gateway_base_url.rstrip('/')}{launch_url}"
+
+
 @router.post(
     "/{user_id}/whatsapp-connection",
     response_model=WhatsappConnectionResponse,
@@ -91,7 +100,7 @@ async def create_connection(
         await session.commit()
         return _response(
             connection,
-            f"{request.app.state.settings.whatsapp_gateway_base_url.rstrip('/')}{launch}",
+            _full_launch_url(request.app.state.settings, launch),
         )
     except Exception as error:
         await session.rollback()
@@ -139,7 +148,7 @@ async def resume_connection(
         await session.commit()
         return _response(
             connection,
-            f"{request.app.state.settings.whatsapp_gateway_base_url.rstrip('/')}{launch}",
+            _full_launch_url(request.app.state.settings, launch),
         )
     except Exception as error:
         await session.rollback()

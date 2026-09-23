@@ -321,16 +321,17 @@
       if (!botao) return;
       botao.addEventListener("click", async function () {
         botao.disabled = true;
-        var janela = window.open("", "whatsapp_onboarding", "width=700,height=760");
         try {
           var conexao = await requisitar("POST", botao.dataset.whatsappAction === "resume" ? "/resume" : "");
-          if (conexao.launch_url && janela) janela.location = conexao.launch_url;
-          else if (janela) janela.close();
+          // Resume normalmente continua o provisioning no Gateway. Só uma
+          // resposta que de fato pede interação Meta abre uma nova janela.
+          if (conexao.launch_url) {
+            window.open(conexao.launch_url, "whatsapp_onboarding", "width=700,height=760");
+          }
           mostrar(conexao);
           tentativas = 0;
           if (!terminal[conexao.status]) setTimeout(atualizar, 3000);
         } catch (_) {
-          if (janela) janela.close();
           botao.disabled = false;
           estado.insertAdjacentHTML("beforeend", "<p class=\"aviso erro\">Não foi possível iniciar a configuração.</p>");
         }

@@ -21,7 +21,7 @@ async def _client(app):
 
 @pytest.fixture
 def gateway(monkeypatch):
-    state = {"status": "AUTHORIZATION_PENDING"}
+    state = {"status": "AUTHORIZATION_PENDING", "resume_status": None}
 
     async def create(self, **_):
         return GatewayOnboarding("ob-1", state["status"], "/meta/whatsapp/onboardings/ob-1/launch")
@@ -35,8 +35,8 @@ def gateway(monkeypatch):
         )
 
     async def resume(self, _, **__):
-        state["status"] = "AUTHORIZATION_PENDING"
-        return GatewayOnboarding("ob-1", state["status"], "/meta/whatsapp/onboardings/ob-1/launch")
+        state["status"] = state["resume_status"] or "AUTHORIZATION_PENDING"
+        return GatewayOnboarding("ob-1", state["status"])
 
     monkeypatch.setattr(GatewayWhatsappOnboardingClient, "create_onboarding", create)
     monkeypatch.setattr(GatewayWhatsappOnboardingClient, "get_onboarding", get)
@@ -109,3 +109,34 @@ async def test_action_required_can_resume(gateway):
         resumed = await client.post(f"{path}/resume", headers={"X-CSRF-Token": csrf})
         assert resumed.status_code == 200
         assert resumed.json()["status"] == "CONNECTING"
+        assert resumed.json()["launch_url"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("gateway_status", "expected_status"),
+    [
+        ("COMPLETED", "CONNECTED"),
+        ("ACTION_REQUIRED", "ACTION_REQUIRED"),
+        ("CONFLICT", "CONFLICT"),
+        ("FAILED", "FAILED"),
+    ],
+)
+async def test_resume_without_launch_url_projects_gateway_terminal_state(
+    gateway, gateway_status, expected_status
+):
+    world = await build_portal_world(whatsapp_gateway_base_url="https://gateway.test")
+    async with await _client(world.app) as client:
+        await login(client, email=REPRESENTATIVE_A_EMAIL)
+        csrf = await _csrf(client)
+        path = f"/api/v1/representatives/{world.representative_a_id}/whatsapp-connection"
+        await client.post(path, headers={"X-CSRF-Token": csrf})
+        gateway["status"] = "ACTION_REQUIRED"
+        await client.get(path)
+        gateway["resume_status"] = gateway_status
+
+        resumed = await client.post(f"{path}/resume", headers={"X-CSRF-Token": csrf})
+
+        assert resumed.status_code == 200
+        assert resumed.json()["status"] == expected_status
+        assert resumed.json()["launch_url"] is None
