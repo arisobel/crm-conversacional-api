@@ -40,6 +40,7 @@ from crm_api.repositories.price_entries import PriceEntryRepository
 from crm_api.repositories.price_lists import PriceListRepository
 from crm_api.repositories.users import SessionRepository, UserRepository
 from crm_api.repositories.whatsapp_campaigns import WhatsappCampaignRepository
+from crm_api.repositories.whatsapp_connections import WhatsappConnectionRepository
 from crm_api.services.auth import AuthenticationFailed, normalize_email
 from crm_api.services.catalog import (
     ArticleNotFound,
@@ -83,6 +84,7 @@ from crm_api.services.customer_price_list import (
     PricesUnavailable,
 )
 from crm_api.services.customers import InvalidWhatsappNumber
+from crm_api.services.gateway_whatsapp_onboarding import GatewayWhatsappOnboardingClient
 from crm_api.services.icms import (
     AmbiguousIcmsRule,
     IcmsResolver,
@@ -111,6 +113,11 @@ from crm_api.services.users import (
     UserService,
     WhatsappAlreadyUsed,
     WrongCurrentPassword,
+)
+from crm_api.services.whatsapp_connections import (
+    ConnectionForbidden,
+    ConnectionNotFound,
+    WhatsappConnectionService,
 )
 from crm_api.web.csrf import CSRF_FIELD_NAME, csrf_is_valid
 from crm_api.web.dependencies import LOGIN_PATH, PortalRedirect, portal_user
@@ -281,10 +288,19 @@ def _publication_service(session: AsyncSession) -> PricePublicationService:
     )
 
 
-async def _designaveis(session: AsyncSession, tenant_id: uuid.UUID) -> list[User]:
-    return await UserRepository(session).list_users(
-        tenant_id, active=True, limit=200, offset=0
+def _whatsapp_connection_service(
+    request: Request, session: AsyncSession
+) -> WhatsappConnectionService:
+    return WhatsappConnectionService(
+        connections=WhatsappConnectionRepository(session),
+        users=UserRepository(session),
+        audit=AuditRepository(session),
+        gateway=GatewayWhatsappOnboardingClient(request.app.state.settings),
     )
+
+
+async def _designaveis(session: AsyncSession, tenant_id: uuid.UUID) -> list[User]:
+    return await UserRepository(session).list_users(tenant_id, active=True, limit=200, offset=0)
 
 
 # ------------------------------------------------------------------ sessão
@@ -302,9 +318,9 @@ async def pagina_login(
     m: Annotated[str | None, Query()] = None,
     expirada: Annotated[str | None, Query()] = None,
 ) -> Response:
-    return _render(request, "login.html", {"email": None}, mensagem=m or (
-        "expirada" if expirada else None
-    ))
+    return _render(
+        request, "login.html", {"email": None}, mensagem=m or ("expirada" if expirada else None)
+    )
 
 
 @router.post("/login", include_in_schema=False)
@@ -621,9 +637,7 @@ async def pagina_cliente(
     # sem aviso ninguém descobre por quê — é o que acontece com o artigo que
     # acabou de ser cadastrado e cujo lote ainda não foi publicado.
     entradas = PriceEntryRepository(session)
-    competencia = await entradas.latest_month(
-        current_user.tenant_id, at=datetime.now(UTC).date()
-    )
+    competencia = await entradas.latest_month(current_user.tenant_id, at=datetime.now(UTC).date())
     com_preco = (
         {
             entrada.product_id
@@ -818,9 +832,7 @@ async def alterar_titular(
         return _redirect(destino, _codigo_do_erro(error))
 
     await session.commit()
-    return _redirect(
-        destino, "titular-alterado" if resultado.changed else "titular-sem-mudanca"
-    )
+    return _redirect(destino, "titular-alterado" if resultado.changed else "titular-sem-mudanca")
 
 
 # ---------------------------------------------------------------- contatos
@@ -996,6 +1008,40 @@ async def pagina_usuarios(
         },
         current_user=current_user,
         mensagem=m,
+    )
+
+
+@router.get("/whatsapp/{user_id}", include_in_schema=False)
+async def pagina_whatsapp_do_representante(
+    user_id: uuid.UUID,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    if current_user.role is UserRole.REPRESENTATIVE and current_user.user_id != user_id:
+        return _redirect("/portal/customers", "sem-permissao")
+    if current_user.role not in (UserRole.REPRESENTATIVE, UserRole.ADMIN, UserRole.MANAGER):
+        return _redirect("/portal/customers", "sem-permissao")
+    try:
+        representative = await UserRepository(session).get_in_tenant(
+            current_user.tenant_id, user_id
+        )
+        if representative is None or representative.role is not UserRole.REPRESENTATIVE:
+            raise ConnectionNotFound
+        connection = await _whatsapp_connection_service(request, session).get(
+            tenant_id=current_user.tenant_id,
+            actor_id=current_user.user_id,
+            role=current_user.role,
+            representative_id=user_id,
+            refresh=False,
+        )
+    except (ConnectionNotFound, ConnectionForbidden):
+        return _redirect("/portal/customers", "nao-encontrado")
+    return _render(
+        request,
+        "whatsapp_connection.html",
+        {"representative": representative, "connection": connection},
+        current_user=current_user,
     )
 
 
@@ -1435,9 +1481,7 @@ async def pagina_lista_de_preco(
         "localidades": await CustomerAdminRepository(session).list_locations(customer_id),
         "location_id": location_id,
         "mes": mes,
-        "competencias": await PriceEntryRepository(session).list_months(
-            current_user.tenant_id
-        ),
+        "competencias": await PriceEntryRepository(session).list_months(current_user.tenant_id),
         "origem": tenant.origin_state_code if tenant else None,
         "resolvida": None,
     }
@@ -1608,13 +1652,9 @@ async def pagina_produtos(
         {
             "linhas": linhas,
             "familias": await catalogo.list_families(current_user.tenant_id, active=None),
-            "contagem_por_familia": await catalogo.count_products_by_family(
-                current_user.tenant_id
-            ),
+            "contagem_por_familia": await catalogo.count_products_by_family(current_user.tenant_id),
             "grupos": await catalogo.list_groups(current_user.tenant_id, active=None),
-            "contagem_por_grupo": await catalogo.count_products_by_group(
-                current_user.tenant_id
-            ),
+            "contagem_por_grupo": await catalogo.count_products_by_group(current_user.tenant_id),
             "grupos_do_artigo": await catalogo.groups_of_products(
                 current_user.tenant_id, [linha.product.id for linha in linhas]
             ),
@@ -2053,9 +2093,7 @@ async def publicar_lote(
         return _redirect("/portal/prices", _codigo_do_erro(error))
 
     await session.commit()
-    return _redirect(
-        f"/portal/prices?mes={resultado.reference_month:%Y-%m}", "lote-publicado"
-    )
+    return _redirect(f"/portal/prices?mes={resultado.reference_month:%Y-%m}", "lote-publicado")
 
 
 __all__ = ["router", "PortalRedirect"]

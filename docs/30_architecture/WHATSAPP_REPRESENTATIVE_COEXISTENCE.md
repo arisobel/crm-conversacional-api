@@ -4,6 +4,11 @@
 **Estado:** não declara WhatsApp Coexistence como implementado e não substitui o PoC técnico no Gateway.  
 **Escopo:** identidade WhatsApp do representante, conversa direta com o cliente, observação do canal, automação eventual e seus limites de autorização.
 
+> **Nota de implementação (2026-09-23):** o CRM passou a ter somente a projeção
+> comercial do onboarding e uma jornada de portal. Embedded Signup, OAuth, tokens,
+> descoberta, provisioning e webhook continuam exclusivamente no Gateway. Ver
+> [entrega de onboarding](../40_delivery/WHATSAPP_COEXISTENCE_ONBOARDING.md).
+
 ## 1. Propósito
 
 Este arquivo define a arquitetura-alvo conceitual do Plano A: campanhas e atendimento podem usar a identidade WhatsApp Business do próprio representante, desde que WhatsApp Coexistence seja comprovado na prática. O objetivo é preservar a relação direta Representante ↔ Cliente, enquanto o Gateway observa o canal e, quando uma política permitir, pode operar automação limitada.

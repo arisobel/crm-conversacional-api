@@ -8,6 +8,12 @@ Atualizado em: 2026-09-04
 implementados e implantados.** Frente aberta: **D — campanhas de WhatsApp**
 (ver [backlog](09_backlog.md)).
 
+### Onboarding WhatsApp Coexistence (2026-09-23)
+
+Vertical slice CRM entregue: vínculo comercial, migração `0016`, API autenticada,
+cliente privado do Gateway, seção do portal, popup e polling. O funcionamento ponta a
+ponta ainda depende do Gateway configurado e do Embedded Signup operacional.
+
 ### F6 — campanhas de WhatsApp (reconciliada em 2026-09-04)
 
 O plano [F6_WHATSAPP_CAMPAIGNS](../40_delivery/F6_WHATSAPP_CAMPAIGNS.md) possui

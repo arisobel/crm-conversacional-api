@@ -267,4 +267,77 @@
   document.querySelectorAll("[data-combobox]").forEach(montarCombobox);
   ligarModais();
   ligarAlternancias();
+
+  /* Onboarding é iniciado no CRM; somente a janela do launcher segue para o
+   * Gateway. Abrir a janela no gesto do clique evita bloqueador de popup, e o
+   * token interno nunca entra neste JavaScript. */
+  function ligarWhatsappBusiness() {
+    var painel = document.getElementById("whatsapp-connection");
+    if (!painel) return;
+    var userId = painel.dataset.userId;
+    var csrf = painel.dataset.csrfToken;
+    var estado = painel.querySelector("[data-whatsapp-state]");
+    var terminal = { CONNECTED: true, ACTION_REQUIRED: true, CONFLICT: true, FAILED: true };
+    var tentativas = 0;
+    var maxTentativas = 100; // cinco minutos, em intervalos de três segundos
+
+    function mostrar(conexao) {
+      if (!conexao) {
+        estado.innerHTML = "<p>Nenhuma linha conectada.</p><button type=\"button\" data-whatsapp-action=\"create\">Conectar WhatsApp</button>";
+      } else if (conexao.status === "CONNECTED") {
+        estado.innerHTML = "<p><strong>Conectado</strong></p><p>" + (conexao.display_phone_number || "Número aguardando atualização.") + "</p><p class=\"dica\">Linha pronta para uso.</p>";
+      } else if (conexao.status === "ACTION_REQUIRED") {
+        estado.innerHTML = "<p>A configuração precisa de uma ação adicional.</p><button type=\"button\" data-whatsapp-action=\"resume\">Retomar configuração</button>";
+      } else if (conexao.status === "CONFLICT") {
+        estado.innerHTML = "<p>Existe um conflito na configuração desta linha.</p><p class=\"dica\">Contate um administrador.</p>";
+      } else if (conexao.status === "FAILED") {
+        estado.innerHTML = "<p>Não foi possível concluir a conexão.</p><button type=\"button\" data-whatsapp-action=\"resume\">Tentar novamente</button>";
+      } else {
+        estado.innerHTML = "<p>Conexão em andamento...</p><p class=\"dica\">Esta página acompanha a configuração automaticamente.</p>";
+      }
+      ligarBotoes();
+    }
+
+    async function requisitar(method, sufixo) {
+      var resposta = await fetch("/api/v1/representatives/" + userId + "/whatsapp-connection" + sufixo, {
+        method: method, credentials: "same-origin", headers: { "X-CSRF-Token": csrf }
+      });
+      if (!resposta.ok) throw new Error("Não foi possível consultar a configuração.");
+      return resposta.json();
+    }
+
+    async function atualizar() {
+      try {
+        var conexao = await requisitar("GET", "");
+        mostrar(conexao);
+        if (conexao && !terminal[conexao.status] && tentativas++ < maxTentativas) setTimeout(atualizar, 3000);
+      } catch (_) {
+        estado.innerHTML = "<p>Não foi possível consultar a configuração agora.</p><p class=\"dica\">Atualize a página ou tente novamente em alguns instantes.</p>";
+      }
+    }
+
+    function ligarBotoes() {
+      var botao = estado.querySelector("[data-whatsapp-action]");
+      if (!botao) return;
+      botao.addEventListener("click", async function () {
+        botao.disabled = true;
+        var janela = window.open("", "whatsapp_onboarding", "width=700,height=760");
+        try {
+          var conexao = await requisitar("POST", botao.dataset.whatsappAction === "resume" ? "/resume" : "");
+          if (conexao.launch_url && janela) janela.location = conexao.launch_url;
+          else if (janela) janela.close();
+          mostrar(conexao);
+          tentativas = 0;
+          if (!terminal[conexao.status]) setTimeout(atualizar, 3000);
+        } catch (_) {
+          if (janela) janela.close();
+          botao.disabled = false;
+          estado.insertAdjacentHTML("beforeend", "<p class=\"aviso erro\">Não foi possível iniciar a configuração.</p>");
+        }
+      });
+    }
+    ligarBotoes();
+    if (estado.textContent.indexOf("andamento") !== -1) setTimeout(atualizar, 3000);
+  }
+  ligarWhatsappBusiness();
 })();

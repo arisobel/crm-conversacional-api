@@ -1166,6 +1166,56 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /api/v1/representatives/{userId}/whatsapp-connection:
+    get:
+      tags: [WhatsApp onboarding]
+      security: [{PortalSession: []}]
+      parameters: [{$ref: "#/components/parameters/UserId"}]
+      responses:
+        "200":
+          description: Projeção comercial sanitizada; `null` quando não há conexão.
+          content: {application/json: {schema: {$ref: "#/components/schemas/WhatsappConnection"}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "503": {$ref: "#/components/responses/ServiceUnavailable"}
+    post:
+      tags: [WhatsApp onboarding]
+      security: [{PortalSession: []}]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema: {type: string}
+      responses:
+        "201":
+          description: Onboarding iniciado; `launch_url` é temporária e não é persistida.
+          content: {application/json: {schema: {$ref: "#/components/schemas/WhatsappConnection"}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "503": {$ref: "#/components/responses/ServiceUnavailable"}
+
+  /api/v1/representatives/{userId}/whatsapp-connection/resume:
+    post:
+      tags: [WhatsApp onboarding]
+      security: [{PortalSession: []}]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Onboarding retomado quando o estado do Gateway permitir.
+          content: {application/json: {schema: {$ref: "#/components/schemas/WhatsappConnection"}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "503": {$ref: "#/components/responses/ServiceUnavailable"}
+
 components:
   securitySchemes:
     InternalHmac:
@@ -1327,6 +1377,23 @@ components:
             $ref: "#/components/schemas/Problem"
 
   schemas:
+    WhatsappConnection:
+      type: object
+      required: [connection_id, representative_user_id, status]
+      properties:
+        connection_id: {type: string, format: uuid}
+        representative_user_id: {type: string, format: uuid}
+        status:
+          type: string
+          enum: [NOT_CONNECTED, CONNECTING, CONNECTED, ACTION_REQUIRED, CONFLICT, FAILED]
+        display_phone_number: {type: [string, "null"]}
+        failure_code: {type: [string, "null"]}
+        started_at: {type: [string, "null"], format: date-time}
+        connected_at: {type: [string, "null"], format: date-time}
+        launch_url:
+          type: [string, "null"]
+          description: URL temporária do Gateway; presente somente ao iniciar ou retomar.
+
     Problem:
       type: object
       required: [type, title, status]

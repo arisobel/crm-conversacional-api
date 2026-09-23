@@ -1,7 +1,7 @@
 # Backlog — onboarding WhatsApp Coexistence no CRM
 
 **Natureza:** planejamento de produto e integração interna.  
-**Estado:** proposto; não implementado.  
+**Estado:** vertical slice P0 implementado no CRM em 2026-09-23; depende de Gateway configurado e do fluxo Meta em produção.
 **Escopo:** experiência comercial para conectar o WhatsApp Business de um representante ao Gateway. O CRM não integra diretamente com a Meta.
 
 ## Objetivo e fronteira de responsabilidade
@@ -160,4 +160,4 @@ Ficam explicitamente fora desse corte: campanhas, timeline completa, human/bot, 
 
 ## Limites desta entrega documental
 
-Nenhuma implementação foi realizada: não há UI, endpoints, migrations, persistência de credenciais, chamada Graph API, OAuth Meta no CRM, alteração no Gateway, commit ou push.
+O vertical slice P0 possui UI, endpoints CRM, migration e cliente interno do Gateway. Não houve chamada Graph API, OAuth Meta no CRM, persistência de credenciais, alteração no Gateway, commit ou push.

@@ -20,6 +20,9 @@
     <a href="/portal/intakes">Pré-cadastros</a>
     <a href="/portal/products">Produtos</a>
     <a href="/portal/campaigns">Campanhas</a>
+    {% if current_user.role.value == 'REPRESENTATIVE' %}
+    <a href="/portal/whatsapp/{{ current_user.user_id }}">WhatsApp Business</a>
+    {% endif %}
     {% if current_user.role.value == 'ADMIN' %}
     <a href="/portal/prices">Tabelas</a>
     <a href="/portal/icms-rules">ICMS</a>

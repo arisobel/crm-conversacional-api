@@ -27,6 +27,9 @@
       <td>{% if usuario.active %}ativo{% else %}<span class="vazio">inativo</span>{% endif %}</td>
       <td>{{ usuario.last_login_at.strftime('%d/%m/%Y %H:%M') if usuario.last_login_at else '—' }}</td>
       <td class="acoes">
+        {% if usuario.role.value == 'REPRESENTATIVE' %}
+        <a href="/portal/whatsapp/{{ usuario.id }}">WhatsApp Business</a>
+        {% endif %}
         {% if usuario.id != current_user.user_id %}
         <form method="post" action="/portal/users/{{ usuario.id }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

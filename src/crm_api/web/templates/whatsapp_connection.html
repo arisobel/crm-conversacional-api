@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}WhatsApp Business{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><h1>WhatsApp Business</h1><a class="link-voltar" href="{% if current_user.role.value == 'REPRESENTATIVE' %}/portal/customers{% else %}/portal/users{% endif %}">Voltar</a></div>
+<section class="painel" id="whatsapp-connection" data-user-id="{{ representative.id }}" data-csrf-token="{{ csrf_token }}">
+  <h2>{{ representative.full_name }}</h2>
+  <div data-whatsapp-state>
+  {% if not connection %}
+    <p>Nenhuma linha conectada.</p><button type="button" data-whatsapp-action="create">Conectar WhatsApp</button>
+  {% elif connection.status.value == 'CONNECTED' %}
+    <p><strong>Conectado</strong></p><p>{{ connection.display_phone_number or 'Número aguardando atualização.' }}</p><p class="dica">Linha pronta para uso.</p>
+  {% elif connection.status.value == 'ACTION_REQUIRED' %}
+    <p>A configuração precisa de uma ação adicional.</p><button type="button" data-whatsapp-action="resume">Retomar configuração</button>
+  {% elif connection.status.value == 'CONFLICT' %}
+    <p>Existe um conflito na configuração desta linha.</p><p class="dica">Contate um administrador.</p>
+  {% elif connection.status.value == 'FAILED' %}
+    <p>Não foi possível concluir a conexão.</p><button type="button" data-whatsapp-action="resume">Tentar novamente</button>
+  {% else %}
+    <p>Conexão em andamento...</p><p class="dica">Esta página acompanha a configuração automaticamente.</p>
+  {% endif %}
+  </div>
+</section>
+{% endblock %}

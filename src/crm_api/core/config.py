@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     # interativa liga em desenvolvimento, e não o contrário.
     expose_api_docs: bool = False
 
+    # Integração privada CRM → Gateway. Os nomes não mencionam Meta porque o
+    # CRM não conhece nem opera as credenciais ou APIs da Meta.
+    whatsapp_gateway_base_url: str | None = None
+    whatsapp_gateway_internal_token: SecretStr | None = None
+    whatsapp_gateway_timeout_seconds: float = 10.0
+
     password_min_length: int = 12
     login_max_failed_attempts: int = 5
     login_lockout_seconds: int = 900
