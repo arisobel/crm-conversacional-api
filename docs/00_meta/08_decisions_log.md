@@ -581,10 +581,11 @@ estiver ativo e o Gateway não resolver linha válida para o representante, a
 campanha não pode cair silenciosamente para a linha central: o fallback exige
 configuração e auditoria, ou a operação falha de forma controlada.
 
-A implementação definitiva do Plano A depende do gate técnico de WhatsApp
-Coexistence definido em [F6.4](../40_delivery/F6_WHATSAPP_CAMPAIGNS.md) e na
-[arquitetura de Coexistence](../30_architecture/WHATSAPP_REPRESENTATIVE_COEXISTENCE.md).
-O Gateway continua autoridade do canal; o CRM continua autoridade comercial.
+A validação básica do gate técnico de WhatsApp Coexistence foi concluída:
+onboarding, inbound, resposta automática, resposta manual no App e
+`smb_message_echoes` observado. Ver [jornada ponta a ponta](../40_delivery/WHATSAPP_COEXISTENCE_END_TO_END.md).
+F6.4 ainda precisa fechar o contrato de campanhas e sender. O Gateway continua
+autoridade do canal; o CRM continua autoridade comercial.
 
 Esta decisão não fecha timeout, horários, schema, persistência, payload de
 `smb_message_echoes`, capabilities customer-facing, endpoint, lock, mídia ou

@@ -1,6 +1,6 @@
 # F7 — Conversação híbrida Representante ↔ Cliente
 
-Blueprint de entrega futura para a conversa contínua entre Cliente, Representante, Gateway, CRM-api e IA/LLM. Baseia-se na [arquitetura conceitual de Coexistence](../30_architecture/WHATSAPP_REPRESENTATIVE_COEXISTENCE.md) e não declara WhatsApp Coexistence, F7 ou automação como implementados.
+Blueprint de entrega futura para a conversa contínua entre Cliente, Representante, Gateway, CRM-api e IA/LLM. A Coexistence básica já foi validada, conforme a [jornada ponta a ponta](WHATSAPP_COEXISTENCE_END_TO_END.md); este documento não declara F7 ou automação como implementados.
 
 ## Natureza e fronteira da fase
 
@@ -17,7 +17,7 @@ F7 não redefine o motor comercial de campanhas. É planejada prioritariamente p
 
 O planejamento documental de F7 pode avançar; a implementação efetiva de cada fase dependente não começa sem:
 
-1. PoC Coexistence com evidência suficiente para o Plano A;
+1. evidência básica de Coexistence já registrada para o Plano A;
 2. F6.4 com contrato CRM ↔ Gateway funcional;
 3. sender do representante resolvido de forma confiável;
 4. Gateway recebendo eventos suficientes da conversa;
@@ -25,12 +25,12 @@ O planejamento documental de F7 pode avançar; a implementação efetiva de cada
 6. autoria manual detectável;
 7. política básica customer-facing aprovada.
 
-Se uma pré-condição não estiver pronta, a fase dependente não começa. O gate está em [F6.4](F6_WHATSAPP_CAMPAIGNS.md#gate-técnico--whatsapp-coexistence) e na [arquitetura conceitual](../30_architecture/WHATSAPP_REPRESENTATIVE_COEXISTENCE.md#14-decisões-que-o-poc-precisa-comprovar).
+Se uma pré-condição não estiver pronta, a fase dependente não começa. A evidência está na [jornada ponta a ponta](WHATSAPP_COEXISTENCE_END_TO_END.md); F6.4 e os demais contratos continuam pendentes.
 
 ## Sequência de entrega
 
 ```text
-PoC Coexistence + F6.4
+Coexistence básica validada + F6.4
           |
           v
         F7.0  Decisões e contrato conceitual
@@ -67,7 +67,7 @@ A ordem privilegia observabilidade, autoria, estado e segurança antes de automa
 
 ## F7.0 — Fechamento de decisões e contrato conceitual
 
-**Depende de:** evidências do PoC e resultado de F6.4 disponíveis para análise.
+**Depende de:** evidência básica já registrada e resultado de F6.4 disponível para análise.
 
 **Entrega:** decisões suficientes para implementar F7.1 sem inventar regras em código: identificador canônico da conversa; autoridade final sobre `mode`; autoria conceitual e contrato de eventos Gateway → CRM; timeout, horários e ativação automática; retenção LGPD; mídia; capabilities customer-facing; e corrida Humano × Bot.
 
@@ -77,7 +77,7 @@ A ordem privilegia observabilidade, autoria, estado e segurança antes de automa
 
 ## F7.1 — Observação e autoria da conversa
 
-**Depende de:** F7.0, PoC aprovado para os eventos necessários e F6.4 funcional.
+**Depende de:** F7.0, contrato de eventos necessário fechado e F6.4 funcional.
 
 **Entrega:** observação e projeção futura de mensagens com autoria explícita:
 
@@ -89,7 +89,7 @@ SYSTEM
 BOT_HANDOFF
 ```
 
-O primeiro corte cobre inbound do cliente, outbound manual do representante e outbound automático quando este vier a existir, sempre vinculados a tenant, representante, cliente, contato e linha. `smb_message_echoes` é o candidato central para autoria `HUMAN`, condicionado ao PoC; este blueprint não define seu payload.
+O primeiro corte cobre inbound do cliente, outbound manual do representante e outbound automático quando este vier a existir, sempre vinculados a tenant, representante, cliente, contato e linha. `smb_message_echoes` já foi observado no Gateway, mas seu payload, correlação e projeção `HUMAN` no CRM continuam fora deste blueprint.
 
 **Critério de saída:** o CRM consegue distinguir quem produziu cada mensagem e qual conversa conceitual ela integra, sem resposta automática.
 

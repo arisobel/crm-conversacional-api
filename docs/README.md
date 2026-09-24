@@ -33,6 +33,7 @@ Memória operacional do CRM Conversacional API.
 
 - [Modelo de domínio atual](20_domain/DOMAIN_MODEL.md)
 - [Entrega F1 — tabela vigente no WhatsApp](40_delivery/F1_PRICE_LIST_GATEWAY.md)
+- [WhatsApp Coexistence — jornada ponta a ponta CRM ↔ Gateway](40_delivery/WHATSAPP_COEXISTENCE_END_TO_END.md)
 - [Manifesto por ator no WhatsApp](30_architecture/WHATSAPP_ACTOR_MANIFEST.md) — desenho, nada implementado
 - [Backlog da interface administrativa](40_delivery/ADMIN_INTERFACE_BACKLOG.md)
 

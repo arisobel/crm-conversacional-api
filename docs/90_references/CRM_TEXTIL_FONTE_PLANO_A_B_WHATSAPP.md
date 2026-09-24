@@ -1,4 +1,12 @@
 # CRM-Têxtil / Gateway — Fonte de Projeto
+
+> **Atualização de estado (2026-09-24):** este arquivo preserva a investigação e
+> o roteiro original da PoC como histórico. A validação básica foi concluída:
+> onboarding pelo CRM, inbound roteado pelo Gateway, resposta automática,
+> resposta manual no WhatsApp Business App e `smb_message_echoes` observado.
+> A fonte vigente para essa evidência é a [jornada ponta a ponta de
+> Coexistence](../40_delivery/WHATSAPP_COEXISTENCE_END_TO_END.md). As seções de
+> conversa híbrida, timeline, handoff e campanhas continuam propostas futuras.
 ## Comunicação Representante ↔ Cliente via WhatsApp
 
 **Classificação:** documento de origem / referência de projeto\
@@ -342,15 +350,12 @@ O Gateway já possui conceitos que favorecem o Plano A:
 
 O Gateway, portanto, não foi construído assumindo uma única linha WhatsApp.
 
-### Lacuna atual
+### Lacuna atualizada
 
-Ainda não há tratamento específico de eventos de Coexistence como:
-
-- `smb_message_echoes`;
-- `smb_app_state_sync`;
-- sincronização/histórico Coexistence.
-
-Essa é uma extensão futura claramente delimitada.
+O `smb_message_echoes` foi observado no Gateway durante a validação real e não
+é mais uma lacuna de evidência básica. Permanecem futuras a projeção desse echo
+como autoria no CRM, `smb_app_state_sync`, sincronização/histórico integral e a
+automação baseada nesses eventos.
 
 ---
 
@@ -460,9 +465,11 @@ Não deve, neste momento, ser implementado antes de esgotar a validação práti
 
 ---
 
-# 10. PoC técnico do Plano A
+# 10. PoC técnico do Plano A — histórico da validação básica
 
-Antes de alterar profundamente CRM-api ou Gateway, realizar um PoC com **um único número**.
+O roteiro abaixo foi a base da validação com um número e permanece como registro
+histórico. Seus resultados básicos foram obtidos; não deve ser lido como bloqueio
+atual para afirmar a viabilidade de Coexistence.
 
 ## Etapa P0 — Meta / Tech Provider
 
@@ -576,9 +583,11 @@ Após validar P3–P6:
 
 ---
 
-# 11. Critérios de aceite do PoC
+# 11. Critérios de aceite do PoC — resultado histórico
 
-O Plano A será considerado comprovado quando:
+Os critérios de coexistência básica foram atendidos até a observação da mensagem
+manual no Gateway. A correlação/projeção integral no CRM, timeline e automação
+não foram declaradas concluídas e seguem em F7/F6.4.
 
 1. o mesmo número funcionar simultaneamente no WhatsApp Business App e Cloud API;
 2. a API enviar usando esse número;
@@ -604,13 +613,15 @@ O Plano A será considerado comprovado quando:
 7. **Plano A e B reutilizam o mesmo motor comercial.**
 8. **WhatsApp permanece a interface operacional principal do representante.**
 9. **CRM é uma projeção complementar, gerencial e histórica.**
-10. **Coexistence deve ser validado primeiro por PoC antes de redesenho definitivo.**
+10. **Coexistence foi validado pela PoC básica antes da evolução do desenho definitivo.**
 
 ---
 
-# 13. Próxima decisão
+# 13. Próxima decisão — histórico substituído
 
-O próximo trabalho deve ser **executar a validação P0/P1 do PoC**, começando pela configuração Meta Tech Provider já existente e identificando exatamente:
+O trabalho de executar a validação P0/P1 foi concluído. A próxima decisão passa
+a ser fechar, separadamente, o contrato de campanhas (F6.4) e os limites da
+conversa híbrida (F7), sem presumir que esses produtos já existem.
 
 - qual app Meta será utilizado;
 - qual configuração Embedded Signup está disponível;
@@ -1105,14 +1116,15 @@ Adicionar aos princípios arquiteturais do projeto:
 
 ---
 
-# 26. Extensão do PoC do Plano A
+# 26. Extensão do PoC do Plano A — backlog futuro
 
-O PoC deve ganhar etapas adicionais depois da validação básica de Coexistence.
+A validação básica de Coexistence foi concluída. As etapas abaixo descrevem o
+backlog futuro de produto e não resultados já obtidos.
 
-## P8 — Echo de mensagem humana
+## P8 — Echo de mensagem humana (evidência técnica obtida; projeção ainda futura)
 
 - representante envia uma mensagem manual pelo WhatsApp Business App;
-- Gateway recebe `smb_message_echoes`;
+- Gateway recebe `smb_message_echoes` — **observado na validação**;
 - sistema identifica corretamente:
   - linha;
   - representante;
@@ -1120,7 +1132,7 @@ O PoC deve ganhar etapas adicionais depois da validação básica de Coexistence
   - direção;
   - `wamid`;
   - conteúdo;
-- CRM registra a autoria como `HUMAN`.
+- CRM registra a autoria como `HUMAN` — **futuro**.
 
 ## P9 — Resposta automática na mesma conversa
 

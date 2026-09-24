@@ -128,11 +128,12 @@ identifica o dono da campanha; o Gateway resolve a linha autorizada no canal.
 `phone_number_id`, credenciais e demais ativos Meta permanecem sob autoridade do
 Gateway.
 
-O Plano A depende da validação prática de **WhatsApp Coexistence**. É uma
-direção preferencial e tecnicamente promissora, condicionada a PoC técnico no
-Gateway; não significa que o CRM já implemente Coexistence, nem que o Gateway já
-processe todos os seus eventos específicos. O contexto de origem está em
-[Fonte — Plano A / Plano B WhatsApp](../90_references/CRM_TEXTIL_FONTE_PLANO_A_B_WHATSAPP.md).
+O vertical slice de **WhatsApp Coexistence** foi validado: onboarding via CRM,
+inbound no Gateway, resposta automática, resposta manual no WhatsApp Business
+App e `smb_message_echoes` observado. Isso confirma a viabilidade básica do
+Plano A, sem declarar o sender de campanhas, F6.4 ou a conversa híbrida como
+implementados. A evidência canônica está em [WhatsApp Coexistence — jornada
+ponta a ponta CRM ↔ Gateway](../40_delivery/WHATSAPP_COEXISTENCE_END_TO_END.md).
 
 A continuidade conversacional posterior à campanha, inclusive a evolução futura
 de conversação híbrida Humano + IA na identidade do representante, é uma frente
@@ -284,11 +285,11 @@ Motor comercial CRM
 F6.1 / F6.2 / F6.3
         |
         v
-PoC Coexistence no Gateway
+Coexistence básica validada
         |
-        +---- GO ----> Plano A / sender do representante
+        +---- Plano A viável → contrato/sender de campanha (F6.4, futuro)
         |
-        +---- NO-GO -> Plano B / fallback central
+        +---- Plano B → fallback central explícito, se necessário
         |
         v
 F6.4 integração CRM ↔ Gateway
@@ -297,7 +298,6 @@ F6.4 integração CRM ↔ Gateway
 F6.5 comandos conversacionais
 ```
 
-O PoC decide a estratégia de sender antes do desenho definitivo da integração.
-A F6.4 continua responsável pelo contrato e pela integração CRM ↔ Gateway; F6.5
-continua sendo o incremento de comandos sobre o motor já validado. Esta ordem
-não altera o arquivo F6 nesta sessão.
+A validação básica não fecha a estratégia comercial de sender: F6.4 continua
+responsável pelo contrato e pela integração CRM ↔ Gateway, e F6.5 pelo incremento
+de comandos sobre o motor já validado. A conversa híbrida é escopo futuro de F7.

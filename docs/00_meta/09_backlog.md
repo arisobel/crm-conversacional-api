@@ -536,7 +536,11 @@ gate de Coexistence para definir sender; F6.5 continua posterior à integração
 
 ### D3 — Contratos e execução no Gateway
 
-- [ ] Executar o PoC de WhatsApp Coexistence e registrar GO/NO-GO para o Plano A.
+- [x] Validar o vertical slice de WhatsApp Coexistence para o Plano A: onboarding,
+      inbound, resposta automática, resposta manual no App e `smb_message_echoes`
+      observado. A evidência está em
+      [WHATSAPP_COEXISTENCE_END_TO_END](../40_delivery/WHATSAPP_COEXISTENCE_END_TO_END.md).
+      Isso não conclui campanhas, F6.4 ou F7.
 - [ ] Fechar o contrato CRM → Gateway e eventos Gateway → CRM, com HMAC,
       correlação, idempotência, replay, tentativa parcial e reconciliação, sem
       fechar endpoint ou payload antes da F6.0.

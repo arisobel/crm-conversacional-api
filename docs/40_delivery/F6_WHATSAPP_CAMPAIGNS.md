@@ -44,12 +44,10 @@ F6.1 modelo de campanha ───────┐
 F6.2 resolvedor de audiência ───┼─ F6.3 portal de campanhas
                                 |
                                 v
-                         PoC Coexistence
-                            /       \
-                          GO        NO-GO
-                          |           |
-                          v           v
-                      Plano A      Plano B
+                    Coexistence básica validada
+                             |
+                             v
+                Plano A viável / Plano B fallback
                           \           /
                            \         /
                             v       v
@@ -366,8 +364,11 @@ permanece aberta ao contrato — não é definida nesta fase.
 
 ### Gate técnico — WhatsApp Coexistence
 
-A implementação definitiva do sender do Plano A depende de evidência prática no
-Gateway. Os critérios mínimos de GO são:
+A evidência básica de Coexistence foi obtida no Gateway: mesma identidade usada
+pelo WhatsApp Business App e pelo fluxo conectado, inbound roteado, resposta
+automática, resposta manual e `smb_message_echoes` observado. Os critérios abaixo
+ficam preservados como histórico do gate e como referência para a integração de
+campanhas, que ainda não está concluída:
 
 - mesma linha utilizável no WhatsApp Business App e na Cloud API;
 - envio por API pela linha correta e mensagem visível no aplicativo;
@@ -380,7 +381,9 @@ O detalhamento conceitual está em
 [WhatsApp Coexistence e conversa híbrida do representante](../30_architecture/WHATSAPP_REPRESENTATIVE_COEXISTENCE.md)
 e a evidência de origem em
 [Fonte — Plano A / Plano B WhatsApp](../90_references/CRM_TEXTIL_FONTE_PLANO_A_B_WHATSAPP.md).
-Este gate não reproduz o roteiro P0–P12 nem declara Coexistence implementado.
+O registro canônico da evidência é [WhatsApp Coexistence — jornada ponta a ponta
+CRM ↔ Gateway](WHATSAPP_COEXISTENCE_END_TO_END.md). A validação não declara F6.4,
+sender de campanha ou automação comercial implementados.
 
 ### Estratégias de sender após o gate
 

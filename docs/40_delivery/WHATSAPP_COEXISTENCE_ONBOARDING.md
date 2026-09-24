@@ -1,8 +1,8 @@
 # Onboarding WhatsApp Coexistence — CRM
 
-**Estado:** implementado no CRM em 2026-09-23; requer Gateway compatível configurado para funcionar ponta a ponta.
+**Estado:** implementado e validado ponta a ponta. A referência canônica, incluindo evidência de coexistência, é [WhatsApp Coexistence — jornada ponta a ponta CRM ↔ Gateway](WHATSAPP_COEXISTENCE_END_TO_END.md).
 
-## Fluxo
+## Resumo operacional
 
 ```text
 Representative UI → CRM route → CRM service → Gateway client
@@ -10,9 +10,9 @@ Representative UI → CRM route → CRM service → Gateway client
 → CRM polling → CONNECTED
 ```
 
-O CRM é dono de tenant, usuário, RBAC, vínculo comercial, UX e auditoria. O Gateway é dono de Embedded Signup, OAuth, token, WABA, `phone_number_id`, linha, routing e webhook.
+O CRM é dono de tenant, usuário, RBAC, vínculo comercial, UX e auditoria. O Gateway é dono de Embedded Signup, OAuth, token, WABA, `phone_number_id`, linha, routing e webhook. A validação real incluiu inbound roteado a `crm_textil / consulta_cliente`, resposta automática, resposta manual no WhatsApp Business App e `smb_message_echoes` observado no Gateway.
 
-## Entrega
+## Entrega implementada
 
 - Migração `0016_whatsapp_onboarding` e `RepresentativeWhatsappConnection`.
 - Uma conexão ativa (`CONNECTING`, `CONNECTED` ou `ACTION_REQUIRED`) por tenant/representante.
@@ -22,17 +22,11 @@ O CRM é dono de tenant, usuário, RBAC, vínculo comercial, UX e auditoria. O G
 - Popup somente quando o Gateway retornar `launch_url`; um resume sem URL continua server-side e o polling segue a cada três segundos, no máximo cinco minutos, até estado terminal.
 - Auditoria de início, conclusão, falha, conflito, ação requerida e retomada, sem URLs ou segredos.
 
-## Estados
+## Estados e retry
 
-`AUTHORIZATION_PENDING`, `TOKEN_EXCHANGE_PENDING`, `TOKEN_RECEIVED`, `ASSET_DISCOVERY_PENDING`, `ASSET_DISCOVERED`, `SUBSCRIPTION_PENDING` e `PROVISIONING` projetam `CONNECTING`. `COMPLETED` projeta `CONNECTED`; `ACTION_REQUIRED`, `CONFLICT` e `FAILED` preservam seus estados comerciais.
+`AUTHORIZATION_PENDING`, `TOKEN_EXCHANGE_PENDING`, `TOKEN_RECEIVED`, `ASSET_DISCOVERY_PENDING`, `ASSET_DISCOVERED` e `PROVISIONING` projetam `CONNECTING`. `COMPLETED` projeta `CONNECTED`; `ACTION_REQUIRED`, `CONFLICT` e `FAILED` preservam seus estados comerciais. `SUBSCRIPTION_PENDING`, se recebido, também é projetado defensivamente para `CONNECTING`, mas é estado interno/reservado do Gateway e não transição pública efetiva declarada por este lifecycle.
 
-## Repetição após falha
-
-O CRM calcula `retry_action` e a interface não interpreta `failure_code` diretamente.
-`TOKEN_EXCHANGE_REJECTED` é inicialmente `RESTART`: o mesmo representante inicia uma
-nova tentativa, com nova chave de idempotência e novo onboarding no Gateway; a tentativa
-falha anterior permanece no histórico. As demais falhas são `RESUME` até receberem regra
-explícita. Só uma tentativa ativa continua permitida por representante.
+O CRM calcula `retry_action` e a interface não interpreta `failure_code` diretamente. `TOKEN_EXCHANGE_REJECTED` e `NEW_AUTHORIZATION_REQUIRED` exigem `RESTART`; falhas recuperáveis usam `RESUME`. O restart cria novo onboarding e chave de idempotência para o mesmo representante, preservando a tentativa anterior no histórico. Só uma tentativa ativa continua permitida por representante.
 
 ## Deploy e teste manual
 
