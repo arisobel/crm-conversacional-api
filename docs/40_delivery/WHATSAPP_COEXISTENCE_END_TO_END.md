@@ -35,23 +35,26 @@ Representante (ou ADMIN/MANAGER do mesmo tenant)
 | CRM | Gateway — não pertence ao CRM |
 |---|---|
 | tenant, representante, RBAC e vínculo comercial | OAuth Meta, tokens e credenciais |
-| `RepresentativeWhatsappConnection`, idempotência e auditoria | WABA, `phone_number_id` e `subscribed_apps` |
+| `RepresentativeWhatsappConnection`, geração/persistência/reuso de `idempotency_key` e auditoria | WABA, `phone_number_id` e `subscribed_apps` |
 | UX, popup, polling e projeção sanitizada de status | Embedded Signup, `launch_url`, provisioning e `whatsapp_lines` |
 | histórico das tentativas e número exibível | `line_flow_bindings`, webhook, roteamento e transporte Meta |
+| referências comerciais enviadas ao onboarding | validação/enforcement de idempotência: mesma chave + mesmo corpo reutiliza onboarding; mesma chave + corpo diferente gera conflito |
 
 O CRM não chama a Graph API, não persiste token Meta, código OAuth, segredo, payload bruto de webhook ou `launch_url`. A referência de linha do Gateway é correlação técnica; a autoridade operacional permanece no Gateway.
 
 ## Contrato CRM → Gateway usado no onboarding
 
-O cliente interno do CRM chama o Gateway com Bearer token server-side, timeout e chave de idempotência. As respostas são validadas e sanitizadas antes da projeção.
+O cliente interno do CRM chama o Gateway com Bearer token server-side, timeout e chave de idempotência. O CRM gera, persiste e reutiliza a `idempotency_key` quando aplicável; o Gateway valida e aplica a idempotência do onboarding. A mesma chave com o mesmo corpo reutiliza o onboarding; a mesma chave com corpo diferente resulta em conflito. As respostas são validadas e sanitizadas antes da projeção.
 
 | Operação | Finalidade | Resultado relevante para o CRM |
 |---|---|---|
 | `create` | inicia onboarding com referências de tenant e representante | `onboarding_id`, estado, `launch_url` temporária |
 | `GET status` | atualiza a tentativa em andamento | estado, `display_phone_number`, referência de linha e falha sanitizada |
-| `resume` | retoma trabalho técnico recuperável | estado e, opcionalmente, nova `launch_url` |
+| `resume` | retoma trabalho técnico recuperável, essencialmente server-side | estado; `launch_url` opcional aceita apenas por compatibilidade/defesa |
 
-O contrato concreto atualmente usado pelo CRM é `POST /internal/meta/whatsapp/onboardings`, `GET /internal/meta/whatsapp/onboardings/{onboarding_id}` e `POST /internal/meta/whatsapp/onboardings/{onboarding_id}/resume`. O `create` informa `application_reference=crm_textil` e `flow_reference=consulta_cliente`; a resolução e o vínculo técnico continuam no Gateway.
+O contrato concreto atualmente usado pelo CRM é `POST /internal/meta/whatsapp/onboardings`, `GET /internal/meta/whatsapp/onboardings/{onboarding_id}` e `POST /internal/meta/whatsapp/onboardings/{onboarding_id}/resume`. No `create`, `customer_reference = tenant_reference`: é a referência externa do tenant/conta comercial que contextualiza o onboarding, não necessariamente um customer/cliente comercial do CRM. `representative_reference = representative.public_ref`; portanto tenant, customer comercial e representante não devem ser confundidos. O `create` também informa `application_reference=crm_textil` e `flow_reference=consulta_cliente`; a resolução e o vínculo técnico continuam no Gateway.
+
+No contrato atual, `resume` normalmente não retorna uma nova `launch_url`; o CRM apenas aceita esse campo opcionalmente por compatibilidade/defesa. Se houver necessidade de nova interação Meta, o caminho é `RESTART` com novo onboarding, e não a criação de uma URL no `resume`.
 
 ## Mapeamento de estado Gateway → CRM
 
@@ -74,7 +77,7 @@ O contrato concreto atualmente usado pelo CRM é `POST /internal/meta/whatsapp/o
 | falha recuperável, por exemplo `TRANSIENT_GATEWAY_FAILURE` | `RESUME` | retoma o mesmo onboarding; pode não haver popup |
 | `TOKEN_EXCHANGE_REJECTED` | `RESTART` | cria novo onboarding e nova chave de idempotência; conserva o histórico falho |
 | `NEW_AUTHORIZATION_REQUIRED` | `RESTART` | inicia nova autorização Meta para o mesmo representante |
-| `ACTION_REQUIRED` | `RESUME` | solicita continuidade ao Gateway; há popup apenas se ele devolver URL |
+| `ACTION_REQUIRED` | `RESUME` | solicita continuidade server-side; nova interação Meta requer `RESTART`/novo onboarding |
 
 Uma tentativa ativa por tenant/representante é permitida (`CONNECTING`, `CONNECTED` ou `ACTION_REQUIRED`). `CONFLICT` e falhas não recuperáveis não são convertidos silenciosamente em conexão ativa.
 
