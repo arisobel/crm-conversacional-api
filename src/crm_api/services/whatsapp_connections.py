@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from enum import StrEnum
 
 from crm_api.models.user import User, UserRole
 from crm_api.models.whatsapp_connection import (
@@ -25,6 +26,24 @@ class ConnectionForbidden(Exception):
 
 class ConnectionConflict(Exception):
     pass
+
+
+class ConnectionRetryAction(StrEnum):
+    NONE = "NONE"
+    RESUME = "RESUME"
+    RESTART = "RESTART"
+
+
+_NON_RECOVERABLE_FAILURE_CODES = frozenset({"TOKEN_EXCHANGE_REJECTED"})
+
+
+def retry_action_for(connection: RepresentativeWhatsappConnection | None) -> ConnectionRetryAction:
+    """A regra fica no domínio, não na UI, para crescer por failure_code."""
+    if connection is None or connection.status is not WhatsappConnectionStatus.FAILED:
+        return ConnectionRetryAction.NONE
+    if connection.failure_code in _NON_RECOVERABLE_FAILURE_CODES:
+        return ConnectionRetryAction.RESTART
+    return ConnectionRetryAction.RESUME
 
 
 _MAP = {
@@ -171,6 +190,9 @@ class WhatsappConnectionService:
                 if data.launch_url:
                     return existing, data.launch_url
             raise ConnectionConflict
+        if existing and existing.status is WhatsappConnectionStatus.FAILED:
+            if retry_action_for(existing) is not ConnectionRetryAction.RESTART:
+                raise ConnectionConflict
         connection = RepresentativeWhatsappConnection(
             id=uuid.uuid4(),
             tenant_id=tenant_id,
@@ -186,7 +208,14 @@ class WhatsappConnectionService:
         )
         connection.gateway_onboarding_id = data.onboarding_id
         self._apply(connection, data)
-        self._audit_event(connection, actor_id, "WHATSAPP_CONNECTION_STARTED", request_id)
+        self._audit_event(
+            connection,
+            actor_id,
+            "WHATSAPP_CONNECTION_RESTARTED"
+            if existing and existing.status is WhatsappConnectionStatus.FAILED
+            else "WHATSAPP_CONNECTION_STARTED",
+            request_id,
+        )
         return connection, data.launch_url or ""
 
     async def resume(
@@ -210,6 +239,11 @@ class WhatsappConnectionService:
             or not connection.gateway_onboarding_id
             or connection.status
             not in {WhatsappConnectionStatus.ACTION_REQUIRED, WhatsappConnectionStatus.FAILED}
+        ):
+            raise ConnectionConflict
+        if (
+            connection.status is WhatsappConnectionStatus.FAILED
+            and retry_action_for(connection) is not ConnectionRetryAction.RESUME
         ):
             raise ConnectionConflict
         data = await self._gateway.resume_onboarding(

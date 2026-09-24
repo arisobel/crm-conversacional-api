@@ -1393,6 +1393,10 @@ components:
         launch_url:
           type: [string, "null"]
           description: URL temporária do Gateway; presente somente ao iniciar ou retomar.
+        retry_action:
+          type: string
+          enum: [NONE, RESUME, RESTART]
+          description: Ação de recuperação calculada pelo CRM para uma falha.
 
     Problem:
       type: object

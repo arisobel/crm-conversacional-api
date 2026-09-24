@@ -118,6 +118,7 @@ from crm_api.services.whatsapp_connections import (
     ConnectionForbidden,
     ConnectionNotFound,
     WhatsappConnectionService,
+    retry_action_for,
 )
 from crm_api.web.csrf import CSRF_FIELD_NAME, csrf_is_valid
 from crm_api.web.dependencies import LOGIN_PATH, PortalRedirect, portal_user
@@ -1040,7 +1041,11 @@ async def pagina_whatsapp_do_representante(
     return _render(
         request,
         "whatsapp_connection.html",
-        {"representative": representative, "connection": connection},
+        {
+            "representative": representative,
+            "connection": connection,
+            "retry_action": retry_action_for(connection),
+        },
         current_user=current_user,
     )
 

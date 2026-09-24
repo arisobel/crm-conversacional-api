@@ -21,6 +21,7 @@ from crm_api.services.whatsapp_connections import (
     ConnectionForbidden,
     ConnectionNotFound,
     WhatsappConnectionService,
+    retry_action_for,
 )
 from crm_api.web.csrf import csrf_is_valid
 
@@ -48,6 +49,7 @@ def _response(
         started_at=connection.started_at,
         connected_at=connection.connected_at,
         launch_url=launch_url,
+        retry_action=retry_action_for(connection),
     )
 
 

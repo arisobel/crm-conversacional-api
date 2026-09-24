@@ -291,7 +291,11 @@
       } else if (conexao.status === "CONFLICT") {
         estado.innerHTML = "<p>Existe um conflito na configuração desta linha.</p><p class=\"dica\">Contate um administrador.</p>";
       } else if (conexao.status === "FAILED") {
-        estado.innerHTML = "<p>Não foi possível concluir a conexão.</p><button type=\"button\" data-whatsapp-action=\"resume\">Tentar novamente</button>";
+        if (conexao.retry_action === "RESTART") {
+          estado.innerHTML = "<p>Não foi possível concluir a conexão.</p><p class=\"dica\">É necessário iniciar uma nova autorização.</p><button type=\"button\" data-whatsapp-action=\"restart\">Iniciar nova conexão</button>";
+        } else {
+          estado.innerHTML = "<p>Não foi possível concluir a conexão.</p><button type=\"button\" data-whatsapp-action=\"resume\">Retomar configuração</button>";
+        }
       } else {
         estado.innerHTML = "<p>Conexão em andamento...</p><p class=\"dica\">Esta página acompanha a configuração automaticamente.</p>";
       }
@@ -321,17 +325,29 @@
       if (!botao) return;
       botao.addEventListener("click", async function () {
         botao.disabled = true;
+        var retomada = botao.dataset.whatsappAction === "resume";
+        // Só a criação precisa preservar o gesto do clique para o navegador:
+        // o Gateway sempre retorna o launcher nesse caso. Resume costuma ser
+        // trabalho server-side e não deve abrir uma janela vazia.
+        var janela = retomada
+          ? null
+          : window.open("", "whatsapp_onboarding", "width=700,height=760");
         try {
-          var conexao = await requisitar("POST", botao.dataset.whatsappAction === "resume" ? "/resume" : "");
-          // Resume normalmente continua o provisioning no Gateway. Só uma
-          // resposta que de fato pede interação Meta abre uma nova janela.
+          var conexao = await requisitar("POST", retomada ? "/resume" : "");
           if (conexao.launch_url) {
-            window.open(conexao.launch_url, "whatsapp_onboarding", "width=700,height=760");
+            if (janela) {
+              janela.location = conexao.launch_url;
+            } else {
+              window.open(conexao.launch_url, "whatsapp_onboarding", "width=700,height=760");
+            }
+          } else if (janela) {
+            janela.close();
           }
           mostrar(conexao);
           tentativas = 0;
           if (!terminal[conexao.status]) setTimeout(atualizar, 3000);
         } catch (_) {
+          if (janela) janela.close();
           botao.disabled = false;
           estado.insertAdjacentHTML("beforeend", "<p class=\"aviso erro\">Não foi possível iniciar a configuração.</p>");
         }

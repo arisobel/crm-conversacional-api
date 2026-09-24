@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from crm_api.models.whatsapp_connection import WhatsappConnectionStatus
+from crm_api.services.whatsapp_connections import ConnectionRetryAction
 
 
 class WhatsappConnectionResponse(BaseModel):
@@ -16,3 +17,4 @@ class WhatsappConnectionResponse(BaseModel):
     started_at: datetime | None
     connected_at: datetime | None
     launch_url: str | None = None
+    retry_action: ConnectionRetryAction = ConnectionRetryAction.NONE

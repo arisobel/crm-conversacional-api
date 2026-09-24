@@ -14,7 +14,12 @@
   {% elif connection.status.value == 'CONFLICT' %}
     <p>Existe um conflito na configuração desta linha.</p><p class="dica">Contate um administrador.</p>
   {% elif connection.status.value == 'FAILED' %}
-    <p>Não foi possível concluir a conexão.</p><button type="button" data-whatsapp-action="resume">Tentar novamente</button>
+    <p>Não foi possível concluir a conexão.</p>
+    {% if retry_action.value == 'RESTART' %}
+    <p class="dica">É necessário iniciar uma nova autorização.</p><button type="button" data-whatsapp-action="restart">Iniciar nova conexão</button>
+    {% else %}
+    <button type="button" data-whatsapp-action="resume">Retomar configuração</button>
+    {% endif %}
   {% else %}
     <p>Conexão em andamento...</p><p class="dica">Esta página acompanha a configuração automaticamente.</p>
   {% endif %}

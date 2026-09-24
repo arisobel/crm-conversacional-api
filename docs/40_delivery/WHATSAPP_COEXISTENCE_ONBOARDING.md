@@ -26,6 +26,14 @@ O CRM é dono de tenant, usuário, RBAC, vínculo comercial, UX e auditoria. O G
 
 `AUTHORIZATION_PENDING`, `TOKEN_EXCHANGE_PENDING`, `TOKEN_RECEIVED`, `ASSET_DISCOVERY_PENDING`, `ASSET_DISCOVERED`, `SUBSCRIPTION_PENDING` e `PROVISIONING` projetam `CONNECTING`. `COMPLETED` projeta `CONNECTED`; `ACTION_REQUIRED`, `CONFLICT` e `FAILED` preservam seus estados comerciais.
 
+## Repetição após falha
+
+O CRM calcula `retry_action` e a interface não interpreta `failure_code` diretamente.
+`TOKEN_EXCHANGE_REJECTED` é inicialmente `RESTART`: o mesmo representante inicia uma
+nova tentativa, com nova chave de idempotência e novo onboarding no Gateway; a tentativa
+falha anterior permanece no histórico. As demais falhas são `RESUME` até receberem regra
+explícita. Só uma tentativa ativa continua permitida por representante.
+
 ## Deploy e teste manual
 
 Configurar `CRM_WHATSAPP_GATEWAY_BASE_URL`, `CRM_WHATSAPP_GATEWAY_INTERNAL_TOKEN` (igual a `INTERNAL_STATUS_API_TOKEN` do Gateway) e `CRM_WHATSAPP_GATEWAY_TIMEOUT_SECONDS`; aplicar `alembic upgrade head`; reiniciar o CRM.
