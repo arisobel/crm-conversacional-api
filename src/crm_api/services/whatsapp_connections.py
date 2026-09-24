@@ -34,7 +34,10 @@ class ConnectionRetryAction(StrEnum):
     RESTART = "RESTART"
 
 
-_NON_RECOVERABLE_FAILURE_CODES = frozenset({"TOKEN_EXCHANGE_REJECTED"})
+_NON_RECOVERABLE_FAILURE_CODES = frozenset({"TOKEN_EXCHANGE_REJECTED",
+                                            "NEW_AUTHORIZATION_REQUIRED",})
+
+
 
 
 def retry_action_for(connection: RepresentativeWhatsappConnection | None) -> ConnectionRetryAction:
