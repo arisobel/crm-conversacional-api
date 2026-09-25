@@ -19,6 +19,12 @@ para enviar uma mensagem a uma lista de telefones. Este corte não cria template
 na Meta, não infere público, não escolhe destinatário com LLM e não envia texto
 livre de marketing fora da janela de 24 horas.
 
+Uma campanha também poderá ser preparada por conversa pela futura
+[`CRM_ASSISTANT_LINE`](WHATSAPP_AS_CRM_INTERFACE.md#crm_assistant_line). Isso
+não cria um segundo motor: a linha assistente é interface interna de preparação
+e confirmação; a `REPRESENTATIVE_COEXISTENCE_LINE` é o canal externo pelo qual
+o Gateway executará o envio quando F6.4 existir.
+
 ## Motor comercial único e estratégias de canal
 
 O CRM-api possui **um único motor comercial de campanhas**. Ele identifica o

@@ -2,6 +2,11 @@
 
 Blueprint de entrega futura para a conversa contínua entre Cliente, Representante, Gateway, CRM-api e IA/LLM. A Coexistence básica já foi validada, conforme a [jornada ponta a ponta](WHATSAPP_COEXISTENCE_END_TO_END.md); este documento não declara F7 ou automação como implementados.
 
+F7 trata a `REPRESENTATIVE_COEXISTENCE_LINE`, o canal externo representante ↔
+cliente. A `CRM_ASSISTANT_LINE` permanece um canal interno separado, pelo qual a
+IA pode assistir o representante sem falar com o cliente; ver [WhatsApp como
+interface do CRM-textil](../10_product/WHATSAPP_AS_CRM_INTERFACE.md).
+
 ## Natureza e fronteira da fase
 
 F7 começa quando o problema deixa de ser campanha e passa a ser atendimento contínuo.

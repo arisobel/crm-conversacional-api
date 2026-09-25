@@ -5,6 +5,12 @@
 
 A evidência e o contrato de onboarding estão consolidados em [WhatsApp Coexistence — jornada ponta a ponta CRM ↔ Gateway](../40_delivery/WHATSAPP_COEXISTENCE_END_TO_END.md). Este documento não substitui aquele contrato e não declara F6.4, F7, campanhas pelo vínculo ou automação humano + bot como entregues.
 
+O papel desta linha é `REPRESENTATIVE_COEXISTENCE_LINE`: canal comercial externo
+do representante. Ele é distinto da `CRM_ASSISTANT_LINE`, interface interna pela
+qual o representante conversa com CRM-textil/IA para consultar, preparar ou
+confirmar ações. A visão e os limites dos dois papéis estão em [WhatsApp como
+interface do CRM-textil](../10_product/WHATSAPP_AS_CRM_INTERFACE.md).
+
 ## Evidência atual e seu limite
 
 Foi validado um número conectado pelo CRM, inbound de cliente roteado pelo Gateway para `crm_textil / consulta_cliente`, resposta automática, resposta manual pelo WhatsApp Business App no mesmo número e `smb_message_echoes` observado no Gateway. Assim, a coexistência básica App + Gateway e o núcleo técnico do Plano A deixaram de ser hipótese/PoC pendente.
