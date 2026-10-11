@@ -35,6 +35,20 @@ class WhatsappConnectionRepository:
             )
         )
 
+    async def list_connected_by_line_reference(
+        self, tenant_id: uuid.UUID, gateway_line_reference: str
+    ) -> list[RepresentativeWhatsappConnection]:
+        """Todas, não a primeira: a referência não é única no banco, e mais de
+        uma conexão para a mesma linha é ambiguidade que o chamador recusa."""
+        result = await self._session.scalars(
+            select(RepresentativeWhatsappConnection).where(
+                RepresentativeWhatsappConnection.tenant_id == tenant_id,
+                RepresentativeWhatsappConnection.gateway_line_reference == gateway_line_reference,
+                RepresentativeWhatsappConnection.status == WhatsappConnectionStatus.CONNECTED,
+            )
+        )
+        return list(result)
+
     def add(self, connection: RepresentativeWhatsappConnection) -> None:
         self._session.add(connection)
 

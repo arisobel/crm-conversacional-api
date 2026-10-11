@@ -938,6 +938,37 @@ paths:
         "422":
           $ref: "#/components/responses/Unprocessable"
 
+  /internal/whatsapp/authorization-decision:
+    post:
+      tags: [Internal]
+      operationId: decideWhatsappAuthorization
+      description: >
+        Decide, por mensagem, se a linha Coexistence de um representante pode
+        acionar o robô para o remetente: só quando o titular do cliente é o dono
+        da linha. ALLOW e DENY são 200; o Gateway trata qualquer outra resposta,
+        erro ou timeout como DENY. Sem cache dos dois lados.
+      parameters:
+        - $ref: "#/components/parameters/TenantSlug"
+        - $ref: "#/components/parameters/Timestamp"
+        - $ref: "#/components/parameters/Signature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthorizationDecisionRequest"
+      responses:
+        "200":
+          description: Decisão de atendimento
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizationDecision"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
   /customers/{customerId}/preferred-products:
     get:
       tags: [Customers]
@@ -2134,6 +2165,54 @@ components:
           type: string
         whatsapp_e164:
           type: string
+
+    AuthorizationDecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [gateway_line_reference, phone_e164, application_slug, flow_slug, message_id]
+      properties:
+        gateway_line_reference:
+          type: string
+          description: Referência emitida pelo Gateway no onboarding Coexistence da linha.
+        phone_e164:
+          type: string
+          description: Telefone do remetente. Malformado resulta em DENY CONTACT_NOT_FOUND, não 422.
+        application_slug:
+          type: string
+        flow_slug:
+          type: string
+        message_id:
+          type: string
+          description: wamid da mensagem; vira request_id na auditoria.
+
+    AuthorizationDecision:
+      type: object
+      required: [decision, reason, policy_version]
+      properties:
+        decision:
+          type: string
+          enum: [ALLOW, DENY]
+        reason:
+          type: string
+          enum:
+            - AUTHORIZED
+            - LINE_UNKNOWN
+            - LINE_OWNER_INACTIVE
+            - CONTACT_NOT_FOUND
+            - CUSTOMER_INACTIVE
+            - CUSTOMER_WITHOUT_OWNER
+            - OWNER_MISMATCH
+            - AMBIGUOUS_PHONE
+            - INTERNAL_USER
+        customer_public_ref:
+          type: string
+          description: Só em ALLOW. Id do cliente.
+        contact_public_ref:
+          type: string
+          description: Só em ALLOW.
+        policy_version:
+          type: string
+          const: portfolio-v1
 
     InteractionIntent:
       type: object
