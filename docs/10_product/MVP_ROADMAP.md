@@ -36,6 +36,7 @@ O detalhamento está em [F5 — Portal do representante](../40_delivery/F5_REPRE
 | R6 | Portal do representante | — |
 
 R4 está bloqueada até a confirmação contábil da fórmula de conversão entre UFs.
+**Revisto pelo ADR-032:** o ICMS sai do fluxo padrão, e Q1/Q2 deixam de bloquear.
 
 ## Fases despriorizadas
 
@@ -81,6 +82,11 @@ tenant e servidor MCP. Campanhas de WhatsApp são a frente pós-portal detalhada
 acima; só avançam após as dependências C0.
 
 ## Evolução multiempresa
+
+> **Revisto em 2026-10-12:** o ADR-031 retoma esta evolução como "pastas"
+> (representadas) dentro do escritório do representante, e o ADR-032 tira o
+> ICMS do fluxo padrão. A nova ordem de entrega está na
+> [direção do produto](PRODUCT_DIRECTION.md).
 
 Congelada pelo ADR-013. O [backlog de representante multiempresa](MULTI_COMPANY_BACKLOG.md)
 permanece como referência histórica; "representante" neste produto significa
