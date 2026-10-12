@@ -1,6 +1,12 @@
 from uuid import uuid4
 
 import pytest
+from conftest import (
+    ADMIN_EMAIL,
+    REPRESENTATIVE_A_EMAIL,
+    build_portal_world,
+    login,
+)
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
@@ -9,12 +15,6 @@ from crm_api.models.whatsapp_connection import RepresentativeWhatsappConnection
 from crm_api.services.gateway_whatsapp_onboarding import (
     GatewayOnboarding,
     GatewayWhatsappOnboardingClient,
-)
-from tests.conftest import (
-    ADMIN_EMAIL,
-    REPRESENTATIVE_A_EMAIL,
-    build_portal_world,
-    login,
 )
 
 

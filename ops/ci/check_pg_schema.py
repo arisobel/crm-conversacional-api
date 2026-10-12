@@ -41,6 +41,8 @@ from pathlib import Path
 _RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_RAIZ / "src"))
 
+from alembic.config import Config  # noqa: E402
+from alembic.script import ScriptDirectory  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
 
@@ -153,9 +155,13 @@ async def _confere_estrutura(url: str, relatorio: Relatorio) -> str:
             revisao = await conexao.scalar(text("SELECT version_num FROM alembic_version"))
             print(f"\nBanco migrado — PostgreSQL {versao}, alembic_version={revisao}")
 
+            # A cabeça esperada vem do próprio diretório de migrações: fixá-la
+            # aqui quebrava o CI a cada migração nova (a 0016 ficou de fora).
+            migracoes = ScriptDirectory.from_config(Config(str(_RAIZ / "alembic.ini")))
+            cabeca = migracoes.get_current_head()
             relatorio.afirma(
-                "a cabeça migrada é a 0015",
-                revisao == "0015_whatsapp_campaigns",
+                f"a cabeça migrada é a {cabeca}",
+                revisao == cabeca,
                 revisao,
             )
 
