@@ -20,11 +20,13 @@ class Settings(BaseSettings):
     session_absolute_ttl_seconds: int = 43200
     session_cookie_secure: bool = True
 
-    # Forma de converter o preço-base entre UFs. `INSIDE` é o cálculo "por
-    # dentro", em que o ICMS compõe a própria base — a convenção brasileira e a
-    # proposta pendente de confirmação contábil (Q1/Q2). `OUTSIDE` trata o
-    # imposto como acréscimo sobre o líquido. Trocar aqui não altera o banco.
-    icms_conversion_mode: str = "INSIDE"
+    # Forma de converter o preço-base entre UFs. `NONE` (padrão, ADR-032)
+    # entrega o preço publicado sem conversão: nenhuma regra de ICMS, UF de
+    # origem ou localidade do cliente é exigida. `INSIDE` é o cálculo "por
+    # dentro", em que o ICMS compõe a própria base; `OUTSIDE` trata o imposto
+    # como acréscimo sobre o líquido. Os dois seguem pendentes de confirmação
+    # contábil (Q1/Q2). Trocar aqui não altera o banco.
+    icms_conversion_mode: str = "NONE"
 
     # Se a tabela enviada pelo WhatsApp já vai convertida para a UF do cliente.
     # Desligado por padrão, e o motivo é o alcance: no portal um representante

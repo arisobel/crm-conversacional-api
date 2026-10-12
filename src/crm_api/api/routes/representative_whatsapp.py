@@ -218,7 +218,10 @@ async def customer_price_list(
     tenant_slug: Annotated[str, Depends(verify_internal_request)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ResolvedCustomerPriceListResponse:
-    """Tabela de um cliente da carteira, convertida para a UF de entrega dele.
+    """Tabela de um cliente da carteira, ao preço publicado (ADR-032).
+
+    Só com a conversão de ICMS ligada o preço vai para a UF de entrega dele, e
+    só então `409`/`422` fiscais podem ocorrer.
 
     Cliente fora da carteira responde `404` de cliente — o mesmo corpo de um
     `customer_id` inexistente, como no portal: distinguir os dois confirmaria a
@@ -323,7 +326,7 @@ def _price_list_response(resolvida) -> ResolvedCustomerPriceListResponse:
         customer_name=resolvida.customer.legal_name,
         reference_month=resolvida.reference_month,
         origin_state=resolvida.origin_state,
-        destination_state=resolvida.location.state_code,
+        destination_state=resolvida.destination_state,
         currency=resolvida.currency,
         items=[
             CurrentPriceListItemResponse(

@@ -8,12 +8,17 @@
 </div>
 
 <p class="dica">
+  {% if converte %}
   {{ cliente.legal_name }} · origem
   <strong>{{ origem or 'não configurada' }}</strong>
+  {% else %}
+  {{ cliente.legal_name }} · preço publicado, sem conversão de imposto
+  {% endif %}
 </p>
 
 <section class="painel">
   <form method="get" class="filtros">
+    {% if converte %}
     <select name="location_id">
       {% for local in localidades %}
       <option value="{{ local.id }}"
@@ -22,6 +27,7 @@
       </option>
       {% endfor %}
     </select>
+    {% endif %}
     <select name="mes">
       <option value="">Competência vigente</option>
       {% for competencia in competencias %}
@@ -39,8 +45,10 @@
 <section class="painel">
   <div class="cabecalho">
     <h2>
-      {{ resolvida.reference_month.strftime('%m/%Y') }} ·
-      {{ resolvida.origin_state }} → {{ resolvida.location.state_code }}
+      {{ resolvida.reference_month.strftime('%m/%Y') }}
+      {%- if resolvida.converted %} ·
+      {{ resolvida.origin_state }} → {{ resolvida.destination_state }}
+      {%- endif %}
     </h2>
     <a class="botao"
        href="/portal/customers/{{ cliente.id }}/price-list?formato=csv{% if location_id %}&amp;location_id={{ location_id }}{% endif %}{% if mes %}&amp;mes={{ mes }}{% endif %}">
@@ -55,9 +63,13 @@
         <th>Produto</th>
         <th>Família</th>
         <th>Disponibilidade</th>
+        {% if resolvida.converted %}
         <th class="numero">Base</th>
         <th class="numero">Alíquota</th>
         <th class="numero">Final</th>
+        {% else %}
+        <th class="numero">Preço</th>
+        {% endif %}
       </tr>
     </thead>
     <tbody>
@@ -75,8 +87,10 @@
           <br><span class="vazio">chega {{ item.expected_arrival_date.strftime('%d/%m') }}</span>
           {% endif %}
         </td>
+        {% if resolvida.converted %}
         <td class="numero">{% if item.base_price is not none %}{{ item.base_price }}{% else %}—{% endif %}</td>
         <td class="numero">{% if item.tax_rate is not none %}{{ item.tax_rate }}%{% else %}—{% endif %}</td>
+        {% endif %}
         <td class="numero">
           {%- if item.final_price is not none -%}
           <strong>{{ item.final_price }}</strong>

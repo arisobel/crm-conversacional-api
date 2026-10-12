@@ -46,7 +46,10 @@ ONTEM = datetime.now(UTC) - timedelta(days=1)
 
 @pytest_asyncio.fixture
 async def world():
-    mundo = await build_portal_world()
+    mundo = await build_portal_world(
+        # Estes testes exercitam a conversão; o padrão é NONE (ADR-032).
+        icms_conversion_mode="INSIDE"
+    )
     async with mundo.app.state.session_factory() as session:
         tenant = await session.scalar(select(Tenant).where(Tenant.id == mundo.tenant_id))
         tenant.origin_state_code = "SP"

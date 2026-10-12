@@ -28,10 +28,12 @@ class ResolvedItemResponse(BaseModel):
 class ResolvedPriceListResponse(BaseModel):
     customer_id: UUID
     customer_name: str
-    location_id: UUID
-    location_label: str
-    origin_state: str
-    destination_state: str
+    # Localidade e par de UFs da conversão de ICMS. Nulos no modo padrão
+    # (ADR-032), em que o preço é o publicado e nenhuma praça é considerada.
+    location_id: UUID | None = None
+    location_label: str | None = None
+    origin_state: str | None = None
+    destination_state: str | None = None
     reference_month: date
     currency: str
     items: list[ResolvedItemResponse]

@@ -57,8 +57,8 @@ def _price_list_service(request: Request, session: AsyncSession) -> CustomerPric
     response_model=ResolvedPriceListResponse,
     responses={
         404: {"description": "Customer not found or outside the portfolio"},
-        409: {"description": "Ambiguous or missing ICMS rule"},
-        422: {"description": "Missing location, origin or published competence"},
+        409: {"description": "Ambiguous or missing ICMS rule (only with conversion on)"},
+        422: {"description": "Missing published competence; location or origin with conversion on"},
     },
 )
 async def resolved_price_list(
@@ -69,11 +69,11 @@ async def resolved_price_list(
     location_id: Annotated[uuid.UUID | None, Query()] = None,
     reference_month: Annotated[date | None, Query()] = None,
 ) -> ResolvedPriceListResponse:
-    """Produtos preferidos do cliente, com o preço convertido para a UF dele.
+    """Produtos preferidos do cliente, ao preço publicado (ADR-032).
 
-    Regra de ICMS ausente ou ambígua **interrompe a lista inteira**: entregar
-    uma tabela silenciosamente incompleta faria o representante cotar em cima
-    dela.
+    Só com a conversão de ICMS ligada o preço vai para a UF do cliente; nesse
+    caso, regra ausente ou ambígua **interrompe a lista inteira**: entregar uma
+    tabela silenciosamente incompleta faria o representante cotar em cima dela.
     """
     tenant = await UserRepository(session).get_tenant(request.app.state.settings.tenant_slug)
     if tenant is None:
@@ -106,10 +106,10 @@ async def resolved_price_list(
     return ResolvedPriceListResponse(
         customer_id=resolvida.customer.id,
         customer_name=resolvida.customer.legal_name,
-        location_id=resolvida.location.id,
-        location_label=resolvida.location.label,
+        location_id=resolvida.location.id if resolvida.location else None,
+        location_label=resolvida.location.label if resolvida.location else None,
         origin_state=resolvida.origin_state,
-        destination_state=resolvida.location.state_code,
+        destination_state=resolvida.destination_state,
         reference_month=resolvida.reference_month,
         currency=resolvida.currency,
         items=[ResolvedItemResponse(**vars(item)) for item in resolvida.items],

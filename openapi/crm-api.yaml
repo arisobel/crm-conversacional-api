@@ -594,16 +594,19 @@ paths:
       security:
         - PortalSession: []
       description: >
-        Produtos preferidos do cliente, na ordem e com o alias dele, com o preço convertido
-        para a UF da localidade onde ele recebe. Cliente sem produtos preferidos recebe o
-        catálogo ativo inteiro. Regra de ICMS ausente ou ambígua interrompe a lista inteira
-        com 409: entregar uma tabela silenciosamente incompleta faria o representante cotar
-        em cima dela.
+        Produtos preferidos do cliente, na ordem e com o alias dele. Cliente sem produtos
+        preferidos recebe o catálogo ativo inteiro. No modo padrão (`CRM_ICMS_CONVERSION_MODE=NONE`,
+        ADR-032) o preço é exatamente o publicado: nenhuma regra fiscal, UF de origem ou
+        localidade é exigida, e localidade e par de UFs saem nulos. Com a conversão ligada
+        (`INSIDE`/`OUTSIDE`) o preço vai para a UF da localidade onde ele recebe, e regra de
+        ICMS ausente ou ambígua interrompe a lista inteira com 409.
       parameters:
         - $ref: "#/components/parameters/CustomerId"
         - name: location_id
           in: query
-          description: Localidade a usar; omitida, vale a padrão ativa do cliente.
+          description: >
+            Localidade a usar com a conversão ligada; omitida, vale a padrão ativa do cliente.
+            Ignorada no modo padrão.
           schema:
             type: string
             format: uuid
@@ -1817,9 +1820,7 @@ components:
 
     ResolvedPriceList:
       type: object
-      required:
-        [customer_id, customer_name, location_id, location_label, origin_state,
-         destination_state, reference_month, currency, items]
+      required: [customer_id, customer_name, reference_month, currency, items]
       properties:
         customer_id:
           type: string
@@ -1827,14 +1828,18 @@ components:
         customer_name:
           type: string
         location_id:
-          type: string
+          type: [string, "null"]
           format: uuid
+          description: Nulo no modo padrão, sem conversão de ICMS (ADR-032).
         location_label:
-          type: string
+          type: [string, "null"]
+          description: Nulo no modo padrão, sem conversão de ICMS (ADR-032).
         origin_state:
-          type: string
+          type: [string, "null"]
+          description: Nulo no modo padrão, sem conversão de ICMS (ADR-032).
         destination_state:
-          type: string
+          type: [string, "null"]
+          description: Nulo no modo padrão, sem conversão de ICMS (ADR-032).
         reference_month:
           type: string
           format: date
@@ -2326,14 +2331,15 @@ components:
             - $ref: "#/components/schemas/Money"
             - type: "null"
           description: >
-            Preço convertido para a UF onde o cliente recebe. Nulo quando a conversão está
-            desligada (`CRM_WHATSAPP_ICMS_ENABLED`); nesse caso `base_price` é o valor a
-            exibir. Quando presente, é ele que deve ir ao cliente.
+            Preço a ir ao cliente. Nulo no regime de catálogo (`CRM_WHATSAPP_ICMS_ENABLED`
+            desligado); nesse caso `base_price` é o valor a exibir. No regime de preferidos é
+            igual a `base_price` no modo padrão (`CRM_ICMS_CONVERSION_MODE=NONE`, ADR-032), ou
+            convertido para a UF onde o cliente recebe com `INSIDE`/`OUTSIDE`.
         tax_rate:
           oneOf:
             - type: string
             - type: "null"
-          description: Alíquota de destino aplicada, em porcentagem.
+          description: Alíquota de destino aplicada, em porcentagem. Nula sem conversão.
         expected_arrival_date:
           type: [string, "null"]
           format: date
@@ -2346,10 +2352,12 @@ components:
       type: object
       required: [customer, price_list, items]
       description: >
-        Tem dois regimes. Com a conversão desligada traz o catálogo da competência com
-        `base_price` e sem par de UFs — o formato que o Gateway consome desde F1. Ligada,
-        traz apenas os produtos preferidos do cliente, na ordem dele, com `final_price`
-        convertido para a UF da localidade padrão.
+        Tem dois regimes, escolhidos por `CRM_WHATSAPP_ICMS_ENABLED`. Desligado, traz o
+        catálogo da competência com `base_price` e sem par de UFs — o formato que o Gateway
+        consome desde F1. Ligado, traz apenas os produtos preferidos do cliente, na ordem
+        dele, com `final_price`: o publicado e sem par de UFs no modo padrão
+        (`CRM_ICMS_CONVERSION_MODE=NONE`, ADR-032), ou convertido para a UF da localidade
+        padrão com `INSIDE`/`OUTSIDE`.
       properties:
         customer:
           $ref: "#/components/schemas/CustomerContact"

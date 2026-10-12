@@ -178,11 +178,12 @@ class RepresentativeWhatsappService:
         origin_state: str | None,
         at: datetime | None = None,
     ):
-        """Tabela de um cliente da carteira, convertida para a UF dele.
+        """Tabela de um cliente da carteira, ao preço publicado (ADR-032).
 
         Delega ao serviço da R4 — o mesmo que o portal usa —, então produtos
-        preferidos, localidade padrão e resolução de ICMS por especificidade não
-        são reimplementados aqui. As exceções de domínio sobem para a rota.
+        preferidos e, com a conversão ligada, localidade padrão e resolução de
+        ICMS por especificidade não são reimplementados aqui. As exceções de
+        domínio sobem para a rota.
 
         **`whatsapp_icms_enabled` não é consultado de propósito.** Aquele
         interruptor existe porque, na tabela do cliente, o número convertido vai

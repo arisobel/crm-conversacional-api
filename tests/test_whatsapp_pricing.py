@@ -39,6 +39,8 @@ def _settings(**overrides) -> Settings:
         "tenant_slug": "test-tenant",
         "internal_hmac_secret": "test-secret",
         "whatsapp_icms_enabled": True,
+        # Estes testes exercitam a conversão; o padrão é NONE (ADR-032).
+        "icms_conversion_mode": "INSIDE",
     }
     valores.update(overrides)
     return Settings(**valores)

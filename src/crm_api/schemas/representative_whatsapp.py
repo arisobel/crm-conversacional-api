@@ -36,7 +36,7 @@ class CustomerMatchesResponse(BaseModel):
 
 
 class ResolvedCustomerPriceListResponse(BaseModel):
-    """Tabela convertida de um cliente da carteira.
+    """Tabela de um cliente da carteira, ao preço publicado (ADR-032).
 
     Sem o `calculation_trace` de cada item, de propósito: ele existe para ser
     conferido item a item numa tela, e o WhatsApp não sabe exibir valores
@@ -46,7 +46,9 @@ class ResolvedCustomerPriceListResponse(BaseModel):
     customer_id: UUID
     customer_name: str
     reference_month: date
-    origin_state: str
-    destination_state: str
+    # Par de UFs da conversão de ICMS. Nulos no modo padrão: o Gateway escreve
+    # "já com ICMS para <UF>" sempre que a UF de destino vem preenchida.
+    origin_state: str | None = None
+    destination_state: str | None = None
     currency: str
     items: list[CurrentPriceListItemResponse]

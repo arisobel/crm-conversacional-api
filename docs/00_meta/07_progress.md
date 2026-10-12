@@ -1,12 +1,24 @@
 # Progresso central
 
-Atualizado em: 2026-09-04
+Atualizado em: 2026-10-12
 
 ## Estado atual
 
 **Fase ativa:** F5 e W concluídas do lado do CRM. **R0 a R6 e W1 a W7
 implementados e implantados.** Frente aberta: **D — campanhas de WhatsApp**
 (ver [backlog](09_backlog.md)).
+
+### ADR-032 — preço sem imposto no fluxo padrão (2026-10-12, não implantado)
+
+`ConversionMode.NONE` passa a ser o padrão de `CRM_ICMS_CONVERSION_MODE`. Nesse
+modo o preço entregue é exatamente o publicado: o resolvedor de ICMS não é
+consultado, e nem regra, nem UF de origem, nem localidade do cliente são
+exigidas. `origin_state`, `destination_state` e a localidade saem nulos em todos
+os caminhos (portal, `/admin/customers/{id}/price-list`, tabela do cliente pelo
+WhatsApp do representante e do cliente), porque o Gateway escreve "já com ICMS
+para <UF>" sempre que a UF vem preenchida. O motor (`INSIDE`/`OUTSIDE`) continua
+no código e nos testes. **Antes do deploy:** conferir se o CapRover define
+`CRM_ICMS_CONVERSION_MODE`; se definir `INSIDE`, a mudança não tem efeito.
 
 ### Onboarding WhatsApp Coexistence (2026-09-23)
 
@@ -367,10 +379,9 @@ vier de `price_entries`.
   decisão de 22/08. Não está definida no CapRover; o padrão do código é `false`,
   que é o desejado. O interruptor deixa de ser transitório e vira o mecanismo que
   mantém R4 dormente.
-- **`CustomerPriceListService.resolve` passa sempre pelo resolvedor de ICMS.**
-  Sem matriz carregada — e ela não será carregada — a tela de lista resolvida por
-  cliente do portal não funciona. Era pendência de dado; a decisão de 22/08
-  transformou em defeito aberto.
+- ~~**`CustomerPriceListService.resolve` passa sempre pelo resolvedor de
+  ICMS.**~~ Resolvido pelo ADR-032 em 2026-10-12: no modo padrão `NONE` o
+  resolvedor não é consultado e a lista sai sem matriz, origem ou localidade.
 - **Nota manual não pode ser excluída, só corrigida.** Uma nota lançada no
   cliente errado fica na ficha dele; o que sobra é reescrevê-la para "lançamento
   indevido". Falta decidir se some ou se é marcada.

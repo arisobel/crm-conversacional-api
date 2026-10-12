@@ -24,11 +24,14 @@ _QUATRO_CASAS = Decimal("0.0001")
 class ConversionMode(StrEnum):
     """Como o imposto se relaciona com o preço.
 
-    `INSIDE` é o ICMS "por dentro": o imposto compõe a própria base, convenção
-    brasileira. `OUTSIDE` o trata como acréscimo sobre o líquido. A escolha é de
-    natureza fiscal e está pendente de confirmação contábil (Q1/Q2).
+    `NONE` é o padrão (ADR-032): o preço entregue é o publicado na tabela, sem
+    conversão, e nenhuma regra fiscal é consultada. `INSIDE` é o ICMS "por
+    dentro": o imposto compõe a própria base, convenção brasileira. `OUTSIDE` o
+    trata como acréscimo sobre o líquido. Os dois últimos ficam disponíveis para
+    uma decisão futura; a fórmula segue pendente de confirmação contábil (Q1/Q2).
     """
 
+    NONE = "NONE"
     INSIDE = "INSIDE"
     OUTSIDE = "OUTSIDE"
 

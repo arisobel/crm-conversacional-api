@@ -1,7 +1,9 @@
-"""Lista de preços de um cliente: produtos preferidos, na UF onde ele recebe.
+"""Lista de preços de um cliente: seus produtos preferidos, ao preço publicado.
 
-É a junção das três etapas: preço por competência (R3), localidade (R2) e
-alíquota por par de UFs (R4).
+No modo padrão (`NONE`, ADR-032) o preço entregue é exatamente o da tabela, e
+nem a localidade do cliente nem a matriz de ICMS são consultadas. Com a
+conversão ligada (`INSIDE`/`OUTSIDE`) entra a junção das três etapas: preço por
+competência (R3), localidade (R2) e alíquota por par de UFs (R4).
 """
 
 import uuid
@@ -56,11 +58,15 @@ class ResolvedItem:
 @dataclass(frozen=True)
 class ResolvedPriceList:
     customer: Customer
-    location: CustomerLocation
+    # Os três abaixo só existem com a conversão ligada. No modo `NONE` ficam
+    # nulos: a UF preenchida diria ao Gateway que o preço já é o da praça.
+    location: CustomerLocation | None
     reference_month: date
-    origin_state: str
+    origin_state: str | None
+    destination_state: str | None
     currency: str
     items: list[ResolvedItem]
+    converted: bool
 
 
 class CustomerPriceListService:
@@ -94,15 +100,22 @@ class CustomerPriceListService:
             raise CustomerNotInScope
         cliente, _ = encontrado
 
-        localidade = (
-            await self._admin.get_location(customer_id, location_id)
-            if location_id
-            else await self._admin.get_default_location(customer_id)
-        )
-        if localidade is None or not localidade.active:
-            raise LocationUnavailable(
-                "cliente sem localidade padrão ativa; cadastre uma para determinar a UF"
+        modo = ConversionMode(self._settings.icms_conversion_mode)
+        converte = modo is not ConversionMode.NONE
+
+        # A localidade só serve para achar a UF de destino da conversão. Sem
+        # conversão, exigi-la bloquearia a tabela por um dado que não é usado.
+        localidade = None
+        if converte:
+            localidade = (
+                await self._admin.get_location(customer_id, location_id)
+                if location_id
+                else await self._admin.get_default_location(customer_id)
             )
+            if localidade is None or not localidade.active:
+                raise LocationUnavailable(
+                    "cliente sem localidade padrão ativa; cadastre uma para determinar a UF"
+                )
 
         referencia = at or date.today()
         competencia = month or await self._entries.latest_month(
@@ -128,7 +141,6 @@ class CustomerPriceListService:
         else:
             linhas = await self._entries.list_items(scope.tenant_id, competencia)
 
-        modo = ConversionMode(self._settings.icms_conversion_mode)
         itens: list[ResolvedItem] = []
 
         for entrada, produto, familia in linhas:
@@ -137,7 +149,10 @@ class CustomerPriceListService:
             aliquota = None
             trace = None
 
-            if not sem_preco:
+            if not sem_preco and not converte:
+                # ADR-032: o preço do representante, como publicado.
+                preco_final = entrada.base_price
+            elif not sem_preco:
                 # Uma regra ausente interrompe a lista inteira, de propósito:
                 # entregar a lista sem o item que falhou faria o representante
                 # cotar em cima de uma tabela silenciosamente incompleta.
@@ -183,7 +198,9 @@ class CustomerPriceListService:
             customer=cliente,
             location=localidade,
             reference_month=competencia,
-            origin_state=origin_state or "",
+            origin_state=(origin_state or "") if converte else None,
+            destination_state=localidade.state_code if localidade else None,
             currency="BRL",
             items=itens,
+            converted=converte,
         )

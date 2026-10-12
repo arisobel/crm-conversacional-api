@@ -87,6 +87,7 @@ from crm_api.services.customers import InvalidWhatsappNumber
 from crm_api.services.gateway_whatsapp_onboarding import GatewayWhatsappOnboardingClient
 from crm_api.services.icms import (
     AmbiguousIcmsRule,
+    ConversionMode,
     IcmsResolver,
     IcmsRuleNotFound,
     InvalidTaxRate,
@@ -1446,10 +1447,8 @@ def _csv_da_lista(resolvida) -> Response:
             ]
         )
 
-    nome = (
-        f"lista-{resolvida.customer.id}-{resolvida.reference_month:%Y%m}"
-        f"-{resolvida.location.state_code}.csv"
-    )
+    praca = f"-{resolvida.destination_state}" if resolvida.destination_state else ""
+    nome = f"lista-{resolvida.customer.id}-{resolvida.reference_month:%Y%m}{praca}.csv"
     return Response(
         content="﻿" + buffer.getvalue(),
         media_type="text/csv; charset=utf-8",
@@ -1488,6 +1487,8 @@ async def pagina_lista_de_preco(
         "mes": mes,
         "competencias": await PriceEntryRepository(session).list_months(current_user.tenant_id),
         "origem": tenant.origin_state_code if tenant else None,
+        # Sem conversão (ADR-032) a tela não fala de UF, localidade nem alíquota.
+        "converte": ConversionMode(settings.icms_conversion_mode) is not ConversionMode.NONE,
         "resolvida": None,
     }
 

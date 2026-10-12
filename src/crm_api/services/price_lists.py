@@ -39,7 +39,9 @@ class CurrentPriceListService:
       `404` para qualquer ausência. É byte a byte o que o Gateway em produção
       já consome hoje.
     - **ligado**: produtos preferidos do cliente, na ordem dele, com o preço
-      convertido para a UF onde ele recebe, e erros distinguíveis.
+      que `icms_conversion_mode` determina. No modo padrão (`NONE`, ADR-032) é
+      o publicado, com o par de UFs nulo; com `INSIDE`/`OUTSIDE`, o convertido
+      para a UF onde ele recebe, e erros distinguíveis.
 
     Os dois regimes existem porque o alcance é diferente do portal: aqui o
     número vai direto ao cliente, sem representante conferindo o cálculo.
@@ -188,8 +190,9 @@ class CurrentPriceListService:
         return CurrentPriceListResponse(
             customer=cabecalho,
             price_list=summary,
+            # Nulos no modo padrão (ADR-032): só há praça quando há conversão.
             origin_state=resolvida.origin_state,
-            destination_state=resolvida.location.state_code,
+            destination_state=resolvida.destination_state,
             items=[
                 CurrentPriceListItemResponse(
                     product_id=item.product_id,

@@ -37,7 +37,10 @@ COMPETENCIA = date.today().replace(day=1)
 
 @pytest_asyncio.fixture
 async def world():
-    built = await build_portal_world()
+    built = await build_portal_world(
+        # Estes testes exercitam a conversão; o padrão é NONE (ADR-032).
+        icms_conversion_mode="INSIDE"
+    )
     yield built
     await built.app.state.engine.dispose()
 

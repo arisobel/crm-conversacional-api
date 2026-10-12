@@ -231,7 +231,10 @@ async def test_tenant_sem_uf_de_origem_falha_com_mensagem_clara():
 
 @pytest_asyncio.fixture
 async def mundo():
-    construido = await build_portal_world()
+    construido = await build_portal_world(
+        # Estes testes exercitam a conversão; o padrão é NONE (ADR-032).
+        icms_conversion_mode="INSIDE"
+    )
     app = construido.app
 
     async with app.state.session_factory() as session:
@@ -474,6 +477,10 @@ async def test_representante_nao_administra_a_matriz(mundo):
 
 @pytest.mark.asyncio
 async def test_modo_de_conversao_e_configuravel(mundo):
-    """Q2 pendente: trocar a fórmula é configuração, não migração."""
-    assert portal_settings().icms_conversion_mode == "INSIDE"
+    """Q2 pendente: trocar a fórmula é configuração, não migração.
+
+    O padrão é não converter (ADR-032); ligar a conversão é decisão explícita.
+    """
+    assert portal_settings().icms_conversion_mode == "NONE"
+    assert portal_settings(icms_conversion_mode="INSIDE").icms_conversion_mode == "INSIDE"
     assert portal_settings(icms_conversion_mode="OUTSIDE").icms_conversion_mode == "OUTSIDE"
