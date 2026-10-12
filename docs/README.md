@@ -17,7 +17,7 @@ Memória operacional do CRM Conversacional API.
 ## Leitura obrigatória antes de implementar
 
 1. [Orquestração](00_meta/AGENT_SKILL_ORCHESTRATION.md)
-2. [Direção do produto — CRM de representantes](10_product/REPRESENTATIVE_DIRECTION.md)
+2. [Direção do produto — assistente comercial do representante](10_product/PRODUCT_DIRECTION.md) (substitui a [direção anterior](10_product/REPRESENTATIVE_DIRECTION.md))
 3. [Progresso](00_meta/07_progress.md)
 4. [Backlog](00_meta/09_backlog.md)
 5. [Roadmap](10_product/MVP_ROADMAP.md)

@@ -1,5 +1,9 @@
 # Direção do produto — CRM de representantes
 
+> **Substituído em 2026-10-12** por [Direção do produto: assistente comercial do
+> representante](PRODUCT_DIRECTION.md) (ADR-031 e ADR-032). Mantido como
+> referência histórica.
+
 Definida em: 2026-08-04. Substitui a leitura anterior de que o WhatsApp era a
 interface primária do sistema.
 

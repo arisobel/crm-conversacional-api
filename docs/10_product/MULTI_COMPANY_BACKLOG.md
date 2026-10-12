@@ -1,5 +1,11 @@
 # Backlog — Representante multiempresa (congelado)
 
+> **Descongelado em 2026-10-12 pelo ADR-031, com outra premissa.** O tenant
+> passa a ser o escritório do representante e a empresa representada vira uma
+> pasta dentro dele. A linha WhatsApp é do representante e atende todas as
+> pastas; ela **não** resolve a empresa, como os itens abaixo supunham. Ver
+> [direção do produto](PRODUCT_DIRECTION.md).
+
 > **Congelado em 2026-08-04 pelo ADR-013.** Aqui "representante" significa uma
 > organização que representa várias empresas fornecedoras. A direção aprovada
 > adota o outro significado: representante é um **usuário com carteira de

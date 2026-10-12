@@ -591,3 +591,107 @@ Esta decisão não fecha timeout, horários, schema, persistência, payload de
 `smb_message_echoes`, capabilities customer-facing, endpoint, lock, mídia ou
 retenção LGPD. A conversa híbrida e prioridade humana permanecem no blueprint
 F7 até o fechamento de F7.0.
+
+## ADR-031 — O tenant é o escritório do representante; a representada é uma pasta dentro dele
+
+**Status:** proposta em 2026-10-12. **Revisa parcialmente o ADR-013** e descongela
+o [backlog multiempresa](../10_product/MULTI_COMPANY_BACKLOG.md) com uma leitura
+nova.
+
+### Contexto
+
+O ADR-013 tratou o tenant como **a empresa fornecedora**, com os representantes
+como usuários dela, e congelou a ideia de um representante que atende várias
+empresas. O uso real mostra o oposto:
+
+- Quem contrata e usa a ferramenta é o **representante comercial**. Ele é o
+  centro do produto ("o vendedor é desorganizado, e a gente vai mudar isso").
+- O representante trabalha com **várias pastas** (representadas): fios da
+  Avanti, tinturaria, legging. Abrir uma pasta nova faz parte da rotina dele.
+- **É muito comum o mesmo cliente comprar de duas pastas da mesma cadeia**
+  (fios e tinturaria). Pastas de segmentos diferentes (legging) costumam trazer
+  clientes novos, ou seja, prospecção.
+- O produto não deve ser só têxtil. "Quem é vendedor vende qualquer coisa."
+
+### Decisão
+
+1. **Tenant = escritório de representação.** Pode ter uma pessoa só. Continua
+   sendo a fronteira de isolamento de dados e a unidade de cobrança.
+2. **Representada (pasta) é uma entidade nova dentro do tenant**: nome,
+   documento opcional, situação ativa ou inativa, observação comercial
+   opcional.
+3. **Todo produto pertence a uma representada.** A chave do preço vigente do
+   ADR-014, `(tenant, competência, produto)`, continua única, porque o produto
+   já identifica a pasta. A tabela de cada pasta é publicada separadamente.
+4. **O cliente pertence ao tenant, não à pasta.** O vínculo "cliente trabalha
+   com estas pastas" é N:N e serve para segmentar e prospectar.
+5. **O titular continua por cliente** (ADR-013, `customers.owner_user_id`). A
+   regra de autorização por carteira na linha Coexistence não muda.
+6. **A linha WhatsApp é do representante e atende todas as pastas dele.** A
+   linha não escolhe a pasta: o contexto vem do cliente e dos produtos dele.
+7. **Os produtos preferidos do cliente podem misturar pastas.** O bloco "seus
+   artigos" mostra cada item com o preço da tabela da sua pasta.
+8. **O produto não presume o segmento têxtil.** Atributos têxteis são camada
+   opcional (ADR-027). Itens de serviço, como tingimento, cabem com unidade
+   livre.
+
+### Fora deste ADR (porta aberta)
+
+- **Titular por pasta** dentro do mesmo escritório.
+- **Representada como organização patrocinadora**: uma Avanti que paga
+  licenças e publica a tabela uma única vez para vários escritórios. Seria um
+  eixo acima do tenant, sem mudar o modelo abaixo dele.
+- Permissões por pasta para escritórios com vários representantes.
+
+### Consequências
+
+- A migração dos dados atuais é pequena. O tenant atual passa a ser o
+  escritório, cria-se a pasta "Avanti" e os produtos existentes são ligados a
+  ela.
+- Os itens `MC-001` a `MC-007` saem do congelamento, mas com outra premissa: o
+  backlog original supunha que **a linha resolve a empresa**. Aqui a linha é
+  do representante e serve a todas as pastas.
+- Campanhas (ADR-028) ganham o filtro por pasta: "enviar a tabela de legging
+  para os clientes de legging".
+
+
+## ADR-032 — O preço oferecido é o que o representante publicou; imposto não é calculado no fluxo padrão
+
+**Status:** proposta em 2026-10-12. **Revisa o ADR-015** quanto à obrigatoriedade.
+O modelo da matriz de ICMS permanece no código, mas sai do caminho padrão.
+
+### Contexto
+
+O ADR-015 tornou o ICMS uma regra de primeira classe. O cálculo usa a matriz
+por par de UFs, e **uma regra ausente interrompe a lista de preços inteira**.
+A fórmula (Q1/Q2) nunca recebeu confirmação contábil.
+
+O representante não usa o imposto dessa forma. ICMS, IPI, ST e II variam por
+produto, por estado e pelo regime do comprador (indústria aproveita crédito,
+comércio não). Cada representada conhece a regra do próprio produto. Nas
+palavras do Charles: "pensar no imposto só vai engessar", "a gente oferece o
+preço final que o rep deu" e "se o cliente perguntar, o rep vai saber
+responder no caso específico dele". Além disso, uma regra fiscal brasileira
+fixa no núcleo do produto impede levá-lo a outros mercados.
+
+### Decisão
+
+1. **O preço entregue ao cliente é exatamente o preço publicado na tabela da
+   pasta**, sem conversão tributária.
+2. **Nenhuma ausência de regra fiscal bloqueia a resposta.** A falha
+   `IcmsRuleNotFound` deixa de existir no fluxo padrão.
+3. **Cada pasta pode ter uma observação comercial opcional**, escrita pelo
+   representante (exemplos: "preços FOB", "impostos conforme sua situação
+   fiscal"). O robô a exibe como texto, sem interpretar.
+4. **Perguntas sobre imposto vão para o representante.** O robô não responde a
+   elas, e a conversa fica com o humano (alinhado com a F7).
+5. **O motor de ICMS não é removido.** Ele fica desligado por padrão e só pode
+   ser ligado por uma decisão futura, por pasta, se alguma representada exigir.
+
+### Consequências
+
+- Q1/Q2 deixam de bloquear o roadmap.
+- `tenants.origin_state_code` perde a função de bloqueio e não é migrado para a
+  pasta agora.
+- A tabela do cliente fica mais simples e mais rápida, e nunca deixa de ser
+  entregue por falta de configuração fiscal.
