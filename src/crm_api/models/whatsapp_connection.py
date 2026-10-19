@@ -18,6 +18,8 @@ class WhatsappConnectionStatus(StrEnum):
     ACTION_REQUIRED = "ACTION_REQUIRED"
     CONFLICT = "CONFLICT"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    EXPIRED = "EXPIRED"
 
 
 class RepresentativeWhatsappConnection(Base):

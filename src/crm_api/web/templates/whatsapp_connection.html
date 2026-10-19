@@ -20,8 +20,12 @@
     {% else %}
     <button type="button" data-whatsapp-action="resume">Retomar configuração</button>
     {% endif %}
+  {% elif connection.status.value in ('CANCELLED', 'EXPIRED') %}
+    <p>A tentativa anterior foi {% if connection.status.value == 'CANCELLED' %}cancelada{% else %}encerrada após duas horas{% endif %}.</p>
+    <button type="button" data-whatsapp-action="create">Conectar WhatsApp novamente</button>
   {% else %}
-    <p>Conexão em andamento...</p><p class="dica">Esta página acompanha a configuração automaticamente.</p>
+    <p>Conexão em andamento...</p><p class="dica">Esta página acompanha a configuração automaticamente. A tentativa expira após duas horas.</p>
+    <button type="button" data-whatsapp-action="cancel">Cancelar conexão</button>
   {% endif %}
   </div>
 </section>

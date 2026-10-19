@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
 from crm_api.models.user import User, UserRole
@@ -26,6 +26,9 @@ class ConnectionForbidden(Exception):
 
 class ConnectionConflict(Exception):
     pass
+
+
+ONBOARDING_TTL = timedelta(hours=2)
 
 
 class ConnectionRetryAction(StrEnum):
@@ -92,6 +95,26 @@ class WhatsappConnectionService:
         if role is UserRole.REPRESENTATIVE and actor_id != representative_id:
             raise ConnectionForbidden
 
+    @staticmethod
+    def _expire_if_stale(connection: RepresentativeWhatsappConnection) -> bool:
+        if (
+            connection.status in {
+                WhatsappConnectionStatus.CONNECTING,
+                WhatsappConnectionStatus.ACTION_REQUIRED,
+            }
+            and connection.started_at is not None
+        ):
+            started_at = connection.started_at
+            if started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=UTC)
+            if datetime.now(UTC) - started_at >= ONBOARDING_TTL:
+                connection.status = WhatsappConnectionStatus.EXPIRED
+                connection.failure_code = "ONBOARDING_EXPIRED"
+                connection.failed_at = datetime.now(UTC)
+                connection.updated_at = connection.failed_at
+                return True
+        return False
+
     def _apply(self, connection: RepresentativeWhatsappConnection, data: GatewayOnboarding) -> bool:
         old = connection.status
         connection.last_gateway_status = data.status
@@ -150,6 +173,9 @@ class WhatsappConnectionService:
         await self._representative(tenant_id, representative_id)
         self._authorized(actor_id, role, representative_id)
         connection = await self._connections.get_for_representative(tenant_id, representative_id)
+        if connection and self._expire_if_stale(connection):
+            self._audit_event(connection, actor_id, "WHATSAPP_CONNECTION_EXPIRED", request_id)
+            return connection
         if (
             connection
             and refresh
@@ -183,6 +209,8 @@ class WhatsappConnectionService:
         representative = await self._representative(tenant_id, representative_id)
         self._authorized(actor_id, role, representative_id)
         existing = await self._connections.get_for_representative(tenant_id, representative_id)
+        if existing and self._expire_if_stale(existing):
+            self._audit_event(existing, actor_id, "WHATSAPP_CONNECTION_EXPIRED", request_id)
         if existing and self._connections.active(existing.status):
             if (
                 existing.status is WhatsappConnectionStatus.CONNECTING
@@ -220,6 +248,32 @@ class WhatsappConnectionService:
             request_id,
         )
         return connection, data.launch_url or ""
+
+    async def cancel(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_id: uuid.UUID,
+        role: UserRole,
+        representative_id: uuid.UUID,
+        request_id: str | None = None,
+    ) -> RepresentativeWhatsappConnection:
+        connection = await self.get(
+            tenant_id=tenant_id,
+            actor_id=actor_id,
+            role=role,
+            representative_id=representative_id,
+            refresh=False,
+            request_id=request_id,
+        )
+        if connection is None or connection.status is not WhatsappConnectionStatus.CONNECTING:
+            raise ConnectionConflict
+        connection.status = WhatsappConnectionStatus.CANCELLED
+        connection.failure_code = "CANCELLED_BY_USER"
+        connection.failed_at = datetime.now(UTC)
+        connection.updated_at = connection.failed_at
+        self._audit_event(connection, actor_id, "WHATSAPP_CONNECTION_CANCELLED", request_id)
+        return connection
 
     async def resume(
         self,

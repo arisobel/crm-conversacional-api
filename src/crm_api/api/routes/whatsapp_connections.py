@@ -155,3 +155,26 @@ async def resume_connection(
     except Exception as error:
         await session.rollback()
         _raise(error)
+
+
+@router.post("/{user_id}/whatsapp-connection/cancel", response_model=WhatsappConnectionResponse)
+async def cancel_connection(
+    user_id: uuid.UUID,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> WhatsappConnectionResponse:
+    _csrf(request)
+    try:
+        connection = await _service(request, session).cancel(
+            tenant_id=current_user.tenant_id,
+            actor_id=current_user.user_id,
+            role=current_user.role,
+            representative_id=user_id,
+            request_id=request.headers.get("x-request-id"),
+        )
+        await session.commit()
+        return _response(connection)
+    except Exception as error:
+        await session.rollback()
+        _raise(error)

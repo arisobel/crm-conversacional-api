@@ -277,9 +277,7 @@
     var userId = painel.dataset.userId;
     var csrf = painel.dataset.csrfToken;
     var estado = painel.querySelector("[data-whatsapp-state]");
-    var terminal = { CONNECTED: true, ACTION_REQUIRED: true, CONFLICT: true, FAILED: true };
-    var tentativas = 0;
-    var maxTentativas = 100; // cinco minutos, em intervalos de três segundos
+    var terminal = { CONNECTED: true, ACTION_REQUIRED: true, CONFLICT: true, FAILED: true, CANCELLED: true, EXPIRED: true };
 
     function mostrar(conexao) {
       if (!conexao) {
@@ -296,8 +294,10 @@
         } else {
           estado.innerHTML = "<p>Não foi possível concluir a conexão.</p><button type=\"button\" data-whatsapp-action=\"resume\">Retomar configuração</button>";
         }
+      } else if (conexao.status === "CANCELLED" || conexao.status === "EXPIRED") {
+        estado.innerHTML = "<p>" + (conexao.status === "CANCELLED" ? "Tentativa cancelada." : "Tentativa encerrada após duas horas.") + "</p><button type=\"button\" data-whatsapp-action=\"create\">Conectar WhatsApp novamente</button>";
       } else {
-        estado.innerHTML = "<p>Conexão em andamento...</p><p class=\"dica\">Esta página acompanha a configuração automaticamente.</p>";
+        estado.innerHTML = "<p>Conexão em andamento...</p><p class=\"dica\">Esta página acompanha a configuração automaticamente. A tentativa expira após duas horas.</p><button type=\"button\" data-whatsapp-action=\"cancel\">Cancelar conexão</button>";
       }
       ligarBotoes();
     }
@@ -314,7 +314,7 @@
       try {
         var conexao = await requisitar("GET", "");
         mostrar(conexao);
-        if (conexao && !terminal[conexao.status] && tentativas++ < maxTentativas) setTimeout(atualizar, 3000);
+        if (conexao && !terminal[conexao.status]) setTimeout(atualizar, 3000);
       } catch (_) {
         estado.innerHTML = "<p>Não foi possível consultar a configuração agora.</p><p class=\"dica\">Atualize a página ou tente novamente em alguns instantes.</p>";
       }
@@ -325,15 +325,17 @@
       if (!botao) return;
       botao.addEventListener("click", async function () {
         botao.disabled = true;
-        var retomada = botao.dataset.whatsappAction === "resume";
+        var acao = botao.dataset.whatsappAction;
+        var retomada = acao === "resume";
+        var cancelamento = acao === "cancel";
         // Só a criação precisa preservar o gesto do clique para o navegador:
         // o Gateway sempre retorna o launcher nesse caso. Resume costuma ser
         // trabalho server-side e não deve abrir uma janela vazia.
-        var janela = retomada
+        var janela = retomada || cancelamento
           ? null
           : window.open("", "whatsapp_onboarding", "width=700,height=760");
         try {
-          var conexao = await requisitar("POST", retomada ? "/resume" : "");
+          var conexao = await requisitar("POST", retomada ? "/resume" : cancelamento ? "/cancel" : "");
           if (conexao.launch_url) {
             if (janela) {
               janela.location = conexao.launch_url;
@@ -344,7 +346,6 @@
             janela.close();
           }
           mostrar(conexao);
-          tentativas = 0;
           if (!terminal[conexao.status]) setTimeout(atualizar, 3000);
         } catch (_) {
           if (janela) janela.close();

@@ -54,6 +54,8 @@ O cliente interno do CRM chama o Gateway com Bearer token server-side, timeout e
 
 O contrato concreto atualmente usado pelo CRM é `POST /internal/meta/whatsapp/onboardings`, `GET /internal/meta/whatsapp/onboardings/{onboarding_id}` e `POST /internal/meta/whatsapp/onboardings/{onboarding_id}/resume`. No `create`, `customer_reference = tenant_reference`: é a referência externa do tenant/conta comercial que contextualiza o onboarding, não necessariamente um customer/cliente comercial do CRM. `representative_reference = representative.public_ref`; portanto tenant, customer comercial e representante não devem ser confundidos. O `create` também informa `application_reference=crm_textil` e `flow_reference=consulta_cliente`; a resolução e o vínculo técnico continuam no Gateway.
 
+O CRM oferece cancelamento local e encerra tentativas sem conclusão após duas horas, liberando uma nova tentativa no próprio CRM. O contrato do Gateway ainda não oferece operação de cancelamento; portanto essa ação não revoga uma sessão de Embedded Signup que já tenha sido emitida pela Meta. Para cancelamento ponta a ponta, o Gateway precisa expor e executar essa operação.
+
 No contrato atual, `resume` normalmente não retorna uma nova `launch_url`; o CRM apenas aceita esse campo opcionalmente por compatibilidade/defesa. Se houver necessidade de nova interação Meta, o caminho é `RESTART` com novo onboarding, e não a criação de uma URL no `resume`.
 
 ## Mapeamento de estado Gateway → CRM
