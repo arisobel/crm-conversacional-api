@@ -1,12 +1,12 @@
 """Allow cancelled and expired WhatsApp onboarding attempts.
 
-Revision ID: 0017_whatsapp_onboarding_terminal_states
+Revision ID: 0017_whatsapp_states
 Revises: 0016_whatsapp_onboarding
 """
 
 from alembic import op
 
-revision = "0017_whatsapp_onboarding_terminal_states"
+revision = "0017_whatsapp_states"
 down_revision = "0016_whatsapp_onboarding"
 branch_labels = None
 depends_on = None

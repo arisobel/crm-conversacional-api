@@ -1,9 +1,10 @@
-.env
-.venv/
+# Segredos e configurações locais
+/.env
+
+# Artefatos locais de build/deploy
+/dist/
+/.venv/
 __pycache__/
-.pytest_cache/
-.pytest-tmp-*/
-.ruff_cache/
 *.pyc
-dist/
-.work-gateway/
+.pytest_cache/
+.ruff_cache/
