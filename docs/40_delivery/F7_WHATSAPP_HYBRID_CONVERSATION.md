@@ -7,6 +7,45 @@ cliente. A `CRM_ASSISTANT_LINE` permanece um canal interno separado, pelo qual a
 IA pode assistir o representante sem falar com o cliente; ver [WhatsApp como
 interface do CRM-textil](../10_product/WHATSAPP_AS_CRM_INTERFACE.md).
 
+## Primeiro roteiro de atendimento ao cliente
+
+**Estado:** roteiro de produto para orientar a implementação futura; não ativa
+respostas, observação em tempo real ou transferência para o representante.
+Aplica-se à linha comercial do representante, não à linha assistente interna.
+
+- Saudação inicial, quando o cliente apenas cumprimenta: “Oi, [nome], tudo bem?
+  Como posso te ajudar?” Usar o nome do contato quando conhecido; caso contrário,
+  “Oi, tudo bem? Como posso te ajudar?”. Não confundir o nome da empresa com o
+  nome da pessoa.
+- Se o cliente já disser o que precisa, responder ao pedido sem exigir que ele
+  repita a informação. Manter tom cordial, direto e sem menu obrigatório.
+- Não inserir uma apresentação como assistente na saudação. Se perguntarem
+  diretamente se o atendimento é automatizado, responder com transparência.
+- Se houver mais de um produto possível, pedir a distinção necessária, por
+  exemplo: “Você procura o 75/36 urdume ou trama?”. Não escolher por suposição.
+- Consultar o preço autorizado na tabela vigente; não inventar valor,
+  disponibilidade ou condição comercial. Depois de resolver a consulta, perguntar
+  de maneira natural: “Quer consultar mais algum preço ou produto?”.
+- Se o produto não for encontrado, não prometer uma verificação humana sem que
+  ela possa ser encaminhada. Quando o encaminhamento estiver disponível: “Não
+  encontrei esse produto na tabela. Deixa eu verificar aqui, um minuto.”
+- Quando o cliente informar quantidade e produto, encaminhar ao representante
+  com os dados já fornecidos, sem prometer estoque, reserva ou fechamento. Se
+  faltar qual produto é desejado, pedir apenas essa informação antes de encaminhar.
+  Exemplo após o encaminhamento: “Deixa eu verificar aqui, um minuto.”
+- Se outro pedido não puder ser resolvido, usar a mesma frase ao encaminhar ao
+  representante. A frase não deve ser enviada como promessa de transferência
+  quando aviso e encaminhamento ainda não estiverem funcionando.
+- O representante deve poder acompanhar a conversa e assumir quando desejar. A
+  automação deve parar diante da intervenção manual detectada; os mecanismos de
+  observação, aviso, concorrência e handoff continuam sujeitos às fases abaixo.
+  A digitação, por si só, depende de confirmação de que o canal fornece esse
+  sinal; a mensagem manual é a evidência prevista em F7.3.
+
+Personalização por cliente e variações mais naturais de linguagem são evolução
+futura. Este roteiro não resolve disponibilidade do representante, retomada do
+bot, prazo de resposta ou implementação do transporte.
+
 ## Natureza e fronteira da fase
 
 F7 começa quando o problema deixa de ser campanha e passa a ser atendimento contínuo.
