@@ -14,7 +14,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE TYPE whatsapp_connection_status AS ENUM ('NOT_CONNECTED', 'CONNECTING', 'CONNECTED', 'ACTION_REQUIRED', 'CONFLICT', 'FAILED')")
+    op.execute(
+        "CREATE TYPE whatsapp_connection_status AS ENUM ("
+        "'NOT_CONNECTED', 'CONNECTING', 'CONNECTED', 'ACTION_REQUIRED', 'CONFLICT', 'FAILED')"
+    )
     op.execute("""
       CREATE TABLE representative_whatsapp_connections (
         id uuid PRIMARY KEY, tenant_id uuid NOT NULL REFERENCES tenants(id),
@@ -29,8 +32,15 @@ def upgrade() -> None:
         created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
       )
     """)
-    op.execute("CREATE UNIQUE INDEX ux_rwc_one_active_per_representative ON representative_whatsapp_connections(tenant_id, representative_user_id) WHERE status IN ('CONNECTING', 'CONNECTED', 'ACTION_REQUIRED')")
-    op.execute("CREATE UNIQUE INDEX ux_rwc_gateway_onboarding ON representative_whatsapp_connections(tenant_id, gateway_onboarding_id)")
+    op.execute(
+        "CREATE UNIQUE INDEX ux_rwc_one_active_per_representative"
+        " ON representative_whatsapp_connections(tenant_id, representative_user_id)"
+        " WHERE status IN ('CONNECTING', 'CONNECTED', 'ACTION_REQUIRED')"
+    )
+    op.execute(
+        "CREATE UNIQUE INDEX ux_rwc_gateway_onboarding"
+        " ON representative_whatsapp_connections(tenant_id, gateway_onboarding_id)"
+    )
 
 
 def downgrade() -> None:
