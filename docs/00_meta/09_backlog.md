@@ -599,6 +599,12 @@ gate de Coexistence para definir sender; F6.5 continua posterior à integração
 
 ## Linha assistente — rotina diária
 
+- [x] Definir e testar regra pura de política por organização, representante e
+      capacidades de representante; ainda não aplicada a tráfego.
+- [ ] Persistir e administrar política por tenant e usuário, com auditoria.
+- [ ] Acordar contexto de linha autenticado e revalidar política no manifesto e
+      nos executores; ver `docs/40_delivery/ASSISTANT_POLICY_CONTRACT.md`.
+
 - [x] Definir regras de horário de 07h30 e 18h30 e supressão após antecipação;
       função local independente de agendamento e envio.
 - [ ] Implementar vínculo da linha assistente, executor persistente e regras

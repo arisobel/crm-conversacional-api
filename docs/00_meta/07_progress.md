@@ -4,6 +4,13 @@ Atualizado em: 2026-10-12
 
 ## Estado atual
 
+### Linha assistente — política inicial (2026-10-21)
+
+Regra pura de ativação por organização e representante e seleção das capacidades
+existentes de representante. Ainda não é consumida pelo manifesto nem pelos
+executores; não constitui controle efetivo de acesso. Proposta de integração em
+[contrato da política](../40_delivery/ASSISTANT_POLICY_CONTRACT.md).
+
 ### Linha assistente — regras iniciais de rotina (2026-10-21)
 
 Regra local para início às 07h30 e resumo às 18h30, todos os dias, com
