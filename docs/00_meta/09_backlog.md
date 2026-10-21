@@ -597,6 +597,15 @@ gate de Coexistence para definir sender; F6.5 continua posterior à integração
       queda são decisões comerciais e operacionais do Gateway, não texto livre
       criado pelo CRM.
 
+## Linha assistente — rotina diária
+
+- [x] Definir regras de horário de 07h30 e 18h30 e supressão após antecipação;
+      função local independente de agendamento e envio.
+- [ ] Implementar vínculo da linha assistente, executor persistente e regras
+      de entrega, concorrência e retomada, inclusive antecipação pelo usuário.
+- [ ] Integrar envio pelo Gateway, consentimento e regras aplicáveis ao canal.
+- [ ] Construir resumo com fontes verificáveis de atendimentos e compras.
+
 ## F7 — Conversação híbrida Representante ↔ Cliente
 
 Blueprint: [F7_WHATSAPP_HYBRID_CONVERSATION](../40_delivery/F7_WHATSAPP_HYBRID_CONVERSATION.md).

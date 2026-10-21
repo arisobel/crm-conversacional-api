@@ -25,6 +25,12 @@ Exemplos de uso futuro:
 
 A linha corporativa hoje utilizada pela BPTI é apenas a implementação concreta atual desse papel. `BPTI` não pertence ao conceito, ao modelo de domínio nem à arquitetura futura.
 
+Para a configuração inicial, a linha assistente informada é **+55 11 93940-1738**,
+compartilhada por todos os representantes cadastrados e autorizados. A identidade
+e o escopo de cada representante devem ser resolvidos separadamente; compartilhar
+o número não concede acesso à carteira de outra pessoa. Este registro não
+configura a linha no Gateway nem ativa o vínculo ou mensagens.
+
 ### `REPRESENTATIVE_COEXISTENCE_LINE`
 
 Canal comercial externo, vinculado ao representante, usado para comunicação com seus clientes. Pode futuramente suportar atendimento automatizado, atendimento humano pelo WhatsApp Business App, campanhas, respostas a clientes e orquestração humano/bot em Coexistence.
@@ -60,7 +66,7 @@ indicadores, estoque, campanhas ou handoff já estejam disponíveis.
 
 ### Início do dia e abordagem comercial
 
-O assistente inicia contato diariamente com o representante e pergunta qual
+O assistente inicia contato diariamente às **07h30** com o representante e pergunta qual
 será a abordagem aos clientes naquele dia. A conversa deve ajudar a identificar
 a abordagem e os clientes indicados pelo representante, sem presumir uma escolha.
 A abordagem orienta a seleção do template aplicável à campanha. O CRM resolve
@@ -92,13 +98,19 @@ leu ou assumiu a conversa.
 
 ### Fechamento do dia
 
-Ao final do dia, o assistente deve apresentar ao representante um resumo com
+Às **18h30**, todos os dias, o assistente deve apresentar ao representante um resumo com
 quantos clientes foram atendidos pela linha dele e quantos fecharam compras. As
 definições de “atendido” e “compra fechada”, as fontes de dados, a correlação com
 a linha e o tratamento de dados incompletos precisam ser definidos antes da
 implementação. Não inferir compra fechada de interesse, quantidade solicitada ou
 envio de campanha; quando a informação não estiver disponível, informá-lo em
 vez de apresentar zero como fato.
+
+O representante pode antecipar a rotina da manhã ou solicitar o resumo antes
+do horário. A execução antecipada da mesma rotina no mesmo dia local não deve
+gerar outra mensagem automática naquele horário. O fuso ainda precisa ser
+configurado como **horário de Brasília (`America/Sao_Paulo`)**; os horários não
+ativam envios por si só.
 
 ### Consultor de informações
 
@@ -113,10 +125,10 @@ serão desenhadas conforme a rotina evoluir.
 
 ### Questões para detalhamento
 
-- Horários, fuso, dias de operação e preferências de recebimento dos contatos
-  diários; política para mensagens proativas e regras do WhatsApp aplicáveis.
-- Se a linha assistente será compartilhada ou dedicada e como será feito o
-  vínculo de cada representante autorizado, inclusive desativação.
+- Preferências de recebimento dos contatos diários; política para
+  mensagens proativas e regras do WhatsApp aplicáveis.
+- Como será feito o vínculo de cada representante autorizado à linha
+  compartilhada, inclusive desativação.
 - Critérios para exigir intervenção humana, canal de aviso, falhas de entrega e
   como o representante assume e depois devolve o atendimento à automação.
 - Fontes e definições dos indicadores de atendimento e compra fechada; fontes,

@@ -4,6 +4,14 @@ Atualizado em: 2026-10-12
 
 ## Estado atual
 
+### Linha assistente — regras iniciais de rotina (2026-10-21)
+
+Regra local para início às 07h30 e resumo às 18h30, todos os dias, com
+supressão da rotina já antecipada no mesmo dia local. Ainda não há vínculo,
+agendador, persistência da execução ou envio para esta rotina.
+O usuário definiu a linha compartilhada +55 11 93940-1738 e o horário de Brasília;
+o cadastro e a integração técnica da linha ainda não foram realizados.
+
 **Fase ativa:** F5 e W concluídas do lado do CRM. **R0 a R6 e W1 a W7
 implementados e implantados.** Frente aberta: **D — campanhas de WhatsApp**
 (ver [backlog](09_backlog.md)).
