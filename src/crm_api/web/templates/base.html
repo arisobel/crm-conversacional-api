@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Portal{% endblock %} · CRM</title>
+  <link rel="icon" type="image/png" href="/portal/static/crm-icon.png">
+  <link rel="apple-touch-icon" href="/portal/static/crm-icon.png">
   <link rel="stylesheet" href="/portal/static/portal.css">
   <!-- Sem JavaScript o modal não abre e o combobox não filtra. A folha abaixo
        deixa o formulário do artigo aberto na página e o select nativo à mostra,
@@ -11,7 +13,7 @@
        do portal não admite <style> embutido. -->
   <noscript><link rel="stylesheet" href="/portal/static/portal-nojs.css"></noscript>
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
 {% if current_user %}
 <header class="topo">
   <nav>
