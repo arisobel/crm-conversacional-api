@@ -15,7 +15,8 @@ from sqlalchemy import select
 
 from crm_api.models.customer import Customer, CustomerLocation
 from crm_api.models.customer_contact import CustomerContact
-from crm_api.models.user import User
+from crm_api.models.assistant_settings import AssistantRepresentativeSettings
+from crm_api.models.user import AuditLog, User
 
 _CSRF = re.compile(r'name="csrf_token" value="([^"]+)"')
 
@@ -58,6 +59,57 @@ async def admin(world):
         resposta = await _entrar(client, ADMIN_EMAIL)
         assert resposta.status_code == 200
         yield client
+
+
+@pytest.mark.asyncio
+async def test_assistente_salva_configuracao_e_auditoria(world, admin):
+    page = await admin.get("/portal/assistant")
+    assert "ainda não alteram o atendimento" in page.text
+    token = _token(page.text)
+    await admin.post("/portal/assistant/organization", data={
+        "csrf_token": token, "enabled": "true",
+    })
+    response = await admin.post(
+        f"/portal/assistant/representatives/{world.representative_a_id}",
+        data={"csrf_token": token, "enabled": "true",
+              "capabilities": "CRM_REP_LOOKUP_CUSTOMER"},
+    )
+    assert "Configuração do assistente salva" in response.text
+    async with world.app.state.session_factory() as session:
+        rep = await session.get(
+            AssistantRepresentativeSettings, (world.tenant_id, world.representative_a_id)
+        )
+        assert rep is not None and rep.enabled
+        entries = (await session.scalars(select(AuditLog).where(
+            AuditLog.action == "assistant.representative.updated"
+        ))).all()
+        assert len(entries) == 1
+        assert entries[0].after["capabilities"] == ["CRM_REP_LOOKUP_CUSTOMER"]
+
+
+@pytest.mark.asyncio
+async def test_assistente_recusa_representante_e_capacidade_desconhecida(world, admin):
+    page = await admin.get("/portal/assistant")
+    token = _token(page.text)
+    await admin.post(f"/portal/assistant/representatives/{world.representative_a_id}", data={
+        "csrf_token": token, "enabled": "true", "capabilities": "UNKNOWN",
+    })
+    async with world.app.state.session_factory() as session:
+        assert await session.get(
+            AssistantRepresentativeSettings, (world.tenant_id, world.representative_a_id)
+        ) is None
+    async with _browser(world) as representative:
+        await _entrar(representative, REPRESENTATIVE_A_EMAIL)
+        page = await representative.get("/portal/assistant")
+        assert "/portal/customers" in str(page.url)
+        await representative.post("/portal/assistant/organization", data={
+            "csrf_token": _token(page.text), "enabled": "true",
+        })
+        async with world.app.state.session_factory() as session:
+            entries = (await session.scalars(select(AuditLog).where(
+                AuditLog.action == "assistant.organization.updated"
+            ))).all()
+            assert not entries
 
 
 # ---------------------------------------------------------------- sessão

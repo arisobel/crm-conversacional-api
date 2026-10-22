@@ -13,6 +13,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import RedirectResponse, Response
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.api.authentication import CurrentUser, build_auth_service
@@ -22,6 +23,11 @@ from crm_api.core.database import get_session
 from crm_api.core.numbers import InvalidDecimal, parse_decimal
 from crm_api.core.passwords import WeakPassword
 from crm_api.core.states import InvalidStateCode, normalize_state_code
+from crm_api.models.assistant_settings import (
+    AssistantOrganizationSettings,
+    AssistantRepresentativeCapability,
+    AssistantRepresentativeSettings,
+)
 from crm_api.models.interaction import NOTE_CHANNELS, InteractionDirection
 from crm_api.models.pricing import AvailabilityStatus
 from crm_api.models.tax import IcmsRule
@@ -41,6 +47,7 @@ from crm_api.repositories.price_lists import PriceListRepository
 from crm_api.repositories.users import SessionRepository, UserRepository
 from crm_api.repositories.whatsapp_campaigns import WhatsappCampaignRepository
 from crm_api.repositories.whatsapp_connections import WhatsappConnectionRepository
+from crm_api.services.assistant_policy import REPRESENTATIVE_CAPABILITIES
 from crm_api.services.auth import AuthenticationFailed, normalize_email
 from crm_api.services.catalog import (
     ArticleNotFound,
@@ -983,6 +990,127 @@ async def salvar_localidade(
 
     await session.commit()
     return _redirect(destino, "localidade-salva")
+
+
+# ----------------------------------------------------------- central do assistente
+
+_ASSISTANT_CAPABILITIES = {
+    "CRM_REP_SEARCH_PRICE_ITEMS": "Consultar preços de produtos",
+    "CRM_REP_LOOKUP_CUSTOMER": "Consultar clientes",
+    "CRM_REP_GET_CUSTOMER_PRICE_LIST": "Consultar tabela de preços do cliente",
+    "CRM_REP_CREATE_CUSTOMER_INTAKE": "Solicitar pré-cadastro de cliente",
+}
+
+
+@router.get("/assistant", include_in_schema=False)
+async def pagina_assistente(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    m: Annotated[str | None, Query()] = None,
+) -> Response:
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    tenant_id = current_user.tenant_id
+    organization = await session.get(AssistantOrganizationSettings, tenant_id)
+    users = (await session.scalars(select(User).where(
+        User.tenant_id == tenant_id, User.role == UserRole.REPRESENTATIVE
+    ).order_by(User.full_name))).all()
+    settings = (await session.scalars(select(AssistantRepresentativeSettings).where(
+        AssistantRepresentativeSettings.tenant_id == tenant_id
+    ))).all()
+    capabilities = (await session.scalars(select(AssistantRepresentativeCapability).where(
+        AssistantRepresentativeCapability.tenant_id == tenant_id
+    ))).all()
+    selected: dict[uuid.UUID, set[str]] = {user.id: set() for user in users}
+    for capability in capabilities:
+        if capability.user_id in selected:
+            selected[capability.user_id].add(capability.capability_id)
+    return _render(request, "assistant.html", {
+        "organization": organization,
+        "users": users,
+        "enabled": {setting.user_id: setting.enabled for setting in settings},
+        "selected": selected,
+        "capabilities": _ASSISTANT_CAPABILITIES,
+    }, current_user=current_user, mensagem=m)
+
+
+@router.post("/assistant/organization", include_in_schema=False)
+async def salvar_assistente_organizacao(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+    enabled: Annotated[bool, Form()] = False,
+) -> Response:
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/assistant", "csrf")
+    organization = await session.get(AssistantOrganizationSettings, current_user.tenant_id)
+    before = organization.enabled if organization else False
+    if organization is None:
+        organization = AssistantOrganizationSettings(tenant_id=current_user.tenant_id)
+        session.add(organization)
+    organization.enabled = enabled
+    organization.updated_at = datetime.now(UTC)
+    AuditRepository(session).record(
+        action="assistant.organization.updated", entity="assistant_organization_settings",
+        tenant_id=current_user.tenant_id, actor_user_id=current_user.user_id,
+        entity_id=current_user.tenant_id, before={"enabled": before}, after={"enabled": enabled},
+    )
+    await session.commit()
+    return _redirect("/portal/assistant", "assistente-salvo")
+
+
+@router.post("/assistant/representatives/{user_id}", include_in_schema=False)
+async def salvar_assistente_representante(
+    user_id: uuid.UUID,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+    enabled: Annotated[bool, Form()] = False,
+    capabilities: Annotated[list[str] | None, Form()] = None,
+) -> Response:
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/assistant", "csrf")
+    tenant_id = current_user.tenant_id
+    user = await session.scalar(select(User).where(
+        User.id == user_id, User.tenant_id == tenant_id, User.role == UserRole.REPRESENTATIVE
+    ))
+    chosen = set(capabilities or [])
+    if user is None or not chosen <= REPRESENTATIVE_CAPABILITIES:
+        return _redirect("/portal/assistant", "nao-encontrado")
+    representative = await session.get(AssistantRepresentativeSettings, (tenant_id, user_id))
+    previous = (await session.scalars(select(AssistantRepresentativeCapability.capability_id).where(
+        AssistantRepresentativeCapability.tenant_id == tenant_id,
+        AssistantRepresentativeCapability.user_id == user_id,
+    ))).all()
+    before = {"enabled": representative.enabled if representative else False,
+              "capabilities": sorted(previous)}
+    if representative is None:
+        representative = AssistantRepresentativeSettings(tenant_id=tenant_id, user_id=user_id)
+        session.add(representative)
+        await session.flush()
+    representative.enabled = enabled
+    representative.updated_at = datetime.now(UTC)
+    await session.execute(delete(AssistantRepresentativeCapability).where(
+        AssistantRepresentativeCapability.tenant_id == tenant_id,
+        AssistantRepresentativeCapability.user_id == user_id,
+    ))
+    session.add_all([AssistantRepresentativeCapability(
+        tenant_id=tenant_id, user_id=user_id, capability_id=capability
+    ) for capability in sorted(chosen)])
+    AuditRepository(session).record(
+        action="assistant.representative.updated", entity="assistant_representative_settings",
+        tenant_id=tenant_id, actor_user_id=current_user.user_id, entity_id=user_id,
+        before=before, after={"enabled": enabled, "capabilities": sorted(chosen)},
+    )
+    await session.commit()
+    return _redirect("/portal/assistant", "assistente-salvo")
 
 
 # ----------------------------------------------------------- representantes

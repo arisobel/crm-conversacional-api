@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Central do assistente{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><h1>Central do assistente</h1></div>
+<p class="dica">Escolha quem poderá usar a linha assistente e quais consultas estarão disponíveis.</p>
+<div class="painel">
+  <strong>Configuração em preparação</strong>
+  <p>As escolhas ficam salvas, mas ainda não alteram o atendimento nem bloqueiam ações no WhatsApp. A integração com o Gateway é necessária para que entrem em vigor.</p>
+</div>
+<section class="painel">
+  <h2>Assistente da empresa</h2>
+  <form method="post" action="/portal/assistant/organization">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label><input type="checkbox" name="enabled" value="true" {% if organization and organization.enabled %}checked{% endif %}> Habilitar para a empresa</label>
+    <button type="submit">Salvar empresa</button>
+  </form>
+</section>
+<section class="painel">
+  <h2>Acesso dos representantes</h2>
+  <p class="dica">Um usuário inativo não terá acesso, mesmo que esteja habilitado aqui.</p>
+  {% for user in users %}
+  <form method="post" action="/portal/assistant/representatives/{{ user.id }}" class="formulario">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h3>{{ user.full_name }}{% if not user.active %} (usuário inativo){% endif %}</h3>
+    <label><input type="checkbox" name="enabled" value="true" {% if enabled.get(user.id) %}checked{% endif %}> Habilitar este representante</label>
+    {% for capability, label in capabilities.items() %}
+    <label><input type="checkbox" name="capabilities" value="{{ capability }}" {% if capability in selected[user.id] %}checked{% endif %}> {{ label }}</label>
+    {% endfor %}
+    <button type="submit">Salvar representante</button>
+  </form>
+  {% else %}<p>Nenhum representante cadastrado.</p>{% endfor %}
+</section>
+<section class="painel">
+  <h2>Atendimento aos clientes</h2>
+  <p>Em uma próxima etapa, esta central poderá reunir tom de voz, saudações e orientações do robô de atendimento.</p>
+</section>
+{% endblock %}
