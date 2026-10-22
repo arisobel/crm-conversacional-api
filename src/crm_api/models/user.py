@@ -42,6 +42,7 @@ class User(Base):
 
     __tablename__ = "users"
     __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="ux_users_tenant_id"),
         UniqueConstraint("tenant_id", "email", name="ux_users_tenant_email"),
         UniqueConstraint("public_ref", name="ux_users_public_ref"),
         # Parcial: só um telefone preenchido precisa ser único. Vários usuários

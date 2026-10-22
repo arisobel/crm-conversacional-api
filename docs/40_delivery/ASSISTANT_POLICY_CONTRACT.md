@@ -1,7 +1,7 @@
 # Linha assistente — política e integração proposta
 
-**Estado:** primeira etapa local de regra de política, ainda sem persistência,
-painel, aplicação ao manifesto ou execução. Não muda o contrato do Gateway e
+**Estado:** regra e modelo de persistência preparados localmente, ainda sem
+administração, painel, aplicação ao manifesto ou execução. Não muda o contrato do Gateway e
 não ativa nem desativa atendimento. Não fazer deploy como controle de acesso.
 
 ## Escopo e modelo proposto
@@ -14,8 +14,9 @@ limitadas às capacidades de representante com executor conhecido. Configuraçã
 não substitui usuário ativo, tenant, autenticação, carteira ou permissões de
 cada operação. Só administrador do tenant poderá alterar, com auditoria.
 
-A função pura `AssistantPolicy` implementa esta decisão, mas não representa
-configuração persistida nem é um mecanismo de autorização em produção.
+A função pura `AssistantPolicy` e o repositório de leitura implementam esta
+decisão a partir dos dados persistidos, mas ainda não são mecanismos de
+autorização em produção.
 
 ## Contrato existente e lacuna
 
@@ -54,8 +55,7 @@ comportamento desejado; validar o caminho real e evitar fallback permissivo.
 
 ## Próximas entregas
 
-1. Modelo persistente com isolamento por tenant e representante, padrões negados,
-   administração autenticada, auditoria e migração; painel em etapa posterior.
+1. Administração autenticada e auditada dos dados; painel em etapa posterior.
 2. Acordar e versionar identidade de linha e contexto de execução autenticados;
    atualizar contrato, OpenAPI e decisões antes da integração.
 3. Aplicar política no manifesto **e em cada executor**, manter autorização de
