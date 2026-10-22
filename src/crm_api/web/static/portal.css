@@ -348,3 +348,86 @@ dialog.modal .dica a { color: var(--acento); }
   }
   button, .botao { color: #12171c; }
 }
+
+/* Portal autenticado: navegação e identidade visual. */
+.portal-autenticado {
+  --tinta: #10274b;
+  --tinta-fraca: #7086a8;
+  --linha: #dce9f2;
+  --fundo: #edf6fa;
+  --cartao: #fff;
+  --acento: #006b9c;
+  --erro: #9b1c1c;
+  --erro-fundo: #fdeaea;
+  --ok: #087c5e;
+  --ok-fundo: #e5f9ef;
+  display: flex;
+  min-height: 100vh;
+  background: #eaf5f9;
+}
+.barra-lateral {
+  position: sticky; top: 0; height: 100vh; flex: 0 0 232px; overflow-y: auto;
+  padding: 22px 8px; color: #fff;
+  background: radial-gradient(ellipse at 5% 100%, #007f8f 0, transparent 45%),
+    linear-gradient(160deg, #041b31 10%, #052d48 68%, #00465c);
+  box-shadow: 4px 0 28px rgb(1 84 107 / 16%);
+}
+.barra-lateral .marca { display: block; padding: 2px 12px 24px; }
+.barra-lateral .marca img { display: block; width: 100%; max-width: 195px; height: 62px; object-fit: contain; }
+.barra-lateral nav { display: flex; flex-direction: column; gap: 4px; }
+.barra-lateral nav a {
+  display: flex; align-items: center; gap: 15px; min-height: 49px;
+  padding: 10px 17px; border: 1px solid transparent; border-radius: 12px;
+  color: #e6f4fb; text-decoration: none; font-weight: 500;
+}
+.barra-lateral nav a span { width: 24px; text-align: center; font-size: 22px; line-height: 1; }
+.barra-lateral nav a:hover { background: rgb(255 255 255 / 8%); }
+.barra-lateral nav a.atual { color: white; border-color: #45eef0; background: linear-gradient(100deg, #075375, #13b8ba); box-shadow: 0 4px 18px rgb(10 235 226 / 18%); font-weight: 700; }
+.portal-conteudo { min-width: 0; flex: 1; }
+.portal-autenticado .topo { height: 80px; padding: 12px 28px; background: rgb(255 255 255 / 52%); border-bottom: 1px solid #fff; }
+.topo-titulo { color: #7993ad; font-size: 13px; letter-spacing: .03em; }
+.conta { position: relative; margin-left: auto; z-index: 40; }
+.conta summary { display: flex; align-items: center; justify-content: space-between; gap: 25px; min-width: 190px; padding: 10px 18px; border: 1px solid white; border-radius: 26px; background: #e8f4f8; color: #112b50; cursor: pointer; font-weight: 700; list-style: none; }
+.conta summary::-webkit-details-marker { display: none; }
+.conta-menu { position: absolute; right: 0; top: calc(100% + 8px); width: 235px; padding: 8px 16px; background: white; border-radius: 15px; box-shadow: 0 12px 30px rgb(22 66 93 / 18%); }
+.conta-identidade { padding: 10px 8px 14px; }
+.conta-identidade small { display: block; color: #7791b1; }
+.conta-menu a, .conta-menu button { display: block; width: 100%; padding: 13px 8px; border: 0; border-top: 1px solid #e6eef3; border-radius: 0; background: transparent; color: #112b50; text-align: left; text-decoration: none; font-size: 14px; cursor: pointer; }
+.conta-menu form { margin: 0; }
+.portal-autenticado main { max-width: none; margin: 20px 24px 36px; padding: 30px; min-height: calc(100vh - 136px); border: 1px solid #fff; border-radius: 22px; background: rgb(249 252 254 / 69%); box-shadow: 0 12px 36px rgb(66 130 157 / 8%); overflow-x: auto; }
+.portal-autenticado h1 { font-size: 28px; letter-spacing: -.03em; }
+.portal-autenticado h2 { font-size: 18px; }
+.portal-autenticado .painel, .portal-autenticado table { border-color: #e4eef4; border-radius: 15px; }
+.portal-autenticado th { color: #7289aa; background: #fff; }
+.portal-autenticado td, .portal-autenticado th { padding: 14px 18px; }
+.portal-autenticado td a { color: #0073c4; }
+.portal-autenticado button:not(.link), .portal-autenticado .botao { background: linear-gradient(115deg, #078ba9, #075183); color: white; border-radius: 9px; }
+.portal-autenticado .conta-menu button { color: #112b50; background: transparent; border-radius: 0; }
+.portal-autenticado input[type="text"], .portal-autenticado input[type="email"], .portal-autenticado input[type="password"], .portal-autenticado input[type="search"], .portal-autenticado select { border-color: #d5e6f2; border-radius: 8px; min-height: 43px; }
+.situacao-ativa { color: #00875f; background: #e3f9ef; border: 1px solid #d0f4e5; padding: 4px 13px; border-radius: 30px; font-size: 13px; }
+.inicio-cabecalho { padding: 8px 0 22px; }
+.inicio-cabecalho p:not(.inicio-etiqueta) { color: #748dae; }
+.inicio-etiqueta { margin: 0 0 8px; font-size: 11px; color: #008ba5; font-weight: 800; letter-spacing: .12em; }
+.resumo-grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-bottom: 22px; }
+.resumo-cartao { display: flex; flex-direction: column; gap: 12px; min-height: 165px; padding: 23px; background: white; border: 1px solid #e0edf4; border-radius: 16px; text-decoration: none; color: #6681a0; box-shadow: 0 8px 24px rgb(41 100 126 / 5%); }
+.resumo-cartao strong { color: #0b3153; font-size: 32px; line-height: 1; }
+.resumo-cartao small { margin-top: auto; color: #0086a5; font-weight: 600; }
+.atalhos { padding: 24px; }
+.atalhos-grade { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.atalhos-grade a { display: flex; flex-direction: column; gap: 8px; padding: 18px; color: #123756; background: #f3f9fc; border: 1px solid #e4f0f5; border-radius: 12px; text-decoration: none; font-weight: 700; }
+.atalhos-grade a span { color: #758eaa; font-size: 12px; font-weight: 400; }
+@media (max-width: 800px) {
+  .portal-autenticado { display: block; }
+  .barra-lateral { position: static; width: 100%; height: auto; padding: 10px 12px; }
+  .barra-lateral .marca { padding: 0 4px 8px; }
+  .barra-lateral .marca img { height: 40px; width: 145px; }
+  .barra-lateral nav { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
+  .barra-lateral nav a { flex: 0 0 auto; min-height: 42px; padding: 8px 12px; }
+  .barra-lateral nav a span { font-size: 18px; }
+  .portal-autenticado .topo { height: 64px; padding: 8px 14px; }
+  .portal-autenticado main { margin: 12px; padding: 18px; min-height: 0; }
+  .resumo-grade { grid-template-columns: 1fr; }
+  .resumo-cartao { min-height: 120px; }
+  .atalhos-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 430px) { .topo-titulo { display: none; } .atalhos-grade { grid-template-columns: 1fr; } }

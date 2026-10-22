@@ -318,7 +318,7 @@ async def _designaveis(session: AsyncSession, tenant_id: uuid.UUID) -> list[User
 @router.get("", include_in_schema=False)
 @router.get("/", include_in_schema=False)
 async def raiz() -> RedirectResponse:
-    return RedirectResponse("/portal/customers", status_code=303)
+    return RedirectResponse("/portal/home", status_code=303)
 
 
 @router.get("/login", include_in_schema=False)
@@ -368,7 +368,7 @@ async def submeter_login(
         )
 
     await session.commit()
-    resposta = _redirect("/portal/customers")
+    resposta = _redirect("/portal/home")
     resposta.set_cookie(
         key=settings.session_cookie_name,
         value=emitida.token,
@@ -403,6 +403,23 @@ async def submeter_logout(
 
 
 # ---------------------------------------------------------------- carteira
+
+
+@router.get("/home", include_in_schema=False)
+async def pagina_inicio(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    portfolio = CustomerPortfolioRepository(session)
+    scope = scope_for(current_user)
+    total = await portfolio.count_customers(scope, CustomerFilters())
+    active = await portfolio.count_customers(scope, CustomerFilters(active=True))
+    without_contact = await portfolio.count_customers(scope, CustomerFilters(interacted=False))
+    return _render(request, "home.html", {
+        "total_clientes": total, "clientes_ativos": active,
+        "clientes_sem_interacao": without_contact,
+    }, current_user=current_user)
 
 
 @router.get("/customers", include_in_schema=False)

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Início{% endblock %}
+{% block conteudo %}
+<div class="inicio-cabecalho">
+  <p class="inicio-etiqueta">VISÃO GERAL</p>
+  <h1>Olá, {{ current_user.full_name }}</h1>
+  <p>Seu espaço para acompanhar clientes e organizar o trabalho comercial.</p>
+</div>
+<section class="resumo-grade" aria-label="Resumo de clientes">
+  <a class="resumo-cartao" href="/portal/customers"><span>Clientes na carteira</span><strong>{{ total_clientes }}</strong><small>Ver clientes →</small></a>
+  <a class="resumo-cartao" href="/portal/customers?situacao=ativos"><span>Clientes ativos</span><strong>{{ clientes_ativos }}</strong><small>Ver clientes ativos →</small></a>
+  <a class="resumo-cartao" href="/portal/customers?contato=sem"><span>Sem interação registrada</span><strong>{{ clientes_sem_interacao }}</strong><small>Ver clientes →</small></a>
+</section>
+<section class="painel atalhos">
+  <p class="inicio-etiqueta">SEU TRABALHO</p><h2>Acesse rapidamente</h2><p class="dica">Continue de onde precisa.</p>
+  <div class="atalhos-grade">
+    <a href="/portal/customers">Carteira <span>Clientes e contatos →</span></a>
+    <a href="/portal/products">Produtos <span>Catálogo e artigos →</span></a>
+    <a href="/portal/intakes">Pré-cadastros <span>Solicitações de clientes →</span></a>
+    <a href="/portal/campaigns">Campanhas <span>Públicos e rascunhos →</span></a>
+  </div>
+</section>
+{% endblock %}

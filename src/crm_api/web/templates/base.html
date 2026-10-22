@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
@@ -7,47 +7,52 @@
   <link rel="icon" type="image/png" href="/portal/static/crm-icon.png">
   <link rel="apple-touch-icon" href="/portal/static/crm-icon.png">
   <link rel="stylesheet" href="/portal/static/portal.css">
-  <!-- Sem JavaScript o modal não abre e o combobox não filtra. A folha abaixo
-       deixa o formulário do artigo aberto na página e o select nativo à mostra,
-       para que a tela continue inteira. Ela é um arquivo à parte porque a CSP
-       do portal não admite <style> embutido. -->
   <noscript><link rel="stylesheet" href="/portal/static/portal-nojs.css"></noscript>
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_class %}{% endblock %}{% if current_user %} portal-autenticado{% endif %}">
 {% if current_user %}
-<header class="topo">
-  <nav>
-    <a href="/portal/customers" class="marca">CRM</a>
-    <a href="/portal/customers">Carteira</a>
-    <a href="/portal/intakes">Pré-cadastros</a>
-    <a href="/portal/products">Produtos</a>
-    <a href="/portal/campaigns">Campanhas</a>
+<aside class="barra-lateral">
+  <a href="/portal/home" class="marca" aria-label="CRM — início"><img src="/portal/static/crm-logo.png" alt="CRM"></a>
+  <nav aria-label="Menu principal">
+    {% set path = request.url.path %}
+    <a href="/portal/home" class="{% if path == '/portal/home' %}atual{% endif %}"><span aria-hidden="true">⌂</span> Início</a>
+    <a href="/portal/customers" class="{% if path.startswith('/portal/customers') %}atual{% endif %}"><span aria-hidden="true">♙</span> Carteira</a>
+    <a href="/portal/intakes" class="{% if path.startswith('/portal/intakes') %}atual{% endif %}"><span aria-hidden="true">▤</span> Pré-cadastros</a>
+    <a href="/portal/products" class="{% if path.startswith('/portal/products') %}atual{% endif %}"><span aria-hidden="true">◇</span> Produtos</a>
+    <a href="/portal/campaigns" class="{% if path.startswith('/portal/campaigns') %}atual{% endif %}"><span aria-hidden="true">➤</span> Campanhas</a>
     {% if current_user.role.value == 'REPRESENTATIVE' %}
-    <a href="/portal/whatsapp/{{ current_user.user_id }}">WhatsApp Business</a>
+    <a href="/portal/whatsapp/{{ current_user.user_id }}" class="{% if path.startswith('/portal/whatsapp') %}atual{% endif %}"><span aria-hidden="true">◉</span> WhatsApp Business</a>
     {% endif %}
     {% if current_user.role.value == 'ADMIN' %}
-    <a href="/portal/prices">Tabelas</a>
-    <a href="/portal/icms-rules">ICMS</a>
-    <a href="/portal/users">Usuários</a>
-    <a href="/portal/assistant">Assistente</a>
+    <a href="/portal/prices" class="{% if path.startswith('/portal/prices') %}atual{% endif %}"><span aria-hidden="true">▦</span> Tabelas</a>
+    <a href="/portal/icms-rules" class="{% if path.startswith('/portal/icms-rules') %}atual{% endif %}"><span aria-hidden="true">▤</span> ICMS</a>
+    <a href="/portal/users" class="{% if path.startswith('/portal/users') %}atual{% endif %}"><span aria-hidden="true">♧</span> Usuários</a>
+    <a href="/portal/assistant" class="{% if path.startswith('/portal/assistant') %}atual{% endif %}"><span aria-hidden="true">✧</span> Assistente</a>
     {% endif %}
   </nav>
-  <div class="sessao">
-    <span>{{ current_user.full_name }} · {{ current_user.role.value }}</span>
-    <a href="/portal/minha-senha">Minha senha</a>
-    <form method="post" action="/portal/logout">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="link">Sair</button>
-    </form>
-  </div>
-</header>
+</aside>
+<div class="portal-conteudo">
+  <header class="topo">
+    <span class="topo-titulo">Seu espaço comercial</span>
+    <details class="conta">
+      <summary>{{ current_user.full_name }} <span aria-hidden="true">⌄</span></summary>
+      <div class="conta-menu">
+        <div class="conta-identidade"><strong>{{ current_user.full_name }}</strong><small>{% if current_user.role.value == 'ADMIN' %}Administrador{% elif current_user.role.value == 'MANAGER' %}Gerente{% else %}Representante{% endif %}</small></div>
+        <a href="/portal/minha-senha">♙ &nbsp; Minha senha</a>
+        <form method="post" action="/portal/logout">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit">↪ &nbsp; Sair</button>
+        </form>
+      </div>
+    </details>
+  </header>
 {% endif %}
-
 <main>
   {% if erro %}<p class="aviso erro">{{ erro }}</p>{% endif %}
   {% if aviso %}<p class="aviso ok">{{ aviso }}</p>{% endif %}
   {% block conteudo %}{% endblock %}
 </main>
+{% if current_user %}</div>{% endif %}
 <script src="/portal/static/portal.js" defer></script>
 </body>
 </html>

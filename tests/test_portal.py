@@ -126,13 +126,14 @@ async def test_pagina_protegida_redireciona_para_o_login(world):
 
 
 @pytest.mark.asyncio
-async def test_login_leva_para_a_carteira(world):
+async def test_login_leva_para_inicio(world):
     async with _browser(world) as client:
         resposta = await _entrar(client, ADMIN_EMAIL)
 
     assert resposta.status_code == 200
-    assert "/portal/customers" in str(resposta.url)
+    assert "/portal/home" in str(resposta.url)
     assert "Gestora Exemplo" in resposta.text
+    assert "Clientes na carteira" in resposta.text
 
 
 @pytest.mark.asyncio

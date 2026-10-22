@@ -3,7 +3,7 @@
 
 {% block conteudo %}
 <div class="cabecalho">
-  <h1>{% if somente_minha %}Minha carteira{% else %}Clientes{% endif %}</h1>
+  <div><h1>{% if somente_minha %}Minha carteira{% else %}Clientes{% endif %}</h1><p class="dica">Gerencie seus clientes e contatos.</p></div>
   <a class="botao" href="/portal/customers/novo">Novo cliente</a>
 </div>
 
@@ -59,7 +59,7 @@
         <span class="vazio">nunca</span>
         {%- endif -%}
       </td>
-      <td>{% if cliente.active %}ativo{% else %}<span class="vazio">inativo</span>{% endif %}</td>
+      <td>{% if cliente.active %}<span class="situacao-ativa">ativo</span>{% else %}<span class="vazio">inativo</span>{% endif %}</td>
     </tr>
     {% endfor %}
   </tbody>
