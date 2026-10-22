@@ -404,6 +404,8 @@ dialog.modal .dica a { color: var(--acento); }
 .portal-autenticado button:not(.link), .portal-autenticado .botao { background: linear-gradient(115deg, #078ba9, #075183); color: white; border-radius: 9px; }
 .portal-autenticado .conta-menu button { color: #112b50; background: transparent; border-radius: 0; }
 .portal-autenticado input[type="text"], .portal-autenticado input[type="email"], .portal-autenticado input[type="password"], .portal-autenticado input[type="search"], .portal-autenticado select { border-color: #d5e6f2; border-radius: 8px; min-height: 43px; }
+.portal-autenticado textarea, .portal-autenticado input[type="number"] { padding: 10px; border: 1px solid #d5e6f2; border-radius: 8px; font: inherit; color: var(--tinta); background: white; }
+.portal-autenticado textarea { resize: vertical; }
 .situacao-ativa { color: #00875f; background: #e3f9ef; border: 1px solid #d0f4e5; padding: 4px 13px; border-radius: 30px; font-size: 13px; }
 .inicio-cabecalho { padding: 8px 0 22px; }
 .inicio-cabecalho p:not(.inicio-etiqueta) { color: #748dae; }

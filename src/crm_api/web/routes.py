@@ -27,6 +27,7 @@ from crm_api.models.assistant_settings import (
     AssistantOrganizationSettings,
     AssistantRepresentativeCapability,
     AssistantRepresentativeSettings,
+    ConversationBehaviorSettings,
 )
 from crm_api.models.interaction import NOTE_CHANNELS, InteractionDirection
 from crm_api.models.pricing import AvailabilityStatus
@@ -1018,6 +1019,15 @@ _ASSISTANT_CAPABILITIES = {
     "CRM_REP_CREATE_CUSTOMER_INTAKE": "Solicitar pré-cadastro de cliente",
 }
 
+_BEHAVIOR_DEFAULT_INSTRUCTIONS = (
+    "Converse de forma natural e objetiva. Não repita saudações ou o nome da pessoa "
+    "a cada mensagem. Considere as mensagens recentes da conversa. Se não entender, "
+    "peça esclarecimento sobre o pedido; não sugira uma tabela ou ação sem relação. "
+    "Após uma pausa longa, uma saudação de retorno pode ser apropriada."
+)
+_BEHAVIOR_TONES = {"cordial", "objetivo", "consultivo"}
+_BEHAVIOR_BOTS = {"ASSISTANT", "COEXISTENCE"}
+
 
 @router.get("/assistant", include_in_schema=False)
 async def pagina_assistente(
@@ -1039,6 +1049,9 @@ async def pagina_assistente(
     capabilities = (await session.scalars(select(AssistantRepresentativeCapability).where(
         AssistantRepresentativeCapability.tenant_id == tenant_id
     ))).all()
+    behaviors = (await session.scalars(select(ConversationBehaviorSettings).where(
+        ConversationBehaviorSettings.tenant_id == tenant_id
+    ))).all()
     selected: dict[uuid.UUID, set[str]] = {user.id: set() for user in users}
     for capability in capabilities:
         if capability.user_id in selected:
@@ -1049,7 +1062,51 @@ async def pagina_assistente(
         "enabled": {setting.user_id: setting.enabled for setting in settings},
         "selected": selected,
         "capabilities": _ASSISTANT_CAPABILITIES,
+        "behaviors": {behavior.bot_kind: behavior for behavior in behaviors},
+        "default_instructions": _BEHAVIOR_DEFAULT_INSTRUCTIONS,
     }, current_user=current_user, mensagem=m)
+
+
+@router.post("/assistant/behavior/{bot_kind}", include_in_schema=False)
+async def salvar_comportamento(
+    bot_kind: str,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+    tone: Annotated[str, Form()] = "cordial",
+    instructions: Annotated[str, Form()] = "",
+    context_minutes: Annotated[int, Form()] = 120,
+) -> Response:
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/assistant", "csrf")
+    instructions = instructions.strip()
+    if (bot_kind not in _BEHAVIOR_BOTS or tone not in _BEHAVIOR_TONES
+            or not instructions or len(instructions) > 4000
+            or not 15 <= context_minutes <= 1440):
+        return _redirect("/portal/assistant", "comportamento-invalido")
+    behavior = await session.get(ConversationBehaviorSettings, (current_user.tenant_id, bot_kind))
+    before = None if behavior is None else {
+        "tone": behavior.tone, "instructions": behavior.instructions,
+        "context_minutes": behavior.context_minutes,
+    }
+    if behavior is None:
+        behavior = ConversationBehaviorSettings(tenant_id=current_user.tenant_id, bot_kind=bot_kind)
+        session.add(behavior)
+    behavior.tone = tone
+    behavior.instructions = instructions
+    behavior.context_minutes = context_minutes
+    behavior.updated_at = datetime.now(UTC)
+    AuditRepository(session).record(
+        action="conversation.behavior.updated", entity="conversation_behavior_settings",
+        tenant_id=current_user.tenant_id, actor_user_id=current_user.user_id,
+        before=before, after={"bot_kind": bot_kind, "tone": tone,
+                              "instructions": instructions, "context_minutes": context_minutes},
+    )
+    await session.commit()
+    return _redirect("/portal/assistant", "assistente-salvo")
 
 
 @router.post("/assistant/organization", include_in_schema=False)

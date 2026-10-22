@@ -15,7 +15,10 @@ from sqlalchemy import select
 
 from crm_api.models.customer import Customer, CustomerLocation
 from crm_api.models.customer_contact import CustomerContact
-from crm_api.models.assistant_settings import AssistantRepresentativeSettings
+from crm_api.models.assistant_settings import (
+    AssistantRepresentativeSettings,
+    ConversationBehaviorSettings,
+)
 from crm_api.models.user import AuditLog, User
 
 _CSRF = re.compile(r'name="csrf_token" value="([^"]+)"')
@@ -64,7 +67,7 @@ async def admin(world):
 @pytest.mark.asyncio
 async def test_assistente_salva_configuracao_e_auditoria(world, admin):
     page = await admin.get("/portal/assistant")
-    assert "ainda não alteram o atendimento" in page.text
+    assert "ainda não alteram as respostas" in page.text
     token = _token(page.text)
     await admin.post("/portal/assistant/organization", data={
         "csrf_token": token, "enabled": "true",
@@ -85,6 +88,51 @@ async def test_assistente_salva_configuracao_e_auditoria(world, admin):
         ))).all()
         assert len(entries) == 1
         assert entries[0].after["capabilities"] == ["CRM_REP_LOOKUP_CUSTOMER"]
+
+
+@pytest.mark.asyncio
+async def test_personalidade_dos_robos_e_salva_separadamente(world, admin):
+    page = await admin.get("/portal/assistant")
+    token = _token(page.text)
+    assert "Atendimento aos clientes · Coexistence" in page.text
+    for bot, tone in [("ASSISTANT", "objetivo"), ("COEXISTENCE", "cordial")]:
+        result = await admin.post(f"/portal/assistant/behavior/{bot}", data={
+            "csrf_token": token, "tone": tone, "context_minutes": "120",
+            "instructions": f"Converse naturalmente: {bot}",
+        })
+        assert "Configuração do assistente salva" in result.text
+    async with world.app.state.session_factory() as session:
+        assistant = await session.get(ConversationBehaviorSettings, (world.tenant_id, "ASSISTANT"))
+        coexistence = await session.get(
+            ConversationBehaviorSettings, (world.tenant_id, "COEXISTENCE")
+        )
+        assert assistant.tone == "objetivo"
+        assert coexistence.tone == "cordial"
+        assert assistant.context_minutes == coexistence.context_minutes == 120
+        audit = (await session.scalars(select(AuditLog).where(
+            AuditLog.action == "conversation.behavior.updated"
+        ))).all()
+        assert len(audit) == 2
+
+
+@pytest.mark.asyncio
+async def test_personalidade_rejeita_valores_invalidos_e_outros_usuarios(world, admin):
+    page = await admin.get("/portal/assistant")
+    token = _token(page.text)
+    await admin.post("/portal/assistant/behavior/COEXISTENCE", data={
+        "csrf_token": token, "tone": "cordial", "context_minutes": "1",
+        "instructions": "Olá",
+    })
+    async with _browser(world) as representative:
+        page = await _entrar(representative, REPRESENTATIVE_A_EMAIL)
+        await representative.post("/portal/assistant/behavior/COEXISTENCE", data={
+            "csrf_token": _token(page.text), "tone": "cordial", "context_minutes": "120",
+            "instructions": "Olá",
+        })
+    async with world.app.state.session_factory() as session:
+        assert await session.get(
+            ConversationBehaviorSettings, (world.tenant_id, "COEXISTENCE")
+        ) is None
 
 
 @pytest.mark.asyncio

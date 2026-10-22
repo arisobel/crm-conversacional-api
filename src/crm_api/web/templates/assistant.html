@@ -1,12 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Central do assistente{% endblock %}
 {% block conteudo %}
-<div class="cabecalho"><h1>Central do assistente</h1></div>
-<p class="dica">Escolha quem poderá usar a linha assistente e quais consultas estarão disponíveis.</p>
+<div class="cabecalho"><h1>Central dos robôs</h1></div>
+<p class="dica">Prepare as orientações de conversa e os acessos dos seus robôs.</p>
 <div class="painel">
   <strong>Configuração em preparação</strong>
-  <p>As escolhas ficam salvas, mas ainda não alteram o atendimento nem bloqueiam ações no WhatsApp. A integração com o Gateway é necessária para que entrem em vigor.</p>
+  <p>As escolhas ficam salvas, mas ainda não alteram as respostas, o contexto nem as permissões no WhatsApp. A integração com o Gateway é necessária para que entrem em vigor.</p>
 </div>
+<section class="painel">
+  <h2>Personalidade e conversa</h2>
+  <p class="dica">Configure cada robô separadamente. O período começa novamente a cada mensagem da conversa.</p>
+  {% for bot_kind, bot_label in [('ASSISTANT', 'Assistente do representante'), ('COEXISTENCE', 'Atendimento aos clientes · Coexistence')] %}
+  {% set behavior = behaviors.get(bot_kind) %}
+  <form method="post" action="/portal/assistant/behavior/{{ bot_kind }}" class="formulario">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h3>{{ bot_label }}</h3>
+    <label for="tone-{{ bot_kind }}">Tom de conversa</label>
+    <select id="tone-{{ bot_kind }}" name="tone">
+      {% for value, label in [('cordial', 'Cordial e natural'), ('objetivo', 'Objetivo'), ('consultivo', 'Consultivo')] %}
+      <option value="{{ value }}" {% if (behavior.tone if behavior else 'cordial') == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <label for="context-{{ bot_kind }}">Retomar como nova conversa após silêncio (minutos)</label>
+    <input id="context-{{ bot_kind }}" type="number" name="context_minutes" min="15" max="1440" value="{{ behavior.context_minutes if behavior else 120 }}" required>
+    <p class="dica">120 minutos equivalem a duas horas. Depois da pausa, uma saudação de retorno pode ser usada quando fizer sentido.</p>
+    <label for="instructions-{{ bot_kind }}">Orientações de comportamento</label>
+    <textarea id="instructions-{{ bot_kind }}" name="instructions" rows="7" maxlength="4000" required>{{ behavior.instructions if behavior else default_instructions }}</textarea>
+    <p class="dica">As orientações não substituem regras de preço, permissões e segurança.</p>
+    <button type="submit">Salvar {{ bot_label }}</button>
+  </form>
+  {% endfor %}
+</section>
 <section class="painel">
   <h2>Assistente da empresa</h2>
   <form method="post" action="/portal/assistant/organization">
@@ -29,9 +53,5 @@
     <button type="submit">Salvar representante</button>
   </form>
   {% else %}<p>Nenhum representante cadastrado.</p>{% endfor %}
-</section>
-<section class="painel">
-  <h2>Atendimento aos clientes</h2>
-  <p>Em uma próxima etapa, esta central poderá reunir tom de voz, saudações e orientações do robô de atendimento.</p>
 </section>
 {% endblock %}
