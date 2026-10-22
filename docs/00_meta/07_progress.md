@@ -13,7 +13,11 @@ executores; não constitui controle efetivo de acesso. Proposta de integração 
 Modelo, migração e leitura da configuração preparados com isolamento por tenant;
 administração e aplicação ao tráfego permanecem futuras.
 Validação local: quatro testes da política e três testes de armazenamento em
-SQLite passaram. A migração 0018 ainda exige validação em PostgreSQL antes de deploy.
+SQLite passaram. Em PostgreSQL 18 isolado, todas as migrações até 0017 e a 0018
+foram aplicadas; os padrões, isolamento por tenant, unicidade e cascata passaram
+em `ops/ci/check_assistant_settings.sql`, e a reversão e reaplicação da 0018
+funcionaram. A versão e o banco de produção ainda precisam ser confirmados antes
+de deploy; a configuração documentada do projeto usa PostgreSQL 16.
 
 ### Linha assistente — regras iniciais de rotina (2026-10-21)
 
