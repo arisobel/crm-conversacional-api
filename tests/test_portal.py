@@ -13,12 +13,12 @@ from conftest import (
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
-from crm_api.models.customer import Customer, CustomerLocation
-from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.assistant_settings import (
     AssistantRepresentativeSettings,
     ConversationBehaviorSettings,
 )
+from crm_api.models.customer import Customer, CustomerLocation
+from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.user import AuditLog, User
 
 _CSRF = re.compile(r'name="csrf_token" value="([^"]+)"')

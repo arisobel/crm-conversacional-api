@@ -4,8 +4,17 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer,
-    String, Text, Uuid, func, text,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Integer,
+    String,
+    Text,
+    Uuid,
+    func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,7 +27,9 @@ class AssistantOrganizationSettings(Base):
     __tablename__ = "assistant_organization_settings"
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -26,14 +37,17 @@ class AssistantRepresentativeSettings(Base):
     __tablename__ = "assistant_representative_settings"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["tenant_id", "user_id"], ["users.tenant_id", "users.id"],
+            ["tenant_id", "user_id"],
+            ["users.tenant_id", "users.id"],
             name="fk_assistant_rep_user_tenant",
         ),
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -42,7 +56,10 @@ class AssistantRepresentativeCapability(Base):
     __table_args__ = (
         ForeignKeyConstraint(
             ["tenant_id", "user_id"],
-            ["assistant_representative_settings.tenant_id", "assistant_representative_settings.user_id"],
+            [
+                "assistant_representative_settings.tenant_id",
+                "assistant_representative_settings.user_id",
+            ],
             name="fk_assistant_capability_rep",
             ondelete="CASCADE",
         ),
