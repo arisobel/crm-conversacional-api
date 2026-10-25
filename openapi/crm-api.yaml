@@ -803,6 +803,62 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/integrations/whatsapp/v1/capabilities/manifest:
+    post:
+      tags: [Capability Manifest]
+      operationId: getWhatsappCapabilityManifest
+      description: >
+        Retorna as capacidades do contato autenticado pelo Gateway. Quando
+        channel_context.line_phone_number_id corresponde à Linha Assistente
+        configurada, aceita somente representante ativo com política efetiva;
+        a ausência dela devolve 403 e nunca recebe fallback de cliente.
+      parameters:
+        - $ref: "#/components/parameters/TenantSlug"
+        - $ref: "#/components/parameters/Timestamp"
+        - $ref: "#/components/parameters/Signature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [contact_phone_e164, channel_context]
+              properties:
+                contact_phone_e164:
+                  type: string
+                  description: Telefone E.164 do contato que escreveu.
+                channel_context:
+                  type: object
+                  additionalProperties: false
+                  required: [channel]
+                  properties:
+                    channel:
+                      type: string
+                      const: whatsapp
+                    line_phone_number_id:
+                      type: string
+                      pattern: '^\\d{5,64}$'
+                      description: Phone Number ID técnico da Meta.
+      responses:
+        "200":
+          description: Manifesto de capacidades aceito pelo Gateway.
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Envelope business-capability-manifest/v1.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Linha Assistente sem representante habilitado ou sem política efetiva.
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
   /internal/interaction-capabilities:
     get:
       tags: [Interaction Capabilities]

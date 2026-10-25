@@ -7,17 +7,19 @@ este é o único que sabe quem está falando.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.api.security import verify_internal_request
 from crm_api.core.database import get_session
 from crm_api.core.phone import InvalidWhatsappNumber, normalize_whatsapp_e164
+from crm_api.repositories.assistant_settings import get_assistant_policy
 from crm_api.repositories.users import UserRepository
 from crm_api.schemas.capability_manifest import CapabilityManifest, ManifestRequest
 from crm_api.services.capability_manifest import build_manifest
 from crm_api.services.whatsapp_actor import (
     ActorNotFound,
+    ActorRole,
     AmbiguousActor,
     WhatsappActorResolver,
 )
@@ -30,6 +32,9 @@ router = APIRouter(tags=["Capability Manifest"])
     response_model=CapabilityManifest,
     responses={
         401: {"description": "Unauthorized"},
+        403: {
+            "description": "Assistant line is disabled or caller is not an enabled representative"
+        },
         404: {"description": "Tenant unknown, or no actor matches this phone"},
         409: {"description": "Phone belongs to both a portal user and a customer contact"},
         422: {"description": "Phone is not a valid E.164 number"},
@@ -37,6 +42,7 @@ router = APIRouter(tags=["Capability Manifest"])
 )
 async def capabilities_manifest(
     payload: ManifestRequest,
+    request: Request,
     tenant_slug: Annotated[str, Depends(verify_internal_request)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> CapabilityManifest:
@@ -68,4 +74,28 @@ async def capabilities_manifest(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(error)
         ) from error
 
-    return build_manifest(actor, payload.channel_context)
+    assistant_line_id = request.app.state.settings.assistant_line_phone_number_id
+    is_assistant_line = assistant_line_id == payload.channel_context.line_phone_number_id
+    if not is_assistant_line:
+        return build_manifest(actor, payload.channel_context)
+
+    # A linha central nunca rebaixa um contato para capacidades de cliente. Ela
+    # só atende representante ativo, configurado pelo administrador, e falha
+    # fechada se a política estiver ausente, revogada ou vazia.
+    if actor.role is not ActorRole.REPRESENTATIVE or actor.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="assistant line requires an enabled representative",
+        )
+    policy = await get_assistant_policy(session, tenant.id, actor.user_id)
+    capabilities = policy.effective_capabilities()
+    if not capabilities:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="assistant access is not enabled for this representative",
+        )
+    return build_manifest(
+        actor,
+        payload.channel_context,
+        allowed_capability_ids=capabilities,
+    )

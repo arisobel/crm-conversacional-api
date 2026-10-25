@@ -1,8 +1,9 @@
 # Linha assistente — política e integração proposta
 
-**Estado:** regra e modelo de persistência preparados localmente, ainda sem
-administração, painel, aplicação ao manifesto ou execução. Não muda o contrato do Gateway e
-não ativa nem desativa atendimento. Não fazer deploy como controle de acesso.
+**Estado:** o portal administra a política com auditoria e o CRM a aplica ao
+manifesto da Linha Assistente quando o Gateway informa o `phone_number_id`
+configurado. Ainda falta a revalidação em cada executor do Gateway e o teste
+integrado; não tratar este corte isolado como ativação completa em produção.
 
 ## Escopo e modelo proposto
 
@@ -15,19 +16,19 @@ não substitui usuário ativo, tenant, autenticação, carteira ou permissões d
 cada operação. Só administrador do tenant poderá alterar, com auditoria.
 
 A função pura `AssistantPolicy` e o repositório de leitura implementam esta
-decisão a partir dos dados persistidos, mas ainda não são mecanismos de
-autorização em produção.
+decisão a partir dos dados persistidos. A linha configurada falha fechada para
+cliente, representante inativo ou política ausente/vazia; a linha comercial
+permanece fora deste filtro.
 
 ## Contrato existente e lacuna
 
 `POST /api/integrations/whatsapp/v1/capabilities/manifest` recebe telefone e
 `channel_context.line_phone_number_id`, HMAC e tenant. Retorna ator, capacidades,
-ajuda e TTL. O envelope atual não prova por si só que a linha é assistente: é
-necessário estabelecer vínculo confiável entre referência da linha e tenant,
-além de um acordo para indicar e validar esse papel. Não usar número de exibição
-como identidade técnica. Desconhecido, ausente ou conflitante não pode liberar
-capacidade de representante na linha assistente nem cair no manifesto legado.
-Linha comercial deve continuar com seu fluxo e manifesto existentes.
+ajuda e TTL. Para a BPTI, `CRM_ASSISTANT_LINE_PHONE_NUMBER_ID` recebe o
+identificador Meta `1164849720052678`; ele nunca é substituído pelo número de
+exibição `+5511939401738`. Quando os dois IDs casam, o CRM exige representante
+ativo e filtra o manifesto pela política persistida. Linha comercial deve
+continuar com seu fluxo e manifesto existentes.
 
 O manifesto não é uma autorização final: pode permanecer em cache e as rotas
 atuais de execução do representante recebem telefone, mas não identificam a
@@ -49,20 +50,32 @@ linha assistente, sem fallback para capacidades de cliente ou manifesto legado.
 | CRM indisponível ou erro de autenticação | Não executar nem usar capacidades antigas como autorização; resposta operacional conforme contrato futuro. |
 | Linha comercial | Manter contratos, escopo e atendimento existentes. |
 
-Os códigos HTTP e envelopes de erro específicos dependem de validação com o
-Gateway. Não se deve supor que qualquer 403, 404 ou lista vazia já provoque o
-comportamento desejado; validar o caminho real e evitar fallback permissivo.
+O CRM devolve `403` para a Linha Assistente sem representante elegível ou sem
+política efetiva. O Gateway deve tratar isso como negação, sem cair em
+manifesto legado, cliente ou cache antigo; validar o caminho real antes do
+deploy.
 
 ## Próximas entregas
 
-1. Administração autenticada e auditada dos dados; painel em etapa posterior.
-2. Acordar e versionar identidade de linha e contexto de execução autenticados;
-   atualizar contrato, OpenAPI e decisões antes da integração.
-3. Aplicar política no manifesto **e em cada executor**, manter autorização de
+1. Revalidar a política no Gateway em cada executor, manter autorização de
    carteira e definir efeito de mudanças em cache e requisições em andamento.
-4. Testar no CRM e no Gateway: desativação organizacional e individual, cada
+2. Testar no CRM e no Gateway: desativação organizacional e individual, cada
    capacidade, isolamento entre tenants/representantes, linha comercial intacta,
    cache anterior à revogação, erros, indisponibilidade, ator cliente e ausência de
    fallback. Validar contrato e migração em PostgreSQL antes de implantação.
 
-Horários, avisos, campanhas e rotina diária não são implementados por este corte.
+## Handoff e rotina da Linha Assistente
+
+O handoff parte da linha Coexistence: ela informa ao cliente que vai verificar,
+encerra a automação daquela conversa e pede ao Gateway que notifique pela Linha
+Assistente o representante da **linha de origem** e os administradores ativos.
+O resumo deve conter cliente, conversa, motivo normalizado do handoff e ponto
+de continuidade. Não há fallback para outro representante.
+
+A rotina inicia às 07h30 e resume às 18h30, no horário de Brasília. Ela pode
+lembrar pendências verificáveis, mas não inventa resumo ou próxima ação. Handoff
+e rotina são comandos operacionais CRM ↔ Gateway, não capabilities deste
+manifesto: só entram quando o Gateway registrar executores, idempotência,
+destinatários e eventos. Mensagens iniciadas fora da janela de atendimento do
+destinatário exigem template Meta aprovado; preparar os templates é pré-requisito
+da ativação.

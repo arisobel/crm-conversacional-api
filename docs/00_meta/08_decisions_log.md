@@ -695,3 +695,25 @@ fixa no núcleo do produto impede levá-lo a outros mercados.
   pasta agora.
 - A tabela do cliente fica mais simples e mais rápida, e nunca deixa de ser
   entregue por falta de configuração fiscal.
+
+## ADR-033 — Linha Assistente central é identificada pelo Phone Number ID da Meta
+
+**Status:** aceita em 2026-10-25.
+
+### Decisão
+
+A Linha Assistente da BPTI é a linha compartilhada `+5511939401738`, identificada
+tecnicamente pelo `phone_number_id` Meta `1164849720052678`. O CRM compara esse
+valor com `channel_context.line_phone_number_id`, que chega no corpo autenticado
+por HMAC; nunca decide pelo número exibido.
+
+Nessa linha, somente representante ativo cuja organização, cadastro individual e
+capacidades estejam habilitados pelo administrador recebe manifesto. Ausência,
+cliente, conflito ou política vazia devolvem negação sem fallback. Linhas
+comerciais não recebem esse filtro.
+
+Handoff e rotina não são capabilities do manifesto enquanto o Gateway não tiver
+executores registrados. O handoff pausa a automação da conversa Coexistence,
+informa o cliente e notifica pela Linha Assistente o representante vinculado à
+linha de origem e os administradores ativos. A rotina é às 07h30 e 18h30 em
+Brasília; mensagens proativas fora da janela exigem template Meta aprovado.

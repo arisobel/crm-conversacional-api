@@ -19,6 +19,11 @@ import pytest_asyncio
 from conftest import build_portal_world
 from httpx import ASGITransport, AsyncClient
 
+from crm_api.models.assistant_settings import (
+    AssistantOrganizationSettings,
+    AssistantRepresentativeCapability,
+    AssistantRepresentativeSettings,
+)
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.user import User
 
@@ -26,6 +31,7 @@ CAMINHO = "/api/integrations/whatsapp/v1/capabilities/manifest"
 TELEFONE_REPRESENTANTE = "+5511955554444"
 TELEFONE_CLIENTE = "+5511988887777"
 TELEFONE_DESCONHECIDO = "+5541900000000"
+LINHA_ASSISTENTE = "1164849720052678"
 
 # Espelho do schema do Gateway (e122bb6). O que importa é o que ele **recusa**:
 # chave desconhecida em qualquer nível, actor.id fora de 24 hexadecimais,
@@ -183,11 +189,20 @@ async def _cliente(world):
         yield client
 
 
-async def _pedir(world, telefone: str, *, secret: bytes = b"test-secret"):
+async def _pedir(
+    world,
+    telefone: str,
+    *,
+    line_phone_number_id: str = "1234567890",
+    secret: bytes = b"test-secret",
+):
     corpo = json.dumps(
         {
             "contact_phone_e164": telefone,
-            "channel_context": {"channel": "whatsapp", "line_phone_number_id": "1234567890"},
+            "channel_context": {
+                "channel": "whatsapp",
+                "line_phone_number_id": line_phone_number_id,
+            },
         }
     ).encode("utf-8")
     async with _cliente(world) as client:
@@ -414,6 +429,79 @@ async def test_representante_expira_antes_do_cliente(world):
 
     assert do_representante["expires_in_seconds"] < do_cliente["expires_in_seconds"]
     assert do_cliente["expires_in_seconds"] <= 900
+
+
+# -------------------------------------------------------- linha assistente
+
+
+async def _world_da_linha_assistente():
+    mundo = await build_portal_world(assistant_line_phone_number_id=LINHA_ASSISTENTE)
+    async with mundo.app.state.session_factory() as session:
+        representante = await session.get(User, mundo.representative_a_id)
+        representante.whatsapp_e164 = TELEFONE_REPRESENTANTE
+        session.add(representante)
+        await session.commit()
+    return mundo
+
+
+@pytest.mark.asyncio
+async def test_linha_assistente_falha_fechada_sem_politica():
+    mundo = await _world_da_linha_assistente()
+    try:
+        resposta = await _pedir(
+            mundo, TELEFONE_REPRESENTANTE, line_phone_number_id=LINHA_ASSISTENTE
+        )
+        assert resposta.status_code == 403
+    finally:
+        await mundo.app.state.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_linha_assistente_aplica_capacidades_escolhidas_pelo_administrador():
+    mundo = await _world_da_linha_assistente()
+    try:
+        async with mundo.app.state.session_factory() as session:
+            session.add_all([
+                AssistantOrganizationSettings(tenant_id=mundo.tenant_id, enabled=True),
+                AssistantRepresentativeSettings(
+                    tenant_id=mundo.tenant_id,
+                    user_id=mundo.representative_a_id,
+                    enabled=True,
+                ),
+                *[
+                    AssistantRepresentativeCapability(
+                        tenant_id=mundo.tenant_id,
+                        user_id=mundo.representative_a_id,
+                        capability_id=capability,
+                    )
+                    for capability in _ACOES_REPRESENTANTE
+                ],
+            ])
+            await session.commit()
+
+        resposta = await _pedir(
+            mundo, TELEFONE_REPRESENTANTE, line_phone_number_id=LINHA_ASSISTENTE
+        )
+        assert resposta.status_code == 200
+        corpo = resposta.json()
+        actions = {capability["action"] for capability in corpo["capabilities"]}
+        assert actions == _ACOES_REPRESENTANTE
+        assert "pré-cadastrar cliente" in corpo["help_message"].lower()
+        valida_como_o_gateway_206c6bf(corpo)
+    finally:
+        await mundo.app.state.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_linha_comercial_nao_herda_politica_da_linha_assistente():
+    mundo = await _world_da_linha_assistente()
+    try:
+        resposta = await _pedir(mundo, TELEFONE_REPRESENTANTE)
+        assert resposta.status_code == 200
+        actions = {capability["action"] for capability in resposta.json()["capabilities"]}
+        assert actions == _ACOES_REPRESENTANTE
+    finally:
+        await mundo.app.state.engine.dispose()
 
 
 # ---------------------------------------------------------------- resolução

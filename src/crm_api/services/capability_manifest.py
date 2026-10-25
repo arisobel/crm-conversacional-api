@@ -263,15 +263,33 @@ _CAPACIDADES_REPRESENTANTE = [
 ]
 
 
-def build_manifest(actor: WhatsappActor, channel_context: ChannelContext) -> CapabilityManifest:
+def build_manifest(
+    actor: WhatsappActor,
+    channel_context: ChannelContext,
+    *,
+    allowed_capability_ids: frozenset[str] | None = None,
+) -> CapabilityManifest:
     representante = actor.role is ActorRole.REPRESENTATIVE
+    capabilities = list(_CAPACIDADES_REPRESENTANTE if representante else _CAPACIDADES_CLIENTE)
+    if allowed_capability_ids is not None:
+        # A filtragem só existe para a linha assistente, depois de a rota provar
+        # a identidade técnica da linha e carregar a política do representante.
+        # Nunca derive capacidades de cliente daqui.
+        capabilities = [
+            capability for capability in capabilities if capability.action in allowed_capability_ids
+        ]
+
+    help_message = _AJUDA_REPRESENTANTE if representante else _AJUDA_CLIENTE
+    if representante and allowed_capability_ids is not None:
+        help_message = "Neste assistente você pode: " + "; ".join(
+            capability.title.lower() for capability in capabilities
+        ) + "."
+
     return CapabilityManifest(
         actor=Actor(id=actor.public_ref, role=actor.role.value),
         channel_context=channel_context,
         expires_in_seconds=_TTL_REPRESENTANTE if representante else _TTL_CLIENTE,
         # Listas separadas, nunca uma somada à outra: são alçadas diferentes.
-        capabilities=list(
-            _CAPACIDADES_REPRESENTANTE if representante else _CAPACIDADES_CLIENTE
-        ),
-        help_message=_AJUDA_REPRESENTANTE if representante else _AJUDA_CLIENTE,
+        capabilities=capabilities,
+        help_message=help_message,
     )

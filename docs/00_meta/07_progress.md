@@ -1,17 +1,18 @@
 # Progresso central
 
-Atualizado em: 2026-10-12
+Atualizado em: 2026-10-25
 
 ## Estado atual
 
 ### Linha assistente — política inicial (2026-10-21)
 
-Regra pura de ativação por organização e representante e seleção das capacidades
-existentes de representante. Ainda não é consumida pelo manifesto nem pelos
-executores; não constitui controle efetivo de acesso. Proposta de integração em
+Regra de ativação por organização e representante, administrada no portal com
+auditoria, aplicada ao manifesto da Linha Assistente. A identidade Meta
+`1164849720052678` é configurada como `CRM_ASSISTANT_LINE_PHONE_NUMBER_ID`;
+nessa linha o CRM falha fechado para cliente, usuário inativo ou política vazia.
+As linhas comerciais preservam o comportamento anterior. A revalidação da
+política nos executores do Gateway permanece obrigatória; ver o
 [contrato da política](../40_delivery/ASSISTANT_POLICY_CONTRACT.md).
-Modelo, migração e leitura da configuração preparados com isolamento por tenant;
-administração e aplicação ao tráfego permanecem futuras.
 Validação local: quatro testes da política e três testes de armazenamento em
 SQLite passaram. Em PostgreSQL 18 isolado, todas as migrações até 0017 e a 0018
 foram aplicadas; os padrões, isolamento por tenant, unicidade e cascata passaram
@@ -24,8 +25,9 @@ de deploy; a configuração documentada do projeto usa PostgreSQL 16.
 Regra local para início às 07h30 e resumo às 18h30, todos os dias, com
 supressão da rotina já antecipada no mesmo dia local. Ainda não há vínculo,
 agendador, persistência da execução ou envio para esta rotina.
-O usuário definiu a linha compartilhada +55 11 93940-1738 e o horário de Brasília;
-o cadastro e a integração técnica da linha ainda não foram realizados.
+O usuário confirmou a linha compartilhada +55 11 93940-1738, o identificador Meta
+`1164849720052678` e o horário de Brasília. Ainda não há agendador, executor
+persistente, templates aprovados ou envio pelo Gateway.
 
 **Fase ativa:** F5 e W concluídas do lado do CRM. **R0 a R6 e W1 a W7
 implementados e implantados.** Frente aberta: **D — campanhas de WhatsApp**

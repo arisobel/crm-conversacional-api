@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     whatsapp_gateway_base_url: str | None = None
     whatsapp_gateway_internal_token: SecretStr | None = None
     whatsapp_gateway_timeout_seconds: float = 10.0
+
+    # Identidade técnica da linha central usada pelos representantes. Não é o
+    # número exibido: o Gateway envia este Phone Number ID da Meta, dentro do
+    # corpo HMAC do manifesto. Sem este vínculo, a política do assistente não
+    # é aplicada e a linha continua fora do corte de ativação.
+    assistant_line_phone_number_id: str | None = Field(default=None, pattern=r"^\d{5,64}$")
 
     password_min_length: int = 12
     login_max_failed_attempts: int = 5
