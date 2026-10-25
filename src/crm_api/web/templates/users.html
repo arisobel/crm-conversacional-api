@@ -6,9 +6,21 @@
   <h1>Usuários do portal</h1>
 </div>
 <p class="dica">
-  Representantes, gerentes e administradores. Não existe cadastro separado de
-  representante: ele é um usuário com o papel <code>REPRESENTATIVE</code>.
+  Cadastre primeiro a pessoa e escolha seu papel. Representantes e usuários
+  internos ficam separados abaixo para facilitar a gestão.
 </p>
+
+<section class="painel novo-usuario">
+  <h2>Novo usuário</h2>
+  <p class="dica">Use o formulário abaixo da lista para criar o cadastro.</p>
+  <a class="botao" href="#criar-usuario">Criar usuário</a>
+</section>
+
+<nav class="abas-usuarios" aria-label="Tipos de cadastro">
+  <a href="/portal/users?aba=representantes" class="{% if aba == 'representantes' %}atual{% endif %}">Representantes <strong>{{ representantes|length }}</strong></a>
+  <a href="/portal/users?aba=usuarios" class="{% if aba == 'usuarios' %}atual{% endif %}">Usuários <strong>{{ usuarios_internos|length }}</strong></a>
+</nav>
+<h2>{% if aba == 'representantes' %}Representantes{% else %}Usuários internos{% endif %}</h2>
 
 <table>
   <thead>
@@ -18,7 +30,7 @@
     </tr>
   </thead>
   <tbody>
-    {% for usuario in usuarios %}
+    {% for usuario in (representantes if aba == 'representantes' else usuarios_internos) %}
     <tr>
       <td>{{ usuario.full_name }}</td>
       <td>{{ usuario.email }}</td>
@@ -109,11 +121,13 @@
         </div>
       </td>
     </tr>
+    {% else %}
+    <tr><td colspan="7" class="vazio">Não há cadastros nesta seção.</td></tr>
     {% endfor %}
   </tbody>
 </table>
 
-<section class="painel">
+<section class="painel" id="criar-usuario">
   <h2>Novo usuário</h2>
   <form method="post" action="/portal/users" class="formulario">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

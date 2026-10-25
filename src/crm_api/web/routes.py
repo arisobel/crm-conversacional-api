@@ -1196,6 +1196,7 @@ async def pagina_usuarios(
     current_user: Annotated[CurrentUser, Depends(portal_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
     m: Annotated[str | None, Query()] = None,
+    aba: Annotated[str, Query()] = "representantes",
 ) -> Response:
     if current_user.role is not UserRole.ADMIN:
         return _redirect("/portal/customers", "sem-permissao")
@@ -1203,11 +1204,19 @@ async def pagina_usuarios(
     usuarios, _ = await _user_service(request, session).list_users(
         tenant_id=current_user.tenant_id, limit=200, offset=0
     )
+    if aba not in {"representantes", "usuarios"}:
+        aba = "representantes"
+    representantes = [usuario for usuario in usuarios if usuario.role is UserRole.REPRESENTATIVE]
+    usuarios_internos = [
+        usuario for usuario in usuarios if usuario.role is not UserRole.REPRESENTATIVE
+    ]
     return _render(
         request,
         "users.html",
         {
-            "usuarios": usuarios,
+            "aba": aba,
+            "representantes": representantes,
+            "usuarios_internos": usuarios_internos,
             "tamanho_minimo_senha": request.app.state.settings.password_min_length,
         },
         current_user=current_user,

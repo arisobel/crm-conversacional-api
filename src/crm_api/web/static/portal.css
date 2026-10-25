@@ -212,6 +212,12 @@ tr.detalhe span { color: var(--tinta-fraca); font-size: 12px; }
 .gaveta .formulario { margin-top: 10px; }
 .gaveta a { font-size: 12px; }
 
+.novo-usuario { margin-bottom: 24px; }
+.abas-usuarios { display: flex; gap: 10px; margin: 22px 0 18px; }
+.abas-usuarios a { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--linha); border-radius: 12px; background: var(--cartao); color: var(--tinta-fraca); text-decoration: none; font-weight: 700; }
+.abas-usuarios a.atual { border-color: #ffbf4f; background: #fff8e8; color: #905500; }
+.abas-usuarios strong { min-width: 22px; padding: 2px 7px; border-radius: 999px; background: rgb(16 39 75 / 8%); color: inherit; font-size: 12px; text-align: center; }
+
 /* --------------------------------------------------------------- login */
 
 .pagina-login {
