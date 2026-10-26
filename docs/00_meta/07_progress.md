@@ -15,6 +15,12 @@ executores atuais ainda precisam consumir e revalidar esse contexto antes de a
 regra poder ser ativada. O piloto começa somente após teste integrado com dois
 representantes na mesma Linha Assistente e isolamento comprovado de carteira.
 
+**Atualização do corte:** as quatro rotas internas v2 foram implementadas. Elas
+recebem contexto assinado, exigem conexão WhatsApp `CONNECTED`, política e
+capacidade efetivas em cada chamada, e preservam as rotas anteriores para a
+migração. O Gateway foi adaptado localmente para enviar esse contexto somente
+pela Linha Assistente; falta implantar ambos e executar o piloto real.
+
 ### Linha assistente — política inicial (2026-10-21)
 
 Regra de ativação por organização e representante, administrada no portal com

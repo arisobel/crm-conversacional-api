@@ -10,7 +10,41 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from crm_api.schemas.customer_intake import OpenCustomerIntakeRequest
 from crm_api.schemas.price_lists import CurrentPriceListItemResponse
+
+
+class AssistantExecutionContext(BaseModel):
+    """Identidade assinada de uma chamada feita pela Linha Assistente.
+
+    O telefone identifica quem escreveu para a linha central. O CRM resolve o
+    representante e exige uma conexão WhatsApp ativa dele; a referência de
+    linha, quando o Gateway puder fornecê-la, é uma prova adicional.
+    """
+
+    assistant_line_phone_number_id: str = Field(pattern=r"^\d{5,64}$")
+    representative_phone_e164: str = Field(min_length=8, max_length=20)
+    request_id: str = Field(min_length=1, max_length=200)
+    representative_line_reference: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class AssistantSearchPriceItemsRequest(BaseModel):
+    context: AssistantExecutionContext
+    query: str = Field(min_length=2, max_length=120)
+
+
+class AssistantLookupCustomersRequest(BaseModel):
+    context: AssistantExecutionContext
+    query: str = Field(min_length=2, max_length=120)
+
+
+class AssistantCustomerPriceListRequest(BaseModel):
+    context: AssistantExecutionContext
+
+
+class AssistantCustomerIntakeRequest(BaseModel):
+    context: AssistantExecutionContext
+    intake: OpenCustomerIntakeRequest
 
 
 class PriceItemsResponse(BaseModel):

@@ -49,6 +49,18 @@ class WhatsappConnectionRepository:
         )
         return list(result)
 
+    async def list_connected_for_representative(
+        self, tenant_id: uuid.UUID, user_id: uuid.UUID
+    ) -> list[RepresentativeWhatsappConnection]:
+        result = await self._session.scalars(
+            select(RepresentativeWhatsappConnection).where(
+                RepresentativeWhatsappConnection.tenant_id == tenant_id,
+                RepresentativeWhatsappConnection.representative_user_id == user_id,
+                RepresentativeWhatsappConnection.status == WhatsappConnectionStatus.CONNECTED,
+            )
+        )
+        return list(result)
+
     def add(self, connection: RepresentativeWhatsappConnection) -> None:
         self._session.add(connection)
 

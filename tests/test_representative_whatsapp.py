@@ -19,6 +19,11 @@ from conftest import build_portal_world
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
+from crm_api.models.assistant_settings import (
+    AssistantOrganizationSettings,
+    AssistantRepresentativeCapability,
+    AssistantRepresentativeSettings,
+)
 from crm_api.models.catalog import CustomerPreferredProduct
 from crm_api.models.customer import Tenant
 from crm_api.models.customer_contact import CustomerContact
@@ -30,6 +35,10 @@ from crm_api.models.pricing import (
 )
 from crm_api.models.tax import IcmsRule
 from crm_api.models.user import User
+from crm_api.models.whatsapp_connection import (
+    RepresentativeWhatsappConnection,
+    WhatsappConnectionStatus,
+)
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.icms import IcmsRuleRepository
 from crm_api.repositories.price_entries import PriceEntryRepository
@@ -151,14 +160,29 @@ async def _get(world, path: str, *, params: dict | None = None, secret: bytes = 
         return await client.get(path, params=params, headers=_headers(path, secret=secret))
 
 
+def _post_headers(path: str, body: bytes, *, secret: bytes = b"test-secret") -> dict[str, str]:
+    timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    canonical = b".".join([timestamp.encode(), b"POST", path.encode(), body])
+    return {
+        "Content-Type": "application/json",
+        "X-Tenant-Slug": "test-tenant",
+        "X-Timestamp": timestamp,
+        "X-Signature": hmac.new(secret, canonical, hashlib.sha256).hexdigest(),
+    }
+
+
+async def _post(world, path: str, payload: dict):
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    async with _cliente(world) as client:
+        return await client.post(path, content=body, headers=_post_headers(path, body))
+
+
 # ----------------------------------------------------------- busca de artigo
 
 
 @pytest.mark.asyncio
 async def test_representante_busca_artigo_em_preco_base(world):
-    resposta = await _get(
-        world, f"{BASE}/{TELEFONE_A}/price-items", params={"query": "75/36"}
-    )
+    resposta = await _get(world, f"{BASE}/{TELEFONE_A}/price-items", params={"query": "75/36"})
     assert resposta.status_code == 200
     corpo = resposta.json()
     assert corpo["reference_month"] == COMPETENCIA.isoformat()
@@ -172,9 +196,7 @@ async def test_representante_busca_artigo_em_preco_base(world):
 
 @pytest.mark.asyncio
 async def test_termo_sem_correspondencia_devolve_lista_vazia(world):
-    resposta = await _get(
-        world, f"{BASE}/{TELEFONE_A}/price-items", params={"query": "poliéster"}
-    )
+    resposta = await _get(world, f"{BASE}/{TELEFONE_A}/price-items", params={"query": "poliéster"})
     assert resposta.status_code == 200
     assert resposta.json()["items"] == []
 
@@ -186,6 +208,63 @@ async def test_contato_de_cliente_nao_alcanca_a_busca_do_representante(world):
         world, f"{BASE}/{TELEFONE_CLIENTE}/price-items", params={"query": "75/36"}
     )
     assert resposta.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_linha_assistente_v2_isola_dois_representantes_por_conexao_politica_e_carteira():
+    mundo = await build_portal_world(assistant_line_phone_number_id="1164849720052678")
+    try:
+        async with mundo.app.state.session_factory() as session:
+            for user_id, phone, reference in (
+                (mundo.representative_a_id, TELEFONE_A, "line-a"),
+                (mundo.representative_b_id, TELEFONE_B, "line-b"),
+            ):
+                user = await session.get(User, user_id)
+                user.whatsapp_e164 = phone
+                session.add(
+                    RepresentativeWhatsappConnection(
+                        id=uuid4(),
+                        tenant_id=mundo.tenant_id,
+                        representative_user_id=user_id,
+                        status=WhatsappConnectionStatus.CONNECTED,
+                        idempotency_key=f"connection-{reference}",
+                        gateway_line_reference=reference,
+                        created_by_user_id=mundo.admin_id,
+                    )
+                )
+                session.add(
+                    AssistantRepresentativeSettings(
+                        tenant_id=mundo.tenant_id, user_id=user_id, enabled=True
+                    )
+                )
+                session.add(
+                    AssistantRepresentativeCapability(
+                        tenant_id=mundo.tenant_id,
+                        user_id=user_id,
+                        capability_id="CRM_REP_LOOKUP_CUSTOMER",
+                    )
+                )
+            session.add(AssistantOrganizationSettings(tenant_id=mundo.tenant_id, enabled=True))
+            await session.commit()
+
+        payload = {
+            "context": {
+                "assistant_line_phone_number_id": "1164849720052678",
+                "representative_phone_e164": TELEFONE_B,
+                "representative_line_reference": "line-b",
+                "request_id": "wamid.assistant-b",
+            },
+            "query": "Alfa",
+        }
+        response = await _post(mundo, f"{BASE}/{TELEFONE_B}/assistant-v2/customers", payload)
+        assert response.status_code == 200
+        assert response.json()["matches"] == []
+
+        payload["context"]["representative_line_reference"] = "line-a"
+        denied = await _post(mundo, f"{BASE}/{TELEFONE_B}/assistant-v2/customers", payload)
+        assert denied.status_code == 403
+    finally:
+        await mundo.app.state.engine.dispose()
 
 
 # --------------------------------------------------------- busca de cliente
@@ -228,9 +307,7 @@ async def test_admin_pelo_whatsapp_tambem_ve_apenas_a_propria_carteira(world):
 
 @pytest.mark.asyncio
 async def test_representante_recebe_a_tabela_convertida_do_cliente(world):
-    resposta = await _get(
-        world, f"{BASE}/{TELEFONE_A}/customers/{world.customer_a_id}/price-list"
-    )
+    resposta = await _get(world, f"{BASE}/{TELEFONE_A}/customers/{world.customer_a_id}/price-list")
 
     assert resposta.status_code == 200
     corpo = resposta.json()
@@ -245,21 +322,15 @@ async def test_representante_recebe_a_tabela_convertida_do_cliente(world):
 @pytest.mark.asyncio
 async def test_a_tabela_nao_carrega_o_trace_do_calculo(world):
     """O `trace` é para ser conferido numa tela, item a item."""
-    resposta = await _get(
-        world, f"{BASE}/{TELEFONE_A}/customers/{world.customer_a_id}/price-list"
-    )
+    resposta = await _get(world, f"{BASE}/{TELEFONE_A}/customers/{world.customer_a_id}/price-list")
     assert "calculation_trace" not in json.dumps(resposta.json())
 
 
 @pytest.mark.asyncio
 async def test_cliente_de_outra_carteira_devolve_404_de_cliente(world):
     """Mesmo corpo de um `customer_id` inexistente, como no portal."""
-    fora = await _get(
-        world, f"{BASE}/{TELEFONE_A}/customers/{world.customer_b_id}/price-list"
-    )
-    inexistente = await _get(
-        world, f"{BASE}/{TELEFONE_A}/customers/{uuid4()}/price-list"
-    )
+    fora = await _get(world, f"{BASE}/{TELEFONE_A}/customers/{world.customer_b_id}/price-list")
+    inexistente = await _get(world, f"{BASE}/{TELEFONE_A}/customers/{uuid4()}/price-list")
 
     assert fora.status_code == inexistente.status_code == 404
     assert fora.json() == inexistente.json()
@@ -274,9 +345,7 @@ async def test_sem_regra_de_icms_responde_409(world):
             await session.delete(regra)
         await session.commit()
 
-    resposta = await _get(
-        world, f"{BASE}/{TELEFONE_A}/customers/{world.customer_a_id}/price-list"
-    )
+    resposta = await _get(world, f"{BASE}/{TELEFONE_A}/customers/{world.customer_a_id}/price-list")
     assert resposta.status_code == 409
 
 
@@ -287,9 +356,7 @@ async def test_tenant_sem_uf_de_origem_responde_422(world):
         tenant.origin_state_code = None
         await session.commit()
 
-    resposta = await _get(
-        world, f"{BASE}/{TELEFONE_A}/customers/{world.customer_a_id}/price-list"
-    )
+    resposta = await _get(world, f"{BASE}/{TELEFONE_A}/customers/{world.customer_a_id}/price-list")
     assert resposta.status_code == 422
 
 

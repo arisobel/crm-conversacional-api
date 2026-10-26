@@ -17,6 +17,7 @@ from crm_api.api.security import verify_internal_request
 from crm_api.core.database import get_session
 from crm_api.core.phone import InvalidWhatsappNumber, normalize_whatsapp_e164
 from crm_api.core.states import InvalidStateCode
+from crm_api.repositories.assistant_settings import get_assistant_policy
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.customer_admin import CustomerAdminRepository
 from crm_api.repositories.customer_intakes import CustomerIntakeRepository
@@ -25,12 +26,18 @@ from crm_api.repositories.icms import IcmsRuleRepository
 from crm_api.repositories.portfolio import CustomerPortfolioRepository
 from crm_api.repositories.price_entries import PriceEntryRepository
 from crm_api.repositories.users import UserRepository
+from crm_api.repositories.whatsapp_connections import WhatsappConnectionRepository
 from crm_api.schemas.customer_intake import (
     CustomerIntakeResponse,
     OpenCustomerIntakeRequest,
 )
 from crm_api.schemas.price_lists import CurrentPriceListItemResponse
 from crm_api.schemas.representative_whatsapp import (
+    AssistantCustomerIntakeRequest,
+    AssistantCustomerPriceListRequest,
+    AssistantExecutionContext,
+    AssistantLookupCustomersRequest,
+    AssistantSearchPriceItemsRequest,
     CustomerMatchesResponse,
     CustomerMatchResponse,
     PriceItemsResponse,
@@ -66,6 +73,7 @@ from crm_api.services.representative_whatsapp import (
 )
 from crm_api.services.whatsapp_actor import (
     ActorNotFound,
+    ActorRole,
     AmbiguousActor,
     WhatsappActorResolver,
 )
@@ -118,9 +126,64 @@ async def _resolve(session: AsyncSession, tenant_slug: str, phone: str):
     except AmbiguousActor as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     except ActorNotFound as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    return tenant, actor
+
+
+async def _resolve_assistant_execution(
+    request: Request,
+    session: AsyncSession,
+    tenant_slug: str,
+    phone: str,
+    context: AssistantExecutionContext,
+    capability: str,
+):
+    """Revalida a autorização da Linha Assistente em toda chamada v2."""
+    assistant_line = request.app.state.settings.assistant_line_phone_number_id
+    if assistant_line is None or context.assistant_line_phone_number_id != assistant_line:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(error)
+            status_code=status.HTTP_403_FORBIDDEN, detail="assistant line is not authorized"
+        )
+
+    try:
+        if normalize_whatsapp_e164(phone) != normalize_whatsapp_e164(
+            context.representative_phone_e164
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="representative phone does not match execution context",
+            )
+    except InvalidWhatsappNumber as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
         ) from error
+
+    tenant, actor = await _resolve(session, tenant_slug, phone)
+    if actor.role is not ActorRole.REPRESENTATIVE or actor.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="assistant requires representative"
+        )
+
+    connections = await WhatsappConnectionRepository(session).list_connected_for_representative(
+        tenant.id, actor.user_id
+    )
+    if len(connections) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="representative line is not connected"
+        )
+    if (
+        context.representative_line_reference is not None
+        and context.representative_line_reference != connections[0].gateway_line_reference
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="representative line does not match"
+        )
+
+    policy = await get_assistant_policy(session, tenant.id, actor.user_id)
+    if not policy.allows(capability):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="assistant capability is not enabled"
+        )
     return tenant, actor
 
 
@@ -160,18 +223,14 @@ async def search_price_items(
     """
     tenant, actor = await _resolve(session, tenant_slug, phone)
     try:
-        encontrados = await _service(request, session).search_price_items(
-            actor, tenant.id, query
-        )
+        encontrados = await _service(request, session).search_price_items(actor, tenant.id, query)
     except NotARepresentative as error:
         raise _forbidden(error) from error
     except NoPublishedCompetence as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
         ) from error
-    return PriceItemsResponse(
-        reference_month=encontrados.reference_month, items=encontrados.items
-    )
+    return PriceItemsResponse(reference_month=encontrados.reference_month, items=encontrados.items)
 
 
 @router.get("/{phone}/customers", response_model=CustomerMatchesResponse, responses=_RESPONSES)
@@ -185,9 +244,7 @@ async def lookup_customers(
     """Clientes **da carteira de quem escreveu** que casam com o termo."""
     tenant, actor = await _resolve(session, tenant_slug, phone)
     try:
-        encontrados = await _service(request, session).lookup_customers(
-            actor, tenant.id, query
-        )
+        encontrados = await _service(request, session).lookup_customers(actor, tenant.id, query)
     except NotARepresentative as error:
         raise _forbidden(error) from error
 
@@ -317,6 +374,146 @@ async def open_customer_intake(
         preferred_products_text=intake.preferred_products_text,
         created_at=intake.created_at,
         created=aberto.created,
+    )
+
+
+# As rotas v2 recebem contexto no corpo HMAC. As rotas GET/POST anteriores
+# continuam durante a migração do Gateway, mas não servem à Linha Assistente.
+@router.post(
+    "/{phone}/assistant-v2/price-items",
+    response_model=PriceItemsResponse,
+    responses=_RESPONSES,
+)
+async def assistant_search_price_items(
+    phone: str,
+    payload: AssistantSearchPriceItemsRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> PriceItemsResponse:
+    tenant, actor = await _resolve_assistant_execution(
+        request, session, tenant_slug, phone, payload.context, "CRM_REP_SEARCH_PRICE_ITEMS"
+    )
+    try:
+        result = await _service(request, session).search_price_items(
+            actor, tenant.id, payload.query
+        )
+    except NoPublishedCompetence as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
+        ) from error
+    return PriceItemsResponse(reference_month=result.reference_month, items=result.items)
+
+
+@router.post(
+    "/{phone}/assistant-v2/customers",
+    response_model=CustomerMatchesResponse,
+    responses=_RESPONSES,
+)
+async def assistant_lookup_customers(
+    phone: str,
+    payload: AssistantLookupCustomersRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CustomerMatchesResponse:
+    tenant, actor = await _resolve_assistant_execution(
+        request, session, tenant_slug, phone, payload.context, "CRM_REP_LOOKUP_CUSTOMER"
+    )
+    matches = await _service(request, session).lookup_customers(actor, tenant.id, payload.query)
+    return CustomerMatchesResponse(
+        matches=[
+            CustomerMatchResponse(
+                customer_id=match.customer_id,
+                legal_name=match.legal_name,
+                trade_name=match.trade_name,
+                document_number=match.document_number,
+                state_code=match.state_code,
+            )
+            for match in matches[:MAX_CANDIDATOS]
+        ],
+        truncated=len(matches) > MAX_CANDIDATOS,
+    )
+
+
+@router.post(
+    "/{phone}/assistant-v2/customers/{customer_id}/price-list",
+    response_model=ResolvedCustomerPriceListResponse,
+    responses=_RESPONSES,
+)
+async def assistant_customer_price_list(
+    phone: str,
+    customer_id: uuid.UUID,
+    payload: AssistantCustomerPriceListRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ResolvedCustomerPriceListResponse:
+    tenant, actor = await _resolve_assistant_execution(
+        request, session, tenant_slug, phone, payload.context, "CRM_REP_GET_CUSTOMER_PRICE_LIST"
+    )
+    try:
+        result = await _service(request, session).customer_price_list(
+            actor, tenant.id, customer_id, origin_state=tenant.origin_state_code
+        )
+    except CustomerNotInScope as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="customer not found"
+        ) from error
+    except (IcmsRuleNotFound, AmbiguousIcmsRule) as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    except (LocationUnavailable, PricesUnavailable, OriginNotConfigured, InvalidTaxRate) as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
+        ) from error
+    return _price_list_response(result)
+
+
+@router.post(
+    "/{phone}/assistant-v2/customer-intakes",
+    response_model=CustomerIntakeResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses=_RESPONSES,
+)
+async def assistant_open_customer_intake(
+    phone: str,
+    payload: AssistantCustomerIntakeRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CustomerIntakeResponse:
+    tenant, actor = await _resolve_assistant_execution(
+        request, session, tenant_slug, phone, payload.context, "CRM_REP_CREATE_CUSTOMER_INTAKE"
+    )
+    intake = payload.intake
+    try:
+        opened = await _intake_service(session).open(
+            actor,
+            tenant.id,
+            idempotency_key=intake.idempotency_key,
+            legal_name=intake.legal_name,
+            state_code=intake.state_code,
+            whatsapp_e164=intake.whatsapp_e164,
+            preferred_products_text=intake.preferred_products_text,
+            request_id=payload.context.request_id,
+        )
+    except WhatsappAlreadyUsed as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    except (InvalidStateCode, BlankField, InvalidWhatsappNumber) as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
+        ) from error
+    await session.commit()
+    result = opened.intake
+    return CustomerIntakeResponse(
+        intake_id=result.id,
+        status=result.status,
+        legal_name=result.legal_name,
+        state_code=result.state_code,
+        has_whatsapp=result.whatsapp_e164 is not None,
+        preferred_products_text=result.preferred_products_text,
+        created_at=result.created_at,
+        created=opened.created,
     )
 
 
