@@ -696,21 +696,29 @@ fixa no núcleo do produto impede levá-lo a outros mercados.
 - A tabela do cliente fica mais simples e mais rápida, e nunca deixa de ser
   entregue por falta de configuração fiscal.
 
-## ADR-033 — Linha Assistente central é identificada pelo Phone Number ID da Meta
+## ADR-033 — Linha Assistente central vinculada às linhas de representantes
 
-**Status:** aceita em 2026-10-25.
+**Status:** aceita em 2026-10-26.
 
 ### Decisão
 
-A Linha Assistente da BPTI é a linha compartilhada `+5511939401738`, identificada
-tecnicamente pelo `phone_number_id` Meta `1164849720052678`. O CRM compara esse
-valor com `channel_context.line_phone_number_id`, que chega no corpo autenticado
-por HMAC; nunca decide pelo número exibido.
+A Linha Assistente da BPTI é identificada tecnicamente pelo `phone_number_id`
+Meta configurado (`1164849720052678` no momento), nunca pelo número exibido. Ela
+é o núcleo operacional do tenant e não pertence a Patrick Rangel Consultor nem a
+qualquer outro representante.
 
-Nessa linha, somente representante ativo cuja organização, cadastro individual e
-capacidades estejam habilitados pelo administrador recebe manifesto. Ausência,
-cliente, conflito ou política vazia devolvem negação sem fallback. Linhas
-comerciais não recebem esse filtro.
+Toda linha WhatsApp conectada e autorizada de um `REPRESENTATIVE` é vinculada à
+Linha Assistente. Em cada chamada, o Gateway deve informar, no contexto HMAC, a
+Linha Assistente, a referência da linha de origem e o telefone do representante.
+O CRM exige que a conexão esteja `CONNECTED` e que o telefone resolva para o
+mesmo representante dono dela. Só então aplica ativação da organização,
+configuração individual, capacidades e carteira. Ausência, cliente, conflito,
+linha cruzada ou política vazia devolvem negação sem fallback.
+
+Isso não transforma a Linha Assistente em atendimento automático ao cliente:
+linhas comerciais e Coexistence mantêm o contrato próprio. A Linha Assistente
+assiste cada representante autorizado nas capacidades dele, sem ampliar acesso
+de carteira.
 
 Handoff e rotina não são capabilities do manifesto enquanto o Gateway não tiver
 executores registrados. O handoff pausa a automação da conversa Coexistence,

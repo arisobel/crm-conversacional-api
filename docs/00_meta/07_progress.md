@@ -4,6 +4,17 @@ Atualizado em: 2026-10-25
 
 ## Estado atual
 
+### ADR-033 — Linha Assistente central vinculada às linhas de representantes (2026-10-26)
+
+A Linha Assistente não pertence ao número ou nome de um representante. Toda
+linha WhatsApp conectada e autorizada de representante deve ser vinculada a ela,
+mas cada execução mantém a identidade, as capacidades e a carteira do dono da
+linha de origem. O contrato CRM ↔ Gateway agora exige contexto assinado com
+Linha Assistente, referência da linha de representante e telefone do autor; os
+executores atuais ainda precisam consumir e revalidar esse contexto antes de a
+regra poder ser ativada. O piloto começa somente após teste integrado com dois
+representantes na mesma Linha Assistente e isolamento comprovado de carteira.
+
 ### Linha assistente — política inicial (2026-10-21)
 
 Regra de ativação por organização e representante, administrada no portal com
