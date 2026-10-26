@@ -43,15 +43,18 @@ pela assinatura:
 | Campo | Validação do CRM |
 |---|---|
 | `assistant_line_phone_number_id` | Casa com a Linha Assistente do tenant. |
-| `representative_line_reference` | Identifica uma única conexão `CONNECTED`. |
-| `representative_phone_e164` | Resolve o dono daquela conexão, que deve estar ativo. |
+| `representative_phone_e164` | Resolve representante ativo com uma única conexão `CONNECTED`. |
+| `representative_line_reference` | Opcional no v2 inicial; se vier, deve casar com a conexão do representante. |
 | `request_id` | Correlaciona auditoria e idempotência. |
 
-O CRM consulta a conexão por `(tenant, representative_line_reference)` e exige
-que seu `representative_user_id` seja o ator resolvido pelo telefone. Contexto
-ausente, ambíguo, desconectado ou divergente nega; nunca escolhe outra linha ou
-representante. O Gateway deve serializar o contexto no corpo ou incluí-lo na
-cadeia canônica HMAC — cabeçalho solto não basta.
+Na conversa dirigida à Linha Assistente, o webhook identifica a linha central e
+o telefone de quem escreveu, mas não necessariamente a linha comercial desse
+representante. Por isso o CRM resolve primeiro o ator pelo telefone e exige sua
+conexão ativa registrada. Se o Gateway tiver a referência após correlacionar o
+ator, ela acrescenta uma segunda prova e precisa casar. Contexto ausente,
+ambíguo, desconectado ou divergente nega; nunca escolhe outro representante. O
+Gateway deve serializar o contexto no corpo ou incluí-lo na cadeia canônica HMAC
+— cabeçalho solto não basta.
 
 O manifesto é descoberta com cache, não autorização final. Cada executor
 revalida contexto, conexão, ator, política, capacidade e carteira. Sem fonte de

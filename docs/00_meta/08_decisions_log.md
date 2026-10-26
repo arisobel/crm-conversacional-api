@@ -708,12 +708,13 @@ Meta configurado (`1164849720052678` no momento), nunca pelo número exibido. El
 qualquer outro representante.
 
 Toda linha WhatsApp conectada e autorizada de um `REPRESENTATIVE` é vinculada à
-Linha Assistente. Em cada chamada, o Gateway deve informar, no contexto HMAC, a
-Linha Assistente, a referência da linha de origem e o telefone do representante.
-O CRM exige que a conexão esteja `CONNECTED` e que o telefone resolva para o
-mesmo representante dono dela. Só então aplica ativação da organização,
-configuração individual, capacidades e carteira. Ausência, cliente, conflito,
-linha cruzada ou política vazia devolvem negação sem fallback.
+Linha Assistente. Em cada chamada, o Gateway informa no contexto HMAC a Linha
+Assistente e o telefone do representante. O CRM exige que esse usuário tenha
+uma conexão `CONNECTED` registrada antes de aplicar ativação da organização,
+configuração individual, capacidades e carteira. A referência da linha de
+origem, quando o Gateway puder correlacioná-la, é uma segunda prova e deve
+casar com essa conexão. Ausência, cliente, conflito, linha cruzada ou política
+vazia devolvem negação sem fallback.
 
 Isso não transforma a Linha Assistente em atendimento automático ao cliente:
 linhas comerciais e Coexistence mantêm o contrato próprio. A Linha Assistente
