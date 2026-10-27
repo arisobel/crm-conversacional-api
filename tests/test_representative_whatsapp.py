@@ -260,8 +260,23 @@ async def test_linha_assistente_v2_isola_dois_representantes_por_conexao_politic
         assert response.status_code == 200
         assert response.json()["matches"] == []
 
-        payload["context"]["representative_line_reference"] = "line-a"
-        denied = await _post(mundo, f"{BASE}/{TELEFONE_B}/assistant-v2/customers", payload)
+        payload = {
+            "context": {
+                "assistant_line_phone_number_id": "1164849720052678",
+                "representative_phone_e164": TELEFONE_A,
+                "representative_line_reference": "line-a",
+                "request_id": "wamid.assistant-a",
+            },
+            "query": "Alfa",
+        }
+        own = await _post(mundo, f"{BASE}/{TELEFONE_A}/assistant-v2/customers", payload)
+        assert own.status_code == 200
+        assert [match["customer_id"] for match in own.json()["matches"]] == [
+            str(mundo.customer_a_id)
+        ]
+
+        payload["context"]["representative_line_reference"] = "line-b"
+        denied = await _post(mundo, f"{BASE}/{TELEFONE_A}/assistant-v2/customers", payload)
         assert denied.status_code == 403
     finally:
         await mundo.app.state.engine.dispose()

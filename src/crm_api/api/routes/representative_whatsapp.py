@@ -23,7 +23,11 @@ from crm_api.repositories.customer_admin import CustomerAdminRepository
 from crm_api.repositories.customer_intakes import CustomerIntakeRepository
 from crm_api.repositories.customers import CustomerRepository
 from crm_api.repositories.icms import IcmsRuleRepository
-from crm_api.repositories.portfolio import CustomerPortfolioRepository
+from crm_api.repositories.portfolio import (
+    CustomerFilters,
+    CustomerPortfolioRepository,
+    PortfolioScope,
+)
 from crm_api.repositories.price_entries import PriceEntryRepository
 from crm_api.repositories.users import UserRepository
 from crm_api.repositories.whatsapp_connections import WhatsappConnectionRepository
@@ -421,6 +425,21 @@ async def assistant_lookup_customers(
         request, session, tenant_slug, phone, payload.context, "CRM_REP_LOOKUP_CUSTOMER"
     )
     matches = await _service(request, session).lookup_customers(actor, tenant.id, payload.query)
+    if not matches:
+        # Diagnóstico temporário, sem registrar o termo, telefone ou nome de
+        # cliente: permite diferenciar falha de filtro da carteira de ausência
+        # real de correspondência no tenant de produção.
+        candidates = await CustomerPortfolioRepository(session).list_customers(
+            PortfolioScope(tenant_id=tenant.id, owner_user_id=None),
+            CustomerFilters(search=payload.query, active=True),
+            limit=MAX_CANDIDATOS + 1,
+            offset=0,
+        )
+        request.app.logger.info(
+            "assistant_customer_lookup_miss tenant_matches=%d owner_matches=%s",
+            len(candidates),
+            any(customer.owner_user_id == actor.user_id for customer, _ in candidates),
+        )
     return CustomerMatchesResponse(
         matches=[
             CustomerMatchResponse(
