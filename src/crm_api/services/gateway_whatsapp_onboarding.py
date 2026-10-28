@@ -130,3 +130,33 @@ class GatewayWhatsappOnboardingClient:
             body={},
             idempotency_key=idempotency_key,
         )
+
+    async def resume_handoff(
+        self, *, phone_number_id: str, contact_phone_e164: str, idempotency_key: str
+    ) -> None:
+        """Entrega ao Gateway um comando explícito do portal para retomar o assistente."""
+        self._ready()
+        headers = {
+            "Authorization": f"Bearer {self._token.get_secret_value()}",
+            "Idempotency-Key": idempotency_key,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(self._timeout)) as client:
+                response = await client.post(
+                    f"{self._base_url}/internal/whatsapp/handoffs/resume",
+                    json={
+                        "phone_number_id": phone_number_id,
+                        "contact_phone_e164": contact_phone_e164,
+                    },
+                    headers=headers,
+                )
+        except httpx.TimeoutException as error:
+            raise GatewayOnboardingError("gateway handoff request timed out") from error
+        except httpx.HTTPError as error:
+            raise GatewayOnboardingError("gateway handoff is unavailable") from error
+        if response.status_code in {401, 403}:
+            raise GatewayOnboardingError("gateway authentication failed")
+        if response.status_code >= 500:
+            raise GatewayOnboardingError("gateway handoff is unavailable")
+        if response.status_code >= 400:
+            raise GatewayOnboardingError("gateway rejected the handoff request", status_code=422)

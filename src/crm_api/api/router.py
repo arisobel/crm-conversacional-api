@@ -15,6 +15,7 @@ from crm_api.api.routes import (
     representative_whatsapp,
     whatsapp_authorization,
     whatsapp_connections,
+    whatsapp_handoffs,
 )
 
 api_router = APIRouter()
@@ -23,6 +24,7 @@ api_router.include_router(interaction_capabilities.router)
 api_router.include_router(capability_manifest.router)
 api_router.include_router(representative_whatsapp.router)
 api_router.include_router(whatsapp_connections.router)
+api_router.include_router(whatsapp_handoffs.router)
 api_router.include_router(whatsapp_authorization.router)
 api_router.include_router(interactions.router)
 api_router.include_router(customers.router)

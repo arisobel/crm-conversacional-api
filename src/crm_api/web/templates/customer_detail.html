@@ -6,6 +6,10 @@
   <h1>{{ cliente.legal_name }}</h1>
   <div class="acoes-cabecalho">
     <a class="botao" href="/portal/customers/{{ cliente.id }}/price-list">Lista de preço</a>
+    <form method="post" action="/portal/customers/{{ cliente.id }}/assistant/resume" class="formulario-linha">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="botao">Retomar assistente</button>
+    </form>
     <a class="link-voltar" href="/portal/customers">Voltar</a>
   </div>
 </div>

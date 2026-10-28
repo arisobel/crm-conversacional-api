@@ -33,6 +33,7 @@ from crm_api.models.interaction import NOTE_CHANNELS, InteractionDirection
 from crm_api.models.pricing import AvailabilityStatus
 from crm_api.models.tax import IcmsRule
 from crm_api.models.user import User, UserRole
+from crm_api.models.whatsapp_connection import WhatsappConnectionStatus
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.catalog import CatalogRepository, ProductFilters
 from crm_api.repositories.customer_admin import CustomerAdminRepository
@@ -726,6 +727,53 @@ async def pagina_cliente(
         current_user=current_user,
         mensagem=m,
     )
+
+
+@router.post("/customers/{customer_id}/assistant/resume", include_in_schema=False)
+async def retomar_assistente_do_cliente(
+    request: Request,
+    customer_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    """Comando do portal; a sessão nunca é enviada ao Gateway."""
+    destino = f"/portal/customers/{customer_id}"
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+
+    escopo = scope_for(current_user)
+    encontrado = await CustomerPortfolioRepository(session).get_customer(escopo, customer_id)
+    if encontrado is None:
+        return _redirect("/portal/customers", "nao-encontrado")
+    cliente, titular = encontrado
+    if titular is None:
+        return _redirect(destino, "assistente-sem-titular")
+
+    conexao = await WhatsappConnectionRepository(session).get_for_representative(
+        current_user.tenant_id, titular.id
+    )
+    contatos = await _admin_service(request, session).list_contacts(escopo, customer_id)
+    contato = next((item for item in contatos if item.active and item.is_primary), None)
+    contato = contato or next((item for item in contatos if item.active), None)
+    if (
+        conexao is None
+        or conexao.status is not WhatsappConnectionStatus.CONNECTED
+        or not conexao.gateway_line_reference
+        or contato is None
+    ):
+        return _redirect(destino, "assistente-indisponivel")
+
+    try:
+        await GatewayWhatsappOnboardingClient(request.app.state.settings).resume_handoff(
+            phone_number_id=conexao.gateway_line_reference,
+            contact_phone_e164=contato.whatsapp_e164,
+            idempotency_key=uuid.uuid4().hex,
+        )
+    except Exception as error:  # o Gateway é externo ao portal; a tela fica utilizável.
+        request.app.logger.warning("portal handoff resume failed: %s", error)
+        return _redirect(destino, "assistente-indisponivel")
+    return _redirect(destino, "assistente-retomado")
 
 
 @router.post("/customers/{customer_id}/notas", include_in_schema=False)
