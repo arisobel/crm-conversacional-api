@@ -38,7 +38,7 @@ from crm_api.services.whatsapp_actor import ActorRole, WhatsappActor
 _TTL_CLIENTE = 900
 _TTL_REPRESENTANTE = 300
 
-_AJUDA_CLIENTE = (
+_AJUDA_CLIENTE_LEGADA = (
     "Posso enviar a tabela atual ou consultar um artigo. "
     "Exemplos: “lista de preços” ou “75/36 urdume”."
 )
@@ -47,13 +47,33 @@ _AJUDA_CLIENTE = (
 # pré-cadastro sujeito a aprovação, nesta ordem.
 # Prometer aqui o que o manifesto não declara produz a pior falha do canal — o
 # representante pede, nada resolve, e ele conclui que o sistema está quebrado.
-_AJUDA_REPRESENTANTE = (
+_AJUDA_REPRESENTANTE_LEGADA = (
     "Este número está cadastrado como representante. Posso consultar artigo em "
     "preço-base, localizar cliente da sua carteira e enviar a tabela de um "
     "cliente dela. Exemplos: “preço do PUE 20”, “buscar cliente Malhas Silva” "
     "ou “tabela do cliente Malhas Silva”. Também posso abrir pelo WhatsApp o "
     "pré-cadastro de um novo cliente, sujeito a aprovação."
 )
+
+# Textos enviados ao Gateway no manifesto. As versoes anteriores permanecem
+# nomeadas como legadas para deixar a troca explicita durante a migracao.
+_AJUDA_CLIENTE = (
+    "Oi, tudo bem? Como posso te ajudar? Posso consultar a tabela atual ou "
+    "verificar informa\u00e7\u00f5es de um produto para voc\u00ea."
+)
+_AJUDA_REPRESENTANTE = (
+    "Oi, tudo bem? Como posso te ajudar hoje? Posso verificar o pre\u00e7o-base de "
+    "um artigo, localizar um cliente da sua carteira, consultar a tabela de um "
+    "cliente ou iniciar o pr\u00e9-cadastro de um novo cliente, sujeito a aprova\u00e7\u00e3o."
+)
+
+
+def _saudacao(actor: WhatsappActor) -> str:
+    """Devolve uma abertura pessoal quando o cadastro tem nome utilizavel."""
+    if actor.display_name and actor.display_name.strip():
+        return f"Oi, {actor.display_name.strip()}, tudo bem?"
+    return "Oi, tudo bem?"
+
 
 _CAPACIDADES_CLIENTE = [
     Capability(
@@ -280,8 +300,14 @@ def build_manifest(
         ]
 
     help_message = _AJUDA_REPRESENTANTE if representante else _AJUDA_CLIENTE
+    help_message = help_message.replace("Oi, tudo bem?", _saudacao(actor), 1)
     if representante and allowed_capability_ids is not None:
         help_message = "Neste assistente você pode: " + "; ".join(
+            capability.title.lower() for capability in capabilities
+        ) + "."
+
+    if representante and allowed_capability_ids is not None:
+        help_message = _saudacao(actor) + " Hoje eu posso te ajudar com: " + "; ".join(
             capability.title.lower() for capability in capabilities
         ) + "."
 

@@ -28,6 +28,7 @@ class ActorRole(StrEnum):
 class WhatsappActor:
     role: ActorRole
     public_ref: str
+    display_name: str | None = None
     user_id: uuid.UUID | None = None
     customer_id: uuid.UUID | None = None
     contact_id: uuid.UUID | None = None
@@ -92,6 +93,7 @@ class WhatsappActorResolver:
             return WhatsappActor(
                 role=ActorRole.REPRESENTATIVE,
                 public_ref=usuario.public_ref,
+                display_name=usuario.full_name,
                 user_id=usuario.id,
             )
 
@@ -100,6 +102,7 @@ class WhatsappActorResolver:
             return WhatsappActor(
                 role=ActorRole.CUSTOMER,
                 public_ref=registro.public_ref,
+                display_name=registro.name,
                 customer_id=cliente.id,
                 contact_id=registro.id,
             )

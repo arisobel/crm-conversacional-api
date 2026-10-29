@@ -7,7 +7,7 @@ _SESSION_TTL_SECONDS = 30 * 60
 
 
 def get_interaction_capabilities() -> InteractionCapabilitiesResponse:
-    return InteractionCapabilitiesResponse(
+    response = InteractionCapabilitiesResponse(
         provider="crm_api",
         version="1",
         session_ttl_seconds=_SESSION_TTL_SECONDS,
@@ -56,3 +56,9 @@ def get_interaction_capabilities() -> InteractionCapabilitiesResponse:
             ),
         ],
     )
+    return response.model_copy(update={
+        "fallback_message": (
+            "Calma, acho que n\u00e3o entendi \U0001f605. Consegue me dar mais informa\u00e7\u00f5es "
+            "do que voc\u00ea precisa?"
+        )
+    })
