@@ -3,14 +3,22 @@
 
 {% block conteudo %}
 <div class="cabecalho">
-  <h1>{{ cliente.legal_name }}</h1>
+  <div class="titulo-cliente">
+    <a class="botao botao-secundario" href="/portal/customers">← Voltar</a>
+    <h1>{{ cliente.legal_name }}</h1>
+  </div>
   <div class="acoes-cabecalho">
     <a class="botao" href="/portal/customers/{{ cliente.id }}/price-list">Lista de preço</a>
-    <form method="post" action="/portal/customers/{{ cliente.id }}/assistant/resume" class="formulario-linha">
+    {% if estado_assistente == 'HUMAN_HANDOFF' %}
+    <form method="post" action="/portal/customers/{{ cliente.id }}/assistant/resume" class="acao-assistente">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button type="submit" class="botao">Retomar assistente</button>
     </form>
-    <a class="link-voltar" href="/portal/customers">Voltar</a>
+    {% elif estado_assistente == 'ASSISTANT_ACTIVE' %}
+    <span class="estado-assistente">Assistente já está atendendo</span>
+    {% else %}
+    <span class="estado-assistente estado-indisponivel">Status do assistente indisponível</span>
+    {% endif %}
   </div>
 </div>
 

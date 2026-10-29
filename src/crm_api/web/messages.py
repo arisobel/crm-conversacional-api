@@ -11,6 +11,16 @@ portal não precisa saber o que é uma violação de índice parcial.
 
 _MENSAGENS: dict[str, tuple[str, str]] = {
     "assistente-salvo": ("ok", "Configuração do assistente salva."),
+    "assistente-retomado": (
+        "ok",
+        "Assistente retomado. A próxima mensagem do cliente volta para ele.",
+    ),
+    "assistente-ja-ativo": ("ok", "O assistente já está atendendo este cliente."),
+    "assistente-indisponivel": (
+        "erro",
+        "Não foi possível consultar ou retomar o assistente agora.",
+    ),
+    "assistente-sem-titular": ("erro", "Este cliente ainda não tem representante titular."),
     "comportamento-invalido": ("erro", "Confira o tom, as orientações e o tempo de contexto."),
     # sucesso
     "cliente-criado": ("ok", "Cliente cadastrado."),

@@ -132,8 +132,8 @@ class GatewayWhatsappOnboardingClient:
         )
 
     async def resume_handoff(
-        self, *, phone_number_id: str, contact_phone_e164: str, idempotency_key: str
-    ) -> None:
+        self, *, gateway_line_reference: str, contact_phone_e164: str, idempotency_key: str
+    ) -> str:
         """Entrega ao Gateway um comando explícito do portal para retomar o assistente."""
         self._ready()
         headers = {
@@ -145,7 +145,7 @@ class GatewayWhatsappOnboardingClient:
                 response = await client.post(
                     f"{self._base_url}/internal/whatsapp/handoffs/resume",
                     json={
-                        "phone_number_id": phone_number_id,
+                        "gateway_line_reference": gateway_line_reference,
                         "contact_phone_e164": contact_phone_e164,
                     },
                     headers=headers,
@@ -160,3 +160,36 @@ class GatewayWhatsappOnboardingClient:
             raise GatewayOnboardingError("gateway handoff is unavailable")
         if response.status_code >= 400:
             raise GatewayOnboardingError("gateway rejected the handoff request", status_code=422)
+        try:
+            status = response.json().get("status")
+        except ValueError as error:
+            raise GatewayOnboardingError("gateway returned an invalid handoff response") from error
+        if status not in {"RESUMED", "ASSISTANT_ACTIVE"}:
+            raise GatewayOnboardingError("gateway returned an invalid handoff response")
+        return status
+
+    async def handoff_status(
+        self, *, gateway_line_reference: str, contact_phone_e164: str
+    ) -> str:
+        self._ready()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(self._timeout)) as client:
+                response = await client.post(
+                    f"{self._base_url}/internal/whatsapp/handoffs/status",
+                    json={
+                        "gateway_line_reference": gateway_line_reference,
+                        "contact_phone_e164": contact_phone_e164,
+                    },
+                    headers={"Authorization": f"Bearer {self._token.get_secret_value()}"},
+                )
+        except httpx.HTTPError as error:
+            raise GatewayOnboardingError("gateway handoff is unavailable") from error
+        if response.status_code >= 400:
+            raise GatewayOnboardingError("gateway rejected the handoff request", status_code=422)
+        try:
+            status = response.json().get("status")
+        except ValueError as error:
+            raise GatewayOnboardingError("gateway returned an invalid handoff response") from error
+        if status not in {"HUMAN_HANDOFF", "ASSISTANT_ACTIVE"}:
+            raise GatewayOnboardingError("gateway returned an invalid handoff response")
+        return status

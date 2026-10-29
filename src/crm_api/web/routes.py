@@ -653,6 +653,30 @@ async def pagina_cliente(
     if encontrado is None:
         return _redirect("/portal/customers", "nao-encontrado")
     cliente, dono = encontrado
+    contatos = await servico.list_contacts(escopo, customer_id)
+    contato_assistente = next((item for item in contatos if item.active and item.is_primary), None)
+    contato_assistente = contato_assistente or next(
+        (item for item in contatos if item.active), None
+    )
+    estado_assistente = "INDISPONIVEL"
+    if dono is not None and contato_assistente is not None:
+        conexao_assistente = await WhatsappConnectionRepository(session).get_for_representative(
+            current_user.tenant_id, dono.id
+        )
+        if (
+            conexao_assistente is not None
+            and conexao_assistente.status is WhatsappConnectionStatus.CONNECTED
+            and conexao_assistente.gateway_line_reference
+        ):
+            try:
+                estado_assistente = await GatewayWhatsappOnboardingClient(
+                    request.app.state.settings
+                ).handoff_status(
+                    gateway_line_reference=conexao_assistente.gateway_line_reference,
+                    contact_phone_e164=contato_assistente.whatsapp_e164,
+                )
+            except Exception:  # A ficha do cliente não pode depender do Gateway para abrir.
+                estado_assistente = "INDISPONIVEL"
 
     pode_gerir = current_user.role in _MANAGEMENT_ROLES
     interacoes, total_interacoes = await _interaction_service(session).timeline(
@@ -695,7 +719,8 @@ async def pagina_cliente(
             "cliente": cliente,
             "titular": dono,
             "campanhas": campanhas_do_cliente,
-            "contatos": await servico.list_contacts(escopo, customer_id),
+            "contatos": contatos,
+            "estado_assistente": estado_assistente,
             "localidades": await servico.list_locations(escopo, customer_id),
             "preferidos": preferidos,
             "catalogo": [
@@ -765,15 +790,18 @@ async def retomar_assistente_do_cliente(
         return _redirect(destino, "assistente-indisponivel")
 
     try:
-        await GatewayWhatsappOnboardingClient(request.app.state.settings).resume_handoff(
-            phone_number_id=conexao.gateway_line_reference,
+        status = await GatewayWhatsappOnboardingClient(request.app.state.settings).resume_handoff(
+            gateway_line_reference=conexao.gateway_line_reference,
             contact_phone_e164=contato.whatsapp_e164,
             idempotency_key=uuid.uuid4().hex,
         )
     except Exception as error:  # o Gateway é externo ao portal; a tela fica utilizável.
         request.app.logger.warning("portal handoff resume failed: %s", error)
         return _redirect(destino, "assistente-indisponivel")
-    return _redirect(destino, "assistente-retomado")
+    return _redirect(
+        destino,
+        "assistente-retomado" if status == "RESUMED" else "assistente-ja-ativo",
+    )
 
 
 @router.post("/customers/{customer_id}/notas", include_in_schema=False)

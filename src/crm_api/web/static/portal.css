@@ -162,6 +162,12 @@ button.link {
 .formulario > button { margin-top: 18px; align-self: flex-start; }
 
 .acoes-cabecalho { display: flex; align-items: center; gap: 14px; }
+.titulo-cliente { display: flex; align-items: center; gap: 14px; }
+.titulo-cliente h1 { margin: 0; }
+.acao-assistente { margin: 0; display: flex; }
+.botao.botao-secundario { background: transparent; color: var(--acento); border: 1px solid currentColor; }
+.estado-assistente { color: var(--tinta-fraca); font-size: 14px; }
+.estado-indisponivel { color: #9a5d00; }
 
 /* ------------------------------------------------------------- timeline */
 
