@@ -244,6 +244,34 @@ _CAPACIDADES_REPRESENTANTE = [
         slots=[Slot(id="customer_query", required=True)],
     ),
     Capability(
+        id="CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
+        action="CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
+        mode=CapabilityMode.READ,
+        requires_confirmation=False,
+        idempotency=Idempotency.NONE,
+        title="Resumir conversa de um cliente",
+        description=(
+            "Mostra as últimas interações registradas de um cliente da carteira do "
+            "representante, para retomar o atendimento sem inventar informações."
+        ),
+        vocabulary=Vocabulary(
+            aliases=[
+                "resumo da conversa",
+                "resumo do atendimento",
+                "resumir conversa",
+                "onde parou a conversa",
+                "últimas interações",
+                "historico do cliente",
+            ],
+            examples=[
+                "me dê um resumo da conversa com Patrick",
+                "onde parou o atendimento da Malhas Silva?",
+                "quais foram as últimas interações com Aurora?",
+            ],
+        ),
+        slots=[Slot(id="customer_query", required=True)],
+    ),
+    Capability(
         id="CRM_REP_CREATE_CUSTOMER_INTAKE",
         action="CRM_REP_CREATE_CUSTOMER_INTAKE",
         mode=CapabilityMode.WRITE,

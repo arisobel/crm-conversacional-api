@@ -23,6 +23,7 @@ from crm_api.repositories.customer_admin import CustomerAdminRepository
 from crm_api.repositories.customer_intakes import CustomerIntakeRepository
 from crm_api.repositories.customers import CustomerRepository
 from crm_api.repositories.icms import IcmsRuleRepository
+from crm_api.repositories.interactions import InteractionRepository
 from crm_api.repositories.portfolio import (
     CustomerFilters,
     CustomerPortfolioRepository,
@@ -38,11 +39,14 @@ from crm_api.schemas.customer_intake import (
 from crm_api.schemas.price_lists import CurrentPriceListItemResponse
 from crm_api.schemas.representative_whatsapp import (
     AssistantCustomerIntakeRequest,
+    AssistantCustomerConversationSummaryRequest,
     AssistantCustomerPriceListRequest,
     AssistantExecutionContext,
     AssistantLookupCustomersRequest,
     AssistantSearchPriceItemsRequest,
     CustomerMatchesResponse,
+    CustomerConversationEntryResponse,
+    CustomerConversationSummaryResponse,
     CustomerMatchResponse,
     PriceItemsResponse,
     ResolvedCustomerPriceListResponse,
@@ -102,6 +106,7 @@ def _service(request: Request, session: AsyncSession) -> RepresentativeWhatsappS
         portfolio=portfolio,
         admin=admin,
         entries=entries,
+        interactions=InteractionRepository(session),
         resolved=CustomerPriceListService(
             portfolio=portfolio,
             admin=admin,
@@ -486,6 +491,43 @@ async def assistant_customer_price_list(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
         ) from error
     return _price_list_response(result)
+
+
+@router.post(
+    "/{phone}/assistant-v2/customers/{customer_id}/conversation-summary",
+    response_model=CustomerConversationSummaryResponse,
+    responses=_RESPONSES,
+)
+async def assistant_customer_conversation_summary(
+    phone: str,
+    customer_id: uuid.UUID,
+    payload: AssistantCustomerConversationSummaryRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CustomerConversationSummaryResponse:
+    tenant, actor = await _resolve_assistant_execution(
+        request, session, tenant_slug, phone, payload.context,
+        "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
+    )
+    try:
+        result = await _service(request, session).customer_conversation_summary(
+            actor, tenant.id, customer_id
+        )
+    except CustomerNotInScope as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="customer not found") from error
+    return CustomerConversationSummaryResponse(
+        customer_id=result.customer.id,
+        customer_name=result.customer.trade_name or result.customer.legal_name,
+        interactions=[
+            CustomerConversationEntryResponse(
+                occurred_at=item.occurred_at,
+                direction=item.direction.value if item.direction is not None else None,
+                summary=item.summary,
+            )
+            for item in result.interactions
+        ],
+    )
 
 
 @router.post(

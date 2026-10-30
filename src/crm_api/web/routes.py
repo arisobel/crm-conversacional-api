@@ -1092,6 +1092,7 @@ _ASSISTANT_CAPABILITIES = {
     "CRM_REP_SEARCH_PRICE_ITEMS": "Consultar preços de produtos",
     "CRM_REP_LOOKUP_CUSTOMER": "Consultar clientes",
     "CRM_REP_GET_CUSTOMER_PRICE_LIST": "Consultar tabela de preços do cliente",
+    "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY": "Resumir conversa do cliente",
     "CRM_REP_CREATE_CUSTOMER_INTAKE": "Solicitar pré-cadastro de cliente",
 }
 

@@ -23,6 +23,7 @@ from crm_api.core.config import Settings
 from crm_api.models.customer import Customer
 from crm_api.models.pricing import AvailabilityStatus
 from crm_api.repositories.customer_admin import CustomerAdminRepository
+from crm_api.repositories.interactions import InteractionRepository
 from crm_api.repositories.portfolio import (
     CustomerFilters,
     CustomerPortfolioRepository,
@@ -31,6 +32,7 @@ from crm_api.repositories.portfolio import (
 from crm_api.repositories.price_entries import PriceEntryRepository
 from crm_api.schemas.price_lists import CurrentPriceListItemResponse
 from crm_api.services.customer_price_list import CustomerPriceListService
+from crm_api.services.portfolio import CustomerNotInScope
 from crm_api.services.product_search import matches_search_terms, search_tokens
 from crm_api.services.whatsapp_actor import ActorRole, WhatsappActor
 
@@ -75,6 +77,12 @@ class PriceItems:
     items: list[CurrentPriceListItemResponse]
 
 
+@dataclass(frozen=True)
+class CustomerConversationSummary:
+    customer: Customer
+    interactions: list
+
+
 class RepresentativeWhatsappService:
     def __init__(
         self,
@@ -82,12 +90,14 @@ class RepresentativeWhatsappService:
         portfolio: CustomerPortfolioRepository,
         admin: CustomerAdminRepository,
         entries: PriceEntryRepository,
+        interactions: InteractionRepository,
         resolved: CustomerPriceListService,
         settings: Settings,
     ) -> None:
         self._portfolio = portfolio
         self._admin = admin
         self._entries = entries
+        self._interactions = interactions
         self._resolved = resolved
         self._settings = settings
 
@@ -199,3 +209,21 @@ class RepresentativeWhatsappService:
             origin_state=origin_state,
             at=(at or datetime.now(UTC)).date(),
         )
+
+    async def customer_conversation_summary(
+        self, actor: WhatsappActor, tenant_id: uuid.UUID, customer_id: uuid.UUID
+    ) -> CustomerConversationSummary:
+        """Últimas interações de um cliente da carteira do representante.
+
+        A leitura passa pelo mesmo escopo da tabela de preços: não revelar se
+        um cliente existe fora da carteira é parte do contrato deste canal.
+        """
+        escopo = self._escopo(actor, tenant_id)
+        scoped = await self._portfolio.get_customer(escopo, customer_id)
+        if scoped is None:
+            raise CustomerNotInScope
+        customer, _owner = scoped
+        interactions = await self._interactions.list_timeline(
+            tenant_id, customer_id, limit=8, offset=0
+        )
+        return CustomerConversationSummary(customer=customer, interactions=interactions)

@@ -63,6 +63,7 @@ _ACOES_REPRESENTANTE = {
     "CRM_REP_SEARCH_PRICE_ITEMS",
     "CRM_REP_LOOKUP_CUSTOMER",
     "CRM_REP_GET_CUSTOMER_PRICE_LIST",
+    "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
     "CRM_REP_CREATE_CUSTOMER_INTAKE",
 }
 _ACOES_REGISTRADAS = _ACOES_CLIENTE | _ACOES_REPRESENTANTE
@@ -73,6 +74,7 @@ _SLOTS_ESPERADOS = {
     "CRM_REP_SEARCH_PRICE_ITEMS": {"product_query"},
     "CRM_REP_LOOKUP_CUSTOMER": {"customer_query"},
     "CRM_REP_GET_CUSTOMER_PRICE_LIST": {"customer_query"},
+    "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY": {"customer_query"},
     "CRM_REP_CREATE_CUSTOMER_INTAKE": {
         "customer_legal_name",
         "customer_state_code",
@@ -241,7 +243,7 @@ async def test_cliente_recebe_as_duas_capacidades_de_hoje(world):
 
 
 @pytest.mark.asyncio
-async def test_representante_recebe_tres_leituras_e_um_pre_cadastro(world):
+async def test_representante_recebe_quatro_leituras_e_um_pre_cadastro(world):
     corpo = (await _pedir(world, TELEFONE_REPRESENTANTE)).json()
 
     assert corpo["actor"]["role"] == "representante"
@@ -249,11 +251,12 @@ async def test_representante_recebe_tres_leituras_e_um_pre_cadastro(world):
         "CRM_REP_SEARCH_PRICE_ITEMS",
         "CRM_REP_LOOKUP_CUSTOMER",
         "CRM_REP_GET_CUSTOMER_PRICE_LIST",
+        "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
         "CRM_REP_CREATE_CUSTOMER_INTAKE",
     ]
-    assert len(corpo["capabilities"]) == 4
+    assert len(corpo["capabilities"]) == 5
 
-    pre_cadastro = corpo["capabilities"][3]
+    pre_cadastro = corpo["capabilities"][4]
     assert pre_cadastro["id"] == pre_cadastro["action"] == "CRM_REP_CREATE_CUSTOMER_INTAKE"
     assert pre_cadastro["mode"] == "write"
     assert pre_cadastro["requires_confirmation"] is True
@@ -290,6 +293,7 @@ async def test_cliente_nao_recebe_escrita_nem_capacidade_de_representante(world)
         "CRM_REP_SEARCH_PRICE_ITEMS",
         "CRM_REP_LOOKUP_CUSTOMER",
         "CRM_REP_GET_CUSTOMER_PRICE_LIST",
+        "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
         "CRM_REP_CREATE_CUSTOMER_INTAKE",
     } & {capacidade["action"] for capacidade in corpo["capabilities"]}
 
@@ -323,7 +327,11 @@ async def test_apenas_o_slot_de_produto_declara_tipo(world):
     produto = por_acao["CRM_REP_SEARCH_PRICE_ITEMS"]["slots"][0]
     assert produto == {"id": "product_query", "required": True, "kind": "product_code"}
 
-    for acao in ("CRM_REP_LOOKUP_CUSTOMER", "CRM_REP_GET_CUSTOMER_PRICE_LIST"):
+    for acao in (
+        "CRM_REP_LOOKUP_CUSTOMER",
+        "CRM_REP_GET_CUSTOMER_PRICE_LIST",
+        "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
+    ):
         cliente_slot = por_acao[acao]["slots"][0]
         assert cliente_slot == {"id": "customer_query", "required": True}
         assert "kind" not in cliente_slot

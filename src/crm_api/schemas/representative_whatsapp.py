@@ -5,7 +5,7 @@ o Gateway já formata em produção, e um segundo formato faria o executor novo
 precisar de um formatador novo sem nenhuma razão de domínio.
 """
 
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -39,6 +39,10 @@ class AssistantLookupCustomersRequest(BaseModel):
 
 
 class AssistantCustomerPriceListRequest(BaseModel):
+    context: AssistantExecutionContext
+
+
+class AssistantCustomerConversationSummaryRequest(BaseModel):
     context: AssistantExecutionContext
 
 
@@ -86,3 +90,15 @@ class ResolvedCustomerPriceListResponse(BaseModel):
     destination_state: str | None = None
     currency: str
     items: list[CurrentPriceListItemResponse]
+
+
+class CustomerConversationEntryResponse(BaseModel):
+    occurred_at: datetime
+    direction: str | None = None
+    summary: str | None = None
+
+
+class CustomerConversationSummaryResponse(BaseModel):
+    customer_id: UUID
+    customer_name: str
+    interactions: list[CustomerConversationEntryResponse]
