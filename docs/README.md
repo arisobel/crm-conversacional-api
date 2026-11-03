@@ -29,6 +29,7 @@ Memória operacional do CRM Conversacional API.
 11. [Campanhas de WhatsApp](10_product/WHATSAPP_CAMPAIGNS.md)
 12. [WhatsApp como interface do CRM-textil](10_product/WHATSAPP_AS_CRM_INTERFACE.md)
 13. [Entrega F6 — campanhas de WhatsApp](40_delivery/F6_WHATSAPP_CAMPAIGNS.md)
+14. [Métricas e parâmetros operacionais da Linha Assistente](40_delivery/ASSISTANT_ROUTINE_METRICS.md)
 
 ### Referência do que já está implementado
 
