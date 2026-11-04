@@ -90,7 +90,7 @@ async def test_representante_troca_a_propria_senha_e_entra_com_a_nova(world):
     async with _browser(world) as outro:
         entrada = await _entrar(outro, REPRESENTATIVE_A_EMAIL, NOVA)
         assert entrada.status_code == 200
-        assert "/portal/customers" in str(entrada.url)
+        assert "/portal/home" in str(entrada.url)
 
 
 @pytest.mark.asyncio
@@ -134,7 +134,7 @@ async def test_troca_exige_a_senha_atual(world):
     # E a senha original continua valendo.
     async with _browser(world) as outro:
         entrada = await _entrar(outro, REPRESENTATIVE_A_EMAIL, PASSWORD)
-        assert "/portal/customers" in str(entrada.url)
+        assert "/portal/home" in str(entrada.url)
 
 
 @pytest.mark.asyncio
@@ -181,7 +181,7 @@ async def test_confirmacao_divergente_nao_troca_nada(world):
 
     async with _browser(world) as outro:
         entrada = await _entrar(outro, REPRESENTATIVE_A_EMAIL, PASSWORD)
-        assert "/portal/customers" in str(entrada.url)
+        assert "/portal/home" in str(entrada.url)
 
 
 @pytest.mark.asyncio
@@ -247,7 +247,7 @@ async def test_admin_redefine_senha_de_representante_pela_tela(world):
 
     async with _browser(world) as representante:
         entrada = await _entrar(representante, REPRESENTATIVE_A_EMAIL, NOVA)
-        assert "/portal/customers" in str(entrada.url)
+        assert "/portal/home" in str(entrada.url)
 
 
 @pytest.mark.asyncio
@@ -289,7 +289,7 @@ async def test_representante_nao_redefine_senha_de_ninguem(world):
         from conftest import REPRESENTATIVE_B_EMAIL
 
         entrada = await _entrar(beta, REPRESENTATIVE_B_EMAIL, PASSWORD)
-        assert "/portal/customers" in str(entrada.url)
+        assert "/portal/home" in str(entrada.url)
 
 
 @pytest.mark.asyncio

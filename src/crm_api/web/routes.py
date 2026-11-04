@@ -30,7 +30,12 @@ from crm_api.models.assistant_settings import (
     ConversationBehaviorSettings,
 )
 from crm_api.models.customer import Customer
-from crm_api.models.interaction import NOTE_CHANNELS, InteractionDirection
+from crm_api.models.interaction import (
+    GATEWAY_SOURCE,
+    NOTE_CHANNELS,
+    CustomerInteraction,
+    InteractionDirection,
+)
 from crm_api.models.pricing import AvailabilityStatus
 from crm_api.models.reminder import ReminderStatus, RepresentativeReminder
 from crm_api.models.tax import IcmsRule
@@ -1126,7 +1131,6 @@ _ASSISTANT_CAPABILITIES = {
     "CRM_REP_LOOKUP_CUSTOMER": "Consultar clientes",
     "CRM_REP_GET_CUSTOMER_PRICE_LIST": "Consultar tabela de preços do cliente",
     "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY": "Resumir conversa do cliente",
-    "CRM_REP_CREATE_CUSTOMER_INTAKE": "Solicitar pré-cadastro de cliente",
 }
 
 _BEHAVIOR_DEFAULT_INSTRUCTIONS = (
@@ -1175,6 +1179,81 @@ async def pagina_assistente(
         "behaviors": {behavior.bot_kind: behavior for behavior in behaviors},
         "default_instructions": _BEHAVIOR_DEFAULT_INSTRUCTIONS,
     }, current_user=current_user, mensagem=m)
+
+
+@router.get("/assistant/unresolved", include_in_schema=False)
+async def pagina_mensagens_nao_entendidas(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    """Exibe lacunas reais de compreensão sem depender de procurar logs."""
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+
+    candidates = list(
+        await session.scalars(
+            select(CustomerInteraction)
+            .where(
+                CustomerInteraction.tenant_id == current_user.tenant_id,
+                CustomerInteraction.source == GATEWAY_SOURCE,
+                CustomerInteraction.direction == InteractionDirection.OUTBOUND,
+                CustomerInteraction.payload.is_not(None),
+            )
+            .order_by(CustomerInteraction.occurred_at.desc())
+            .limit(500)
+        )
+    )
+    outcomes = {"FALLBACK", "RECOVERY", "OUT_OF_SCOPE"}
+    unresolved = [
+        interaction
+        for interaction in candidates
+        if (interaction.payload or {}).get("outcome") in outcomes
+    ][:100]
+    source_refs = {
+        interaction.external_ref.rsplit(":out:", 1)[0]
+        for interaction in unresolved
+        if ":out:" in interaction.external_ref
+    }
+    inbound = {
+        interaction.external_ref: interaction
+        for interaction in await session.scalars(
+            select(CustomerInteraction).where(
+                CustomerInteraction.tenant_id == current_user.tenant_id,
+                CustomerInteraction.source == GATEWAY_SOURCE,
+                CustomerInteraction.external_ref.in_(source_refs),
+            )
+        )
+    } if source_refs else {}
+    customer_ids = {item.customer_id for item in unresolved if item.customer_id}
+    actor_ids = {item.actor_user_id for item in unresolved if item.actor_user_id}
+    customers = {
+        item.id: item.legal_name
+        for item in await session.scalars(select(Customer).where(Customer.id.in_(customer_ids)))
+    } if customer_ids else {}
+    actors = {
+        item.id: item.full_name
+        for item in await session.scalars(select(User).where(User.id.in_(actor_ids)))
+    } if actor_ids else {}
+    rows = []
+    for response in unresolved:
+        source_ref = response.external_ref.rsplit(":out:", 1)[0]
+        message = inbound.get(source_ref)
+        rows.append({
+            "occurred_at": (message or response).occurred_at,
+            "speaker": customers.get(response.customer_id)
+            or actors.get(response.actor_user_id)
+            or "Contato identificado",
+            "message": message.summary if message else "Mensagem original indisponível",
+            "response": response.summary,
+            "outcome": (response.payload or {}).get("outcome"),
+        })
+    return _render(
+        request,
+        "assistant_unresolved.html",
+        {"rows": rows},
+        current_user=current_user,
+    )
 
 
 @router.post("/assistant/behavior/{bot_kind}", include_in_schema=False)

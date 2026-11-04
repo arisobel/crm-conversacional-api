@@ -1,5 +1,6 @@
 import re
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -19,6 +20,12 @@ from crm_api.models.assistant_settings import (
 )
 from crm_api.models.customer import Customer, CustomerLocation
 from crm_api.models.customer_contact import CustomerContact
+from crm_api.models.interaction import (
+    GATEWAY_SOURCE,
+    CustomerInteraction,
+    InteractionDirection,
+    InteractionKind,
+)
 from crm_api.models.user import AuditLog, User
 
 _CSRF = re.compile(r'name="csrf_token" value="([^"]+)"')
@@ -88,6 +95,41 @@ async def test_assistente_salva_configuracao_e_auditoria(world, admin):
         ))).all()
         assert len(entries) == 1
         assert entries[0].after["capabilities"] == ["CRM_REP_LOOKUP_CUSTOMER"]
+
+
+@pytest.mark.asyncio
+async def test_central_exibe_mensagem_que_o_robo_nao_entendeu(world, admin):
+    now = datetime.now(UTC)
+    async with world.app.state.session_factory() as session:
+        session.add_all([
+            CustomerInteraction(
+                id=uuid4(), tenant_id=world.tenant_id,
+                customer_id=world.customer_a_id,
+                kind=InteractionKind.CUSTOMER_CHANNEL,
+                direction=InteractionDirection.INBOUND,
+                source=GATEWAY_SOURCE, channel="WHATSAPP",
+                external_ref="wamid.UNDERSTOOD.TEST", occurred_at=now,
+                summary="Quero separar uma amostra para sexta",
+            ),
+            CustomerInteraction(
+                id=uuid4(), tenant_id=world.tenant_id,
+                customer_id=world.customer_a_id,
+                kind=InteractionKind.CUSTOMER_CHANNEL,
+                direction=InteractionDirection.OUTBOUND,
+                source=GATEWAY_SOURCE, channel="WHATSAPP",
+                external_ref="wamid.UNDERSTOOD.TEST:out:1", occurred_at=now,
+                summary="Pode explicar melhor o que você precisa?",
+                payload={"outcome": "RECOVERY"},
+            ),
+        ])
+        await session.commit()
+
+    page = await admin.get("/portal/assistant/unresolved")
+
+    assert page.status_code == 200
+    assert "Quero separar uma amostra para sexta" in page.text
+    assert "Pode explicar melhor" in page.text
+    assert "Alfa Tecelagem" in page.text
 
 
 @pytest.mark.asyncio

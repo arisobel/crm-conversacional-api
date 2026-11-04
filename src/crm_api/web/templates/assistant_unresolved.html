@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Mensagens não entendidas{% endblock %}
+{% block conteudo %}
+<div class="cabecalho">
+  <div><h1>Mensagens não entendidas</h1><p class="dica">Use exemplos reais para melhorar instruções, vocabulário e novas ações.</p></div>
+  <a class="botao" href="/portal/assistant">Voltar à central</a>
+</div>
+{% if rows %}
+<table>
+  <thead><tr><th>Quando</th><th>Contato</th><th>Mensagem</th><th>Resposta do robô</th><th>Classificação</th></tr></thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.occurred_at.strftime('%d/%m/%Y %H:%M') }}</td>
+      <td>{{ row.speaker }}</td>
+      <td>{{ row.message or '—' }}</td>
+      <td>{{ row.response or '—' }}</td>
+      <td>{% if row.outcome == 'OUT_OF_SCOPE' %}Entendido, sem ação{% else %}Não compreendido{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="rodape-tabela">Exibindo até 100 ocorrências recentes.</p>
+{% else %}
+<p class="vazio">Nenhuma mensagem recente caiu na recuperação do robô.</p>
+{% endif %}
+{% endblock %}
