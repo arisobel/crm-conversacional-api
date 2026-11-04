@@ -25,6 +25,12 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
     # sucesso
     "cliente-criado": ("ok", "Cliente cadastrado."),
     "cliente-salvo": ("ok", "Cadastro atualizado."),
+    "compromisso-criado": ("ok", "Compromisso adicionado à agenda."),
+    "compromisso-atualizado": ("ok", "Compromisso atualizado."),
+    "compromisso-invalido": (
+        "erro",
+        "Confira cliente, tipo, descrição e um horário futuro para o compromisso.",
+    ),
     "titular-alterado": ("ok", "Titular atualizado."),
     "titular-sem-mudanca": ("ok", "Esse já era o titular; nada mudou."),
     "contato-criado": ("ok", "Contato adicionado."),

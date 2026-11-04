@@ -1,7 +1,8 @@
 import re
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
@@ -26,6 +27,7 @@ from crm_api.models.interaction import (
     InteractionDirection,
     InteractionKind,
 )
+from crm_api.models.reminder import ReminderOrigin, ReminderStatus, RepresentativeReminder
 from crm_api.models.user import AuditLog, User
 
 _CSRF = re.compile(r'name="csrf_token" value="([^"]+)"')
@@ -130,6 +132,39 @@ async def test_central_exibe_mensagem_que_o_robo_nao_entendeu(world, admin):
     assert "Quero separar uma amostra para sexta" in page.text
     assert "Pode explicar melhor" in page.text
     assert "Alfa Tecelagem" in page.text
+
+
+@pytest.mark.asyncio
+async def test_carteira_unifica_calendario_e_cria_compromisso_manual(world, admin):
+    page = await admin.get("/portal/customers")
+    assert "Carteira &amp; Agenda" in page.text
+    assert "Agenda e Notificações" in page.text
+    assert "Novo compromisso" in page.text
+
+    due_local = (datetime.now(UTC) + timedelta(days=2)).astimezone(
+        ZoneInfo("America/Sao_Paulo")
+    )
+    response = await admin.post(
+        "/portal/customers/reminders",
+        data={
+            "csrf_token": _token(page.text),
+            "customer_id": str(world.customer_a_id),
+            "kind": "MEETING",
+            "due_local": due_local.strftime("%Y-%m-%dT%H:%M"),
+            "note": "Revisar nova coleção",
+        },
+    )
+    assert "Compromisso adicionado" in response.text
+
+    async with world.app.state.session_factory() as session:
+        reminder = await session.scalar(
+            select(RepresentativeReminder).where(
+                RepresentativeReminder.note == "Revisar nova coleção"
+            )
+        )
+        assert reminder is not None
+        assert reminder.origin == ReminderOrigin.REPRESENTATIVE.value
+        assert reminder.status == ReminderStatus.CONFIRMED.value
 
 
 @pytest.mark.asyncio

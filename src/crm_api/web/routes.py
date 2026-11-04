@@ -7,13 +7,15 @@ traduz o resultado em redirecionamento. Nenhuma regra de negócio vive aqui.
 import csv
 import io
 import uuid
-from datetime import UTC, date, datetime, timedelta, timezone
+from calendar import Calendar
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import RedirectResponse, Response
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.api.authentication import CurrentUser, build_auth_service
@@ -30,6 +32,7 @@ from crm_api.models.assistant_settings import (
     ConversationBehaviorSettings,
 )
 from crm_api.models.customer import Customer
+from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.interaction import (
     GATEWAY_SOURCE,
     NOTE_CHANNELS,
@@ -37,7 +40,12 @@ from crm_api.models.interaction import (
     InteractionDirection,
 )
 from crm_api.models.pricing import AvailabilityStatus
-from crm_api.models.reminder import ReminderStatus, RepresentativeReminder
+from crm_api.models.reminder import (
+    ReminderKind,
+    ReminderOrigin,
+    ReminderStatus,
+    RepresentativeReminder,
+)
 from crm_api.models.tax import IcmsRule
 from crm_api.models.user import User, UserRole
 from crm_api.models.whatsapp_connection import WhatsappConnectionStatus
@@ -442,6 +450,9 @@ async def pagina_carteira(
     titular: Annotated[str | None, Query()] = None,
     contato: Annotated[str | None, Query()] = None,
     secao: Annotated[str | None, Query()] = None,
+    mes: Annotated[str | None, Query()] = None,
+    dia: Annotated[str | None, Query()] = None,
+    agenda_view: Annotated[str | None, Query()] = None,
     m: Annotated[str | None, Query()] = None,
 ) -> Response:
     pode_gerir = current_user.role in _MANAGEMENT_ROLES
@@ -462,6 +473,27 @@ async def pagina_carteira(
     intakes, total_intakes = await _intake_service(request, session).queue(
         scope_for(current_user), actor_role=current_user.role
     )
+    sao_paulo = ZoneInfo("America/Sao_Paulo")
+    agora_local = datetime.now(UTC).astimezone(sao_paulo)
+    hoje = agora_local.date()
+    try:
+        cursor_mes = (
+            datetime.strptime(f"{mes}-01", "%Y-%m-%d").date()
+            if mes
+            else hoje.replace(day=1)
+        )
+    except ValueError:
+        cursor_mes = hoje.replace(day=1)
+    proximo_mes = (cursor_mes.replace(day=28) + timedelta(days=4)).replace(day=1)
+    mes_inicio_utc = datetime.combine(cursor_mes, datetime.min.time(), sao_paulo).astimezone(UTC)
+    mes_fim_utc = datetime.combine(proximo_mes, datetime.min.time(), sao_paulo).astimezone(UTC)
+    try:
+        dia_selecionado = date.fromisoformat(dia) if dia else hoje
+    except ValueError:
+        dia_selecionado = hoje
+    if dia_selecionado < cursor_mes or dia_selecionado >= proximo_mes:
+        dia_selecionado = cursor_mes
+
     agenda_query = (
         select(RepresentativeReminder, Customer, User)
         .join(Customer, Customer.id == RepresentativeReminder.customer_id)
@@ -471,7 +503,8 @@ async def pagina_carteira(
             RepresentativeReminder.status.in_(
                 (ReminderStatus.PENDING_CONFIRMATION.value, ReminderStatus.CONFIRMED.value)
             ),
-            RepresentativeReminder.due_at >= datetime.now(UTC) - timedelta(days=1),
+            RepresentativeReminder.due_at >= mes_inicio_utc,
+            RepresentativeReminder.due_at < mes_fim_utc,
         )
         .order_by(RepresentativeReminder.due_at)
         .limit(100)
@@ -481,7 +514,58 @@ async def pagina_carteira(
             RepresentativeReminder.representative_user_id == current_user.user_id
         )
     agenda_rows = (await session.execute(agenda_query)).all()
-    sao_paulo = timezone(timedelta(hours=-3), "America/Sao_Paulo")
+    agenda = [
+        {
+            "reminder": reminder,
+            "customer": customer,
+            "representative": representative,
+            "due_local": (
+                reminder.due_at.replace(tzinfo=UTC)
+                if reminder.due_at.tzinfo is None
+                else reminder.due_at
+            ).astimezone(sao_paulo),
+        }
+        for reminder, customer, representative in agenda_rows
+    ]
+    agenda_do_dia = [item for item in agenda if item["due_local"].date() == dia_selecionado]
+    notificacoes = [
+        item for item in agenda
+        if item["due_local"] >= agora_local and item["reminder"].notified_at is None
+    ]
+    contagem_por_dia: dict[date, int] = {}
+    for item in agenda:
+        data_item = item["due_local"].date()
+        contagem_por_dia[data_item] = contagem_por_dia.get(data_item, 0) + 1
+    calendario = [
+        [
+            {
+                "date": data,
+                "iso": data.isoformat(),
+                "day": data.day,
+                "in_month": data.month == cursor_mes.month,
+                "today": data == hoje,
+                "selected": data == dia_selecionado,
+                "count": contagem_por_dia.get(data, 0),
+            }
+            for data in semana
+        ]
+        for semana in Calendar(firstweekday=6).monthdatescalendar(cursor_mes.year, cursor_mes.month)
+    ]
+    ids_visiveis = [cliente.id for cliente, _ in linhas]
+    contatos_ativos = 0
+    if ids_visiveis:
+        contatos_ativos = int(await session.scalar(
+            select(func.count(CustomerContact.id)).where(
+                CustomerContact.tenant_id == current_user.tenant_id,
+                CustomerContact.customer_id.in_(ids_visiveis),
+                CustomerContact.active.is_(True),
+            )
+        ) or 0)
+    nomes_meses = (
+        "", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+    )
+    sete_dias = hoje + timedelta(days=7)
     return _render(
         request,
         "customers.html",
@@ -501,20 +585,23 @@ async def pagina_carteira(
             "total": total,
             "intakes": intakes,
             "total_intakes": total_intakes,
-            "agenda": [
-                {
-                    "reminder": reminder,
-                    "customer": customer,
-                    "representative": representative,
-                    "due_local": (
-                        reminder.due_at.replace(tzinfo=UTC)
-                        if reminder.due_at.tzinfo is None
-                        else reminder.due_at
-                    ).astimezone(sao_paulo),
-                }
-                for reminder, customer, representative in agenda_rows
-            ],
-            "total_agenda": len(agenda_rows),
+            "agenda": agenda,
+            "agenda_do_dia": agenda_do_dia,
+            "notificacoes": notificacoes,
+            "agenda_view": "notificacoes" if agenda_view == "notificacoes" else "agenda",
+            "total_agenda": len(agenda),
+            "contatos_ativos": contatos_ativos,
+            "compromissos_hoje": sum(1 for item in agenda if item["due_local"].date() == hoje),
+            "compromissos_sete_dias": sum(
+                1 for item in agenda if hoje <= item["due_local"].date() <= sete_dias
+            ),
+            "calendario": calendario,
+            "mes_titulo": f"{nomes_meses[cursor_mes.month]} {cursor_mes.year}",
+            "mes_atual": cursor_mes.strftime("%Y-%m"),
+            "mes_anterior": (cursor_mes - timedelta(days=1)).strftime("%Y-%m"),
+            "mes_seguinte": proximo_mes.strftime("%Y-%m"),
+            "dia_selecionado": dia_selecionado,
+            "hoje": hoje,
             "secao": secao if secao in {"pre-cadastros", "agenda"} else "clientes",
             "filtros": {
                 "busca": busca,
@@ -529,6 +616,110 @@ async def pagina_carteira(
         current_user=current_user,
         mensagem=m,
     )
+
+
+@router.post("/customers/reminders", include_in_schema=False)
+async def criar_compromisso_manual(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    customer_id: Annotated[str, Form()] = "",
+    kind: Annotated[str, Form()] = "",
+    due_local: Annotated[str, Form()] = "",
+    note: Annotated[str, Form()] = "",
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/customers", "csrf")
+    try:
+        customer_uuid = uuid.UUID(customer_id)
+        customer, _ = await _portfolio_service(session).get_customer(
+            scope_for(current_user), customer_uuid
+        )
+        reminder_kind = ReminderKind(kind)
+        local_value = datetime.fromisoformat(due_local)
+        if local_value.tzinfo is None:
+            local_value = local_value.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+        due_at = local_value.astimezone(UTC)
+        now = datetime.now(UTC)
+        if due_at <= now or due_at > now + timedelta(days=366) or not note.strip():
+            raise ValueError
+    except (ValueError, CustomerNotInScope):
+        return _redirect("/portal/customers", "compromisso-invalido")
+
+    reminder = RepresentativeReminder(
+        id=uuid.uuid4(),
+        tenant_id=current_user.tenant_id,
+        representative_user_id=customer.owner_user_id or current_user.user_id,
+        customer_id=customer.id,
+        customer_contact_id=None,
+        origin=ReminderOrigin.REPRESENTATIVE.value,
+        kind=reminder_kind.value,
+        status=ReminderStatus.CONFIRMED.value,
+        note=note.strip()[:1000],
+        due_at=due_at,
+        timezone="America/Sao_Paulo",
+        source_wamid=f"portal:{uuid.uuid4()}",
+        source_line_reference=None,
+    )
+    session.add(reminder)
+    AuditRepository(session).record(
+        action="reminder.created",
+        entity="representative_reminder",
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.user_id,
+        entity_id=reminder.id,
+        after={
+            "customer_id": str(customer.id),
+            "kind": reminder.kind,
+            "due_at": due_at.isoformat(),
+        },
+    )
+    await session.commit()
+    return _redirect(
+        f"/portal/customers?mes={due_at.astimezone(ZoneInfo('America/Sao_Paulo')):%Y-%m}",
+        "compromisso-criado",
+    )
+
+
+@router.post("/customers/reminders/{reminder_id}/status", include_in_schema=False)
+async def atualizar_compromisso_manual(
+    reminder_id: uuid.UUID,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    status: Annotated[str, Form()] = "",
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/customers", "csrf")
+    statement = select(RepresentativeReminder).where(
+        RepresentativeReminder.id == reminder_id,
+        RepresentativeReminder.tenant_id == current_user.tenant_id,
+    )
+    if current_user.role not in _MANAGEMENT_ROLES:
+        statement = statement.where(
+            RepresentativeReminder.representative_user_id == current_user.user_id
+        )
+    reminder = await session.scalar(statement)
+    if reminder is None:
+        return _redirect("/portal/customers", "nao-encontrado")
+    if status not in {ReminderStatus.COMPLETED.value, ReminderStatus.CANCELLED.value}:
+        return _redirect("/portal/customers", "compromisso-invalido")
+    before = reminder.status
+    reminder.status = status
+    reminder.updated_at = datetime.now(UTC)
+    AuditRepository(session).record(
+        action="reminder.status.updated",
+        entity="representative_reminder",
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.user_id,
+        entity_id=reminder.id,
+        before={"status": before},
+        after={"status": status},
+    )
+    await session.commit()
+    return _redirect("/portal/customers", "compromisso-atualizado")
 
 
 @router.get("/customers/novo", include_in_schema=False)

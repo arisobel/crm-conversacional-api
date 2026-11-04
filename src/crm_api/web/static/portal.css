@@ -379,13 +379,11 @@ dialog.modal .dica a { color: var(--acento); }
 }
 .barra-lateral {
   position: sticky; top: 0; height: 100vh; flex: 0 0 232px; overflow-y: auto;
-  padding: 22px 8px; color: #fff;
+  padding: 46px 8px 22px; color: #fff;
   background: radial-gradient(ellipse at 5% 100%, #007f8f 0, transparent 45%),
     linear-gradient(160deg, #041b31 10%, #052d48 68%, #00465c);
   box-shadow: 4px 0 28px rgb(1 84 107 / 16%);
 }
-.barra-lateral .marca { display: block; padding: 2px 12px 24px; }
-.barra-lateral .marca img { display: block; width: 100%; max-width: 195px; height: 62px; object-fit: contain; }
 .barra-lateral nav { display: flex; flex-direction: column; gap: 4px; }
 .barra-lateral nav a {
   display: flex; align-items: center; gap: 15px; min-height: 49px;
@@ -396,7 +394,6 @@ dialog.modal .dica a { color: var(--acento); }
 .barra-lateral nav a .icone-menu { display: inline-grid; flex: 0 0 24px; place-items: center; }
 .barra-lateral nav a .icone-menu svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .barra-lateral nav a .icone-menu svg circle { fill: currentColor; stroke: none; }
-.barra-lateral nav a .icone-carteira svg path { fill: currentColor; stroke: none; }
 .barra-lateral nav a:hover { background: rgb(255 255 255 / 8%); }
 .barra-lateral nav a.atual { color: white; border-color: #45eef0; background: linear-gradient(100deg, #075375, #13b8ba); box-shadow: 0 4px 18px rgb(10 235 226 / 18%); font-weight: 700; }
 
@@ -405,8 +402,10 @@ dialog.modal .dica a { color: var(--acento); }
 .abas-carteira a.atual { border-color: #1aaeb2; background: #eafafa; color: #075375; }
 .abas-carteira strong { min-width: 22px; padding: 2px 7px; border-radius: 999px; background: rgb(16 39 75 / 8%); color: inherit; font-size: 12px; text-align: center; }
 .portal-conteudo { min-width: 0; flex: 1; }
-.portal-autenticado .topo { height: 80px; padding: 12px 28px; background: rgb(255 255 255 / 52%); border-bottom: 1px solid #fff; }
+.portal-autenticado .topo { position: relative; height: 80px; padding: 12px 28px; background: rgb(255 255 255 / 52%); border-bottom: 1px solid #fff; }
 .topo-titulo { color: #7993ad; font-size: 13px; letter-spacing: .03em; }
+.topo-marca { position: absolute; left: 50%; top: 50%; width: 190px; height: 58px; transform: translate(-50%, -50%); }
+.topo-marca img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .conta { position: relative; margin-left: auto; z-index: 40; }
 .conta summary { display: flex; align-items: center; justify-content: space-between; gap: 25px; min-width: 190px; padding: 10px 18px; border: 1px solid white; border-radius: 26px; background: #e8f4f8; color: #112b50; cursor: pointer; font-weight: 700; list-style: none; }
 .conta summary::-webkit-details-marker { display: none; }
@@ -439,11 +438,75 @@ dialog.modal .dica a { color: var(--acento); }
 .atalhos-grade { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .atalhos-grade a { display: flex; flex-direction: column; gap: 8px; padding: 18px; color: #123756; background: #f3f9fc; border: 1px solid #e4f0f5; border-radius: 12px; text-decoration: none; font-weight: 700; }
 .atalhos-grade a span { color: #758eaa; font-size: 12px; font-weight: 400; }
+
+/* ------------------------------------------------ carteira e agenda unificadas */
+.carteira-titulo { margin-bottom: 24px; }
+.carteira-titulo h1 { font-size: 31px; }
+.carteira-titulo .dica { font-size: 15px; }
+.carteira-agenda-grade { display: grid; grid-template-columns: minmax(620px, 1.08fr) minmax(540px, .92fr); gap: 18px; align-items: start; }
+.workspace-card { min-width: 0; padding: 20px; border: 1px solid #dcecf4; border-radius: 21px; background: rgb(255 255 255 / 72%); box-shadow: 0 12px 30px rgb(55 116 143 / 7%); }
+.workspace-card-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
+.workspace-card-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.workspace-card-title h2 { margin: 0; font-size: 21px; }
+.workspace-card-title p { margin: 2px 0 0; color: var(--tinta-fraca); font-size: 13px; }
+.workspace-icon { display: inline-grid; flex: 0 0 42px; width: 42px; height: 42px; place-items: center; color: #087b98; }
+.workspace-icon svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.workspace-actions { display: flex; gap: 9px; white-space: nowrap; }
+.workspace-actions .botao { padding: 9px 13px; }
+.carteira-metricas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+.metrica { display: flex; flex-direction: column; justify-content: center; min-height: 78px; padding: 13px 16px; border: 1px solid #dce9f2; border-radius: 14px; background: #f8fcfe; color: #526d8f; text-decoration: none; }
+.metrica.destaque { border-color: #63d7dc; background: linear-gradient(120deg, #e5ffff, #f5ffff); }
+.metrica strong { color: #0d3157; font-size: 25px; line-height: 1.1; }
+.filtros-carteira { display: grid; grid-template-columns: minmax(190px, 1fr) 62px 110px minmax(130px, .75fr) auto; gap: 8px; }
+.filtros-carteira input, .filtros-carteira select { min-width: 0; width: 100%; }
+.tabela-rolagem { overflow: auto; border-radius: 14px; }
+.tabela-carteira { min-width: 680px; margin: 0; }
+.tabela-carteira td, .tabela-carteira th { padding: 11px 12px; }
+.tabela-carteira td:first-child { max-width: 220px; }
+.rodape-tabela { margin: 16px 2px 0; }
+.agenda-abas { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; margin-bottom: 17px; border: 1px solid #d7e8f1; border-radius: 14px; }
+.agenda-abas a { padding: 9px 12px; border-radius: 11px; color: #536d8d; text-align: center; text-decoration: none; }
+.agenda-abas a.atual { color: #075375; background: #dffafa; box-shadow: inset 0 0 0 1px #20c9cf; font-weight: 700; }
+.agenda-abas strong { display: inline-block; min-width: 22px; margin-left: 7px; padding: 1px 6px; border-radius: 12px; background: #3ed8d3; color: #073c51; }
+.agenda-corpo { display: grid; grid-template-columns: minmax(230px, .9fr) minmax(260px, 1.1fr); gap: 12px; }
+.calendario, .agenda-dia { min-height: 330px; padding: 15px; border: 1px solid #e1ecf2; border-radius: 15px; background: #fbfdfe; }
+.calendario header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.calendario header a { color: #526d8f; font-size: 28px; line-height: 1; text-decoration: none; }
+.calendario-semana { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; }
+.calendario-semana > span { padding: 5px 0; color: #55708f; font-size: 12px; font-weight: 700; }
+.calendario-semana.dias a { position: relative; display: grid; height: 39px; place-items: center; border-radius: 50%; color: #173a5d; text-decoration: none; font-size: 13px; }
+.calendario-semana.dias a.fora { color: #a5b3c1; }
+.calendario-semana.dias a.hoje span { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; background: #16aeb2; color: white; }
+.calendario-semana.dias a.selecionado:not(.hoje) span { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid #16aeb2; border-radius: 50%; }
+.calendario-semana.dias i { position: absolute; bottom: 1px; width: 5px; height: 5px; border-radius: 50%; background: #17b9b6; }
+.agenda-dia h3 { margin: 0 0 12px; font-size: 15px; }
+.lista-agenda { display: flex; flex-direction: column; gap: 8px; }
+.lista-notificacoes { min-height: 330px; }
+.agenda-item { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid #e2edf3; border-left: 4px solid #13b7b3; border-radius: 11px; background: white; box-shadow: 0 3px 10px rgb(29 89 113 / 5%); }
+.agenda-item.tipo-meeting { border-left-color: #16b9b5; }
+.agenda-item.tipo-follow_up { border-left-color: #efad1f; }
+.agenda-item time { padding: 5px 7px; border-radius: 7px; background: #edf7fa; color: #183d61; font-weight: 700; }
+.agenda-item strong, .agenda-item small { display: block; overflow: hidden; text-overflow: ellipsis; }
+.agenda-item small { color: var(--tinta-fraca); white-space: nowrap; }
+.agenda-item details { position: relative; }
+.agenda-item summary { padding: 4px 7px; color: #345779; cursor: pointer; font-size: 21px; list-style: none; }
+.agenda-item details form { position: absolute; z-index: 5; right: 0; top: 100%; display: flex; gap: 8px; padding: 9px; border-radius: 10px; background: white; box-shadow: 0 8px 24px rgb(20 56 78 / 18%); }
+.agenda-item details button { white-space: nowrap; }
+.agenda-resumo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-top: 16px; }
+.agenda-resumo div { min-height: 74px; padding: 13px; border: 1px solid #e0ebf2; border-radius: 13px; background: #f9fcfd; }
+.agenda-resumo span, .agenda-resumo strong { display: block; }
+.agenda-resumo span { color: #617b98; font-size: 12px; }
+.agenda-resumo strong { color: #10375b; font-size: 24px; }
+.portal-autenticado input[type="datetime-local"] { min-height: 43px; padding: 8px 10px; border: 1px solid #d5e6f2; border-radius: 8px; background: white; color: var(--tinta); font: inherit; }
+
+@media (max-width: 1450px) {
+  .carteira-agenda-grade { grid-template-columns: 1fr; }
+  .agenda-corpo { grid-template-columns: minmax(260px, .8fr) minmax(320px, 1.2fr); }
+}
 @media (max-width: 800px) {
   .portal-autenticado { display: block; }
   .barra-lateral { position: static; width: 100%; height: auto; padding: 10px 12px; }
-  .barra-lateral .marca { padding: 0 4px 8px; }
-  .barra-lateral .marca img { height: 40px; width: 145px; }
+  .topo-marca { width: 135px; }
   .barra-lateral nav { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
   .barra-lateral nav a { flex: 0 0 auto; min-height: 42px; padding: 8px 12px; }
   .barra-lateral nav a span { font-size: 18px; }
@@ -452,5 +515,8 @@ dialog.modal .dica a { color: var(--acento); }
   .resumo-grade { grid-template-columns: 1fr; }
   .resumo-cartao { min-height: 120px; }
   .atalhos-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspace-card-header, .workspace-actions { align-items: stretch; flex-direction: column; }
+  .carteira-metricas, .agenda-resumo { grid-template-columns: 1fr; }
+  .filtros-carteira, .agenda-corpo { grid-template-columns: 1fr; }
 }
-@media (max-width: 430px) { .topo-titulo { display: none; } .atalhos-grade { grid-template-columns: 1fr; } }
+@media (max-width: 430px) { .topo-titulo, .topo-marca { display: none; } .atalhos-grade { grid-template-columns: 1fr; } }

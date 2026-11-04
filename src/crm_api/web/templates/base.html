@@ -12,14 +12,13 @@
 <body class="{% block body_class %}{% endblock %}{% if current_user %} portal-autenticado{% endif %}">
 {% if current_user %}
 <aside class="barra-lateral">
-  <a href="/portal/home" class="marca" aria-label="CRM — início"><img src="/portal/static/crm-logo.png" alt="CRM"></a>
   <nav aria-label="Menu principal">
     {% set path = request.url.path %}
     <a href="/portal/home" class="{% if path == '/portal/home' %}atual{% endif %}">
-      <span class="icone-menu" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M3 14.5 16 3l13 11.5V29H19v-9h-6v9H3Z"/></svg></span> Início
+      <span class="icone-menu" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M4 15 16 4l12 11v13H19v-8h-6v8H4Z"/><circle cx="16" cy="13" r="2.5"/><path d="M11.5 20c.8-3.2 8.2-3.2 9 0"/></svg></span> Início
     </a>
     <a href="/portal/customers" class="{% if path.startswith('/portal/customers') or path.startswith('/portal/intakes') %}atual{% endif %}">
-      <span class="icone-menu icone-carteira" aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="20.5" cy="6" r="3.5"/><path d="M16.5 13c.8-2.8 7.3-2.8 8 0l1.2 5.2h3.1l-1.2-7.3a3 3 0 0 0-2.9-2.5h-8.4a3 3 0 0 0-2.9 2.5l-.5 3.1a10 10 0 1 0 5.8 10.8h8.7v-2.7H16.8a7.2 7.2 0 1 1-4.3-5.4l-.7 4.2H15Z"/><circle cx="7.5" cy="20" r="2.1"/><circle cx="12" cy="19" r="2.1"/><circle cx="9.8" cy="24.2" r="2.1"/></svg></span> Carteira
+      <span class="icone-menu" aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="11" cy="9" r="4"/><circle cx="22" cy="10" r="3"/><path d="M3 25c0-5 3-8 8-8s8 3 8 8M19 18c4-1 8 2 8 7"/><circle cx="24" cy="23" r="4"/><path d="M24 17v2M24 27v2M18 23h2M28 23h2"/></svg></span> Carteira &amp; Agenda
     </a>
     <a href="/portal/products" class="{% if path.startswith('/portal/products') %}atual{% endif %}"><span aria-hidden="true">◇</span> Produtos</a>
     <a href="/portal/campaigns" class="{% if path.startswith('/portal/campaigns') %}atual{% endif %}"><span aria-hidden="true">➤</span> Campanhas</a>
@@ -37,6 +36,7 @@
 <div class="portal-conteudo">
   <header class="topo">
     <span class="topo-titulo">Seu espaço comercial</span>
+    <a href="/portal/home" class="topo-marca" aria-label="CRM — início"><img src="/portal/static/crm-logo.png" alt="CRM"></a>
     <details class="conta">
       <summary>{{ current_user.full_name }} <span aria-hidden="true">⌄</span></summary>
       <div class="conta-menu">
