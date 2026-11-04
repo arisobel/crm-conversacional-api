@@ -3,9 +3,78 @@
 
 {% block conteudo %}
 <div class="cabecalho">
-  <div><h1>{% if somente_minha %}Minha carteira{% else %}Clientes{% endif %}</h1><p class="dica">Gerencie seus clientes e contatos.</p></div>
-  <a class="botao" href="/portal/customers/novo">Novo cliente</a>
+  <div><h1>{% if somente_minha %}Minha carteira{% else %}Carteira{% endif %}</h1><p class="dica">Gerencie clientes, contatos e solicitações de cadastro.</p></div>
+  {% if secao == 'clientes' %}<a class="botao" href="/portal/customers/novo">Novo cliente</a>{% endif %}
 </div>
+
+<nav class="abas-carteira" aria-label="Seções da carteira">
+  <a href="/portal/customers" class="{% if secao == 'clientes' %}atual{% endif %}">Clientes <strong>{{ total }}</strong></a>
+  <a href="/portal/customers?secao=agenda" class="{% if secao == 'agenda' %}atual{% endif %}">Agenda <strong>{{ total_agenda }}</strong></a>
+  <a href="/portal/customers?secao=pre-cadastros" class="{% if secao == 'pre-cadastros' %}atual{% endif %}">Pré-cadastros <strong>{{ total_intakes }}</strong></a>
+</nav>
+
+{% if secao == 'pre-cadastros' %}
+  <div class="cabecalho">
+    <div><h2>Pré-cadastros pendentes</h2><p class="dica">{{ total_intakes }} aguardando conferência.</p></div>
+  </div>
+  {% if intakes %}
+    {% for intake, autor in intakes %}
+    <section class="painel">
+      <div class="cabecalho"><div><h2>{{ intake.legal_name }}</h2><p class="dica">Aberto por {{ autor.full_name }} em {{ intake.created_at.strftime('%d/%m/%Y %H:%M') }} via {{ intake.source }}.</p></div></div>
+      <form method="post" action="/portal/intakes/{{ intake.id }}/accept" class="formulario">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="legal_name_{{ intake.id }}">Razão social</label>
+        <input id="legal_name_{{ intake.id }}" name="legal_name" value="{{ intake.legal_name }}" required>
+        <label for="trade_name_{{ intake.id }}">Nome fantasia</label>
+        <input id="trade_name_{{ intake.id }}" name="trade_name">
+        <label for="document_number_{{ intake.id }}">Documento</label>
+        <input id="document_number_{{ intake.id }}" name="document_number">
+        <label for="state_code_{{ intake.id }}">UF</label>
+        <input id="state_code_{{ intake.id }}" name="state_code" maxlength="2" size="2" value="{{ intake.state_code }}" required>
+        {% if intake.whatsapp_e164 %}
+        <label for="contact_name_{{ intake.id }}">Nome do contato</label>
+        <input id="contact_name_{{ intake.id }}" name="contact_name" value="{{ intake.legal_name }}">
+        <p class="dica">WhatsApp informado: {{ intake.whatsapp_e164 }}. Ele só será autorizado ao aceitar.</p>
+        {% else %}
+        <p class="dica">Nenhum WhatsApp foi informado; o cliente será criado sem contato.</p>
+        {% endif %}
+        {% if intake.preferred_products_text %}<p class="dica">Preferências relatadas: {{ intake.preferred_products_text }}</p>{% endif %}
+        <button type="submit">Aceitar e criar cliente</button>
+      </form>
+      <form method="post" action="/portal/intakes/{{ intake.id }}/reject" class="formulario">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="reason_{{ intake.id }}">Motivo da rejeição</label>
+        <input id="reason_{{ intake.id }}" name="reason" maxlength="500" required>
+        <button type="submit" class="link">Rejeitar pré-cadastro</button>
+      </form>
+    </section>
+    {% endfor %}
+  {% else %}
+    <p class="vazio">Não há pré-cadastros pendentes no seu escopo.</p>
+  {% endif %}
+{% elif secao == 'agenda' %}
+  <div class="cabecalho">
+    <div><h2>Próximos compromissos</h2><p class="dica">Pedidos identificados nas conversas com clientes.</p></div>
+  </div>
+  {% if agenda %}
+  <table>
+    <thead><tr><th>Quando</th><th>Cliente</th><th>Compromisso</th>{% if pode_gerir %}<th>Representante</th>{% endif %}<th>Situação</th></tr></thead>
+    <tbody>
+      {% for item in agenda %}
+      <tr>
+        <td><strong>{{ item.due_local.strftime('%d/%m/%Y %H:%M') }}</strong></td>
+        <td><a href="/portal/customers/{{ item.customer.id }}">{{ item.customer.legal_name }}</a></td>
+        <td>{% if item.reminder.kind == 'CALL' %}Ligação{% elif item.reminder.kind == 'MEETING' %}Reunião{% else %}Retorno{% endif %}<small class="especificacao">{{ item.reminder.note }}</small></td>
+        {% if pode_gerir %}<td>{{ item.representative.full_name }}</td>{% endif %}
+        <td><span class="situacao-ativa">agendado</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="vazio">Nenhum compromisso futuro na agenda.</p>
+  {% endif %}
+{% else %}
 
 <form method="get" class="filtros">
   <input type="search" name="busca" placeholder="Razão social, fantasia ou documento"
@@ -68,5 +137,6 @@
 <p class="rodape-tabela">{{ total }} cliente(s).</p>
 {% else %}
 <p class="vazio">Nenhum cliente encontrado com esses filtros.</p>
+{% endif %}
 {% endif %}
 {% endblock %}

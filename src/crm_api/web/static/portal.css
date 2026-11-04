@@ -393,8 +393,17 @@ dialog.modal .dica a { color: var(--acento); }
   color: #e6f4fb; text-decoration: none; font-weight: 500;
 }
 .barra-lateral nav a span { width: 24px; text-align: center; font-size: 22px; line-height: 1; }
+.barra-lateral nav a .icone-menu { display: inline-grid; flex: 0 0 24px; place-items: center; }
+.barra-lateral nav a .icone-menu svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.barra-lateral nav a .icone-menu svg circle { fill: currentColor; stroke: none; }
+.barra-lateral nav a .icone-carteira svg path { fill: currentColor; stroke: none; }
 .barra-lateral nav a:hover { background: rgb(255 255 255 / 8%); }
 .barra-lateral nav a.atual { color: white; border-color: #45eef0; background: linear-gradient(100deg, #075375, #13b8ba); box-shadow: 0 4px 18px rgb(10 235 226 / 18%); font-weight: 700; }
+
+.abas-carteira { display: flex; gap: 10px; margin: 0 0 20px; }
+.abas-carteira a { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border: 1px solid var(--linha); border-radius: 12px; background: var(--cartao); color: var(--tinta-fraca); text-decoration: none; font-weight: 700; }
+.abas-carteira a.atual { border-color: #1aaeb2; background: #eafafa; color: #075375; }
+.abas-carteira strong { min-width: 22px; padding: 2px 7px; border-radius: 999px; background: rgb(16 39 75 / 8%); color: inherit; font-size: 12px; text-align: center; }
 .portal-conteudo { min-width: 0; flex: 1; }
 .portal-autenticado .topo { height: 80px; padding: 12px 28px; background: rgb(255 255 255 / 52%); border-bottom: 1px solid #fff; }
 .topo-titulo { color: #7993ad; font-size: 13px; letter-spacing: .03em; }

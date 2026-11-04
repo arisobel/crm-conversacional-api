@@ -64,7 +64,6 @@ _ACOES_REPRESENTANTE = {
     "CRM_REP_LOOKUP_CUSTOMER",
     "CRM_REP_GET_CUSTOMER_PRICE_LIST",
     "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
-    "CRM_REP_CREATE_CUSTOMER_INTAKE",
 }
 _ACOES_REGISTRADAS = _ACOES_CLIENTE | _ACOES_REPRESENTANTE
 # Espelho de `CRM_ACTION_REQUIRED_SLOTS`: o Gateway lê estes nomes literalmente.
@@ -75,10 +74,6 @@ _SLOTS_ESPERADOS = {
     "CRM_REP_LOOKUP_CUSTOMER": {"customer_query"},
     "CRM_REP_GET_CUSTOMER_PRICE_LIST": {"customer_query"},
     "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY": {"customer_query"},
-    "CRM_REP_CREATE_CUSTOMER_INTAKE": {
-        "customer_legal_name",
-        "customer_state_code",
-    },
 }
 _TIPOS_REGISTRADOS = {"product_code"}
 
@@ -243,7 +238,7 @@ async def test_cliente_recebe_as_duas_capacidades_de_hoje(world):
 
 
 @pytest.mark.asyncio
-async def test_representante_recebe_quatro_leituras_e_um_pre_cadastro(world):
+async def test_representante_recebe_as_quatro_leituras_disponiveis(world):
     corpo = (await _pedir(world, TELEFONE_REPRESENTANTE)).json()
 
     assert corpo["actor"]["role"] == "representante"
@@ -252,15 +247,8 @@ async def test_representante_recebe_quatro_leituras_e_um_pre_cadastro(world):
         "CRM_REP_LOOKUP_CUSTOMER",
         "CRM_REP_GET_CUSTOMER_PRICE_LIST",
         "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
-        "CRM_REP_CREATE_CUSTOMER_INTAKE",
     ]
-    assert len(corpo["capabilities"]) == 5
-
-    pre_cadastro = corpo["capabilities"][4]
-    assert pre_cadastro["id"] == pre_cadastro["action"] == "CRM_REP_CREATE_CUSTOMER_INTAKE"
-    assert pre_cadastro["mode"] == "write"
-    assert pre_cadastro["requires_confirmation"] is True
-    assert pre_cadastro["idempotency"] == "required"
+    assert len(corpo["capabilities"]) == 4
 
 
 @pytest.mark.asyncio
@@ -294,7 +282,6 @@ async def test_cliente_nao_recebe_escrita_nem_capacidade_de_representante(world)
         "CRM_REP_LOOKUP_CUSTOMER",
         "CRM_REP_GET_CUSTOMER_PRICE_LIST",
         "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
-        "CRM_REP_CREATE_CUSTOMER_INTAKE",
     } & {capacidade["action"] for capacidade in corpo["capabilities"]}
 
 
@@ -336,15 +323,6 @@ async def test_apenas_o_slot_de_produto_declara_tipo(world):
         assert cliente_slot == {"id": "customer_query", "required": True}
         assert "kind" not in cliente_slot
 
-    pre_cadastro_slots = por_acao["CRM_REP_CREATE_CUSTOMER_INTAKE"]["slots"]
-    assert pre_cadastro_slots == [
-        {"id": "customer_legal_name", "required": True},
-        {"id": "customer_state_code", "required": True},
-        {"id": "customer_whatsapp", "required": False},
-        {"id": "preferred_products_text", "required": False},
-    ]
-
-
 @pytest.mark.asyncio
 async def test_a_ajuda_do_representante_promete_apenas_o_que_anuncia(world):
     """Prometer o que o manifesto não declara é a pior falha do canal.
@@ -357,9 +335,8 @@ async def test_a_ajuda_do_representante_promete_apenas_o_que_anuncia(world):
     assert "artigo" in ajuda
     assert "carteira" in ajuda
     assert "tabela" in ajuda
-    assert "pré-cadastro" in ajuda
-    assert "whatsapp" in ajuda
-    assert "aprova" in ajuda
+    assert "interações" in ajuda
+    assert "pré-cadastro" not in ajuda
 
 
 def _resolve_alias_como_gateway_206c6bf(manifesto: dict, texto: str) -> str | None:
@@ -399,12 +376,10 @@ def _resolve_alias_como_gateway_206c6bf(manifesto: dict, texto: str) -> str | No
 
 
 @pytest.mark.asyncio
-async def test_alias_do_pre_cadastro_resolve_exatamente_no_gateway_206c6bf(world):
+async def test_pedido_de_pre_cadastro_nao_vira_busca_de_cliente(world):
     corpo = (await _pedir(world, TELEFONE_REPRESENTANTE)).json()
 
-    assert _resolve_alias_como_gateway_206c6bf(corpo, "cadastrar cliente") == (
-        "CRM_REP_CREATE_CUSTOMER_INTAKE"
-    )
+    assert _resolve_alias_como_gateway_206c6bf(corpo, "cadastrar cliente") is None
     assert _resolve_alias_como_gateway_206c6bf(corpo, "bom dia") is None
 
 
@@ -494,7 +469,8 @@ async def test_linha_assistente_aplica_capacidades_escolhidas_pelo_administrador
         corpo = resposta.json()
         actions = {capability["action"] for capability in corpo["capabilities"]}
         assert actions == _ACOES_REPRESENTANTE
-        assert "pré-cadastrar cliente" in corpo["help_message"].lower()
+        assert "resumir conversa de um cliente" in corpo["help_message"].lower()
+        assert "pré-cadastrar" not in corpo["help_message"].lower()
         valida_como_o_gateway_206c6bf(corpo)
     finally:
         await mundo.app.state.engine.dispose()

@@ -15,9 +15,12 @@
   <a href="/portal/home" class="marca" aria-label="CRM — início"><img src="/portal/static/crm-logo.png" alt="CRM"></a>
   <nav aria-label="Menu principal">
     {% set path = request.url.path %}
-    <a href="/portal/home" class="{% if path == '/portal/home' %}atual{% endif %}"><span aria-hidden="true">⌂</span> Início</a>
-    <a href="/portal/customers" class="{% if path.startswith('/portal/customers') %}atual{% endif %}"><span aria-hidden="true">♙</span> Carteira</a>
-    <a href="/portal/intakes" class="{% if path.startswith('/portal/intakes') %}atual{% endif %}"><span aria-hidden="true">▤</span> Pré-cadastros</a>
+    <a href="/portal/home" class="{% if path == '/portal/home' %}atual{% endif %}">
+      <span class="icone-menu" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M3 14.5 16 3l13 11.5V29H19v-9h-6v9H3Z"/></svg></span> Início
+    </a>
+    <a href="/portal/customers" class="{% if path.startswith('/portal/customers') or path.startswith('/portal/intakes') %}atual{% endif %}">
+      <span class="icone-menu icone-carteira" aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="20.5" cy="6" r="3.5"/><path d="M16.5 13c.8-2.8 7.3-2.8 8 0l1.2 5.2h3.1l-1.2-7.3a3 3 0 0 0-2.9-2.5h-8.4a3 3 0 0 0-2.9 2.5l-.5 3.1a10 10 0 1 0 5.8 10.8h8.7v-2.7H16.8a7.2 7.2 0 1 1-4.3-5.4l-.7 4.2H15Z"/><circle cx="7.5" cy="20" r="2.1"/><circle cx="12" cy="19" r="2.1"/><circle cx="9.8" cy="24.2" r="2.1"/></svg></span> Carteira
+    </a>
     <a href="/portal/products" class="{% if path.startswith('/portal/products') %}atual{% endif %}"><span aria-hidden="true">◇</span> Produtos</a>
     <a href="/portal/campaigns" class="{% if path.startswith('/portal/campaigns') %}atual{% endif %}"><span aria-hidden="true">➤</span> Campanhas</a>
     {% if current_user.role.value == 'REPRESENTATIVE' %}

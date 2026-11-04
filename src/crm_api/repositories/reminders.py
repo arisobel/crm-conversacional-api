@@ -1,0 +1,40 @@
+import uuid
+from datetime import datetime
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from crm_api.models.reminder import RepresentativeReminder
+
+
+class ReminderRepository:
+    def __init__(self, session: AsyncSession):
+        self._session = session
+
+    async def get_by_source(
+        self, tenant_id: uuid.UUID, source_wamid: str
+    ) -> RepresentativeReminder | None:
+        return await self._session.scalar(
+            select(RepresentativeReminder).where(
+                RepresentativeReminder.tenant_id == tenant_id,
+                RepresentativeReminder.source_wamid == source_wamid,
+            )
+        )
+
+    def add(self, reminder: RepresentativeReminder) -> None:
+        self._session.add(reminder)
+
+    async def due(self, now: datetime, *, limit: int = 100) -> list[RepresentativeReminder]:
+        rows = await self._session.scalars(
+            select(RepresentativeReminder)
+            .where(
+                RepresentativeReminder.status.in_(("PENDING_CONFIRMATION", "CONFIRMED")),
+                RepresentativeReminder.notified_at.is_(None),
+                RepresentativeReminder.due_at <= now,
+            )
+            .order_by(RepresentativeReminder.due_at, RepresentativeReminder.id)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        return list(rows)
+

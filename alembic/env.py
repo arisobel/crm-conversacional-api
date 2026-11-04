@@ -17,6 +17,7 @@ from crm_api.models.catalog import Product, ProductFamily  # noqa: F401
 from crm_api.models.customer import Customer, Tenant  # noqa: F401
 from crm_api.models.customer_contact import CustomerContact  # noqa: F401
 from crm_api.models.pricing import PriceList, PriceListItem  # noqa: F401
+from crm_api.models.reminder import RepresentativeReminder  # noqa: F401
 from crm_api.models.textile import Fiber, ProductComposition  # noqa: F401
 
 config = context.config

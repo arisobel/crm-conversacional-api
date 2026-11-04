@@ -7,7 +7,7 @@ traduz o resultado em redirecionamento. Nenhuma regra de negócio vive aqui.
 import csv
 import io
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Annotated
 
@@ -29,8 +29,10 @@ from crm_api.models.assistant_settings import (
     AssistantRepresentativeSettings,
     ConversationBehaviorSettings,
 )
+from crm_api.models.customer import Customer
 from crm_api.models.interaction import NOTE_CHANNELS, InteractionDirection
 from crm_api.models.pricing import AvailabilityStatus
+from crm_api.models.reminder import ReminderStatus, RepresentativeReminder
 from crm_api.models.tax import IcmsRule
 from crm_api.models.user import User, UserRole
 from crm_api.models.whatsapp_connection import WhatsappConnectionStatus
@@ -434,6 +436,7 @@ async def pagina_carteira(
     situacao: Annotated[str | None, Query()] = None,
     titular: Annotated[str | None, Query()] = None,
     contato: Annotated[str | None, Query()] = None,
+    secao: Annotated[str | None, Query()] = None,
     m: Annotated[str | None, Query()] = None,
 ) -> Response:
     pode_gerir = current_user.role in _MANAGEMENT_ROLES
@@ -451,6 +454,29 @@ async def pagina_carteira(
     ultimas = await _interaction_service(session).last_interactions(
         current_user.tenant_id, [cliente.id for cliente, _ in linhas]
     )
+    intakes, total_intakes = await _intake_service(request, session).queue(
+        scope_for(current_user), actor_role=current_user.role
+    )
+    agenda_query = (
+        select(RepresentativeReminder, Customer, User)
+        .join(Customer, Customer.id == RepresentativeReminder.customer_id)
+        .join(User, User.id == RepresentativeReminder.representative_user_id)
+        .where(
+            RepresentativeReminder.tenant_id == current_user.tenant_id,
+            RepresentativeReminder.status.in_(
+                (ReminderStatus.PENDING_CONFIRMATION.value, ReminderStatus.CONFIRMED.value)
+            ),
+            RepresentativeReminder.due_at >= datetime.now(UTC) - timedelta(days=1),
+        )
+        .order_by(RepresentativeReminder.due_at)
+        .limit(100)
+    )
+    if not pode_gerir:
+        agenda_query = agenda_query.where(
+            RepresentativeReminder.representative_user_id == current_user.user_id
+        )
+    agenda_rows = (await session.execute(agenda_query)).all()
+    sao_paulo = timezone(timedelta(hours=-3), "America/Sao_Paulo")
     return _render(
         request,
         "customers.html",
@@ -468,6 +494,23 @@ async def pagina_carteira(
                 for cliente, dono in linhas
             ],
             "total": total,
+            "intakes": intakes,
+            "total_intakes": total_intakes,
+            "agenda": [
+                {
+                    "reminder": reminder,
+                    "customer": customer,
+                    "representative": representative,
+                    "due_local": (
+                        reminder.due_at.replace(tzinfo=UTC)
+                        if reminder.due_at.tzinfo is None
+                        else reminder.due_at
+                    ).astimezone(sao_paulo),
+                }
+                for reminder, customer, representative in agenda_rows
+            ],
+            "total_agenda": len(agenda_rows),
+            "secao": secao if secao in {"pre-cadastros", "agenda"} else "clientes",
             "filtros": {
                 "busca": busca,
                 "uf": uf,
@@ -550,21 +593,11 @@ async def pagina_pre_cadastros(
     session: Annotated[AsyncSession, Depends(get_session)],
     m: Annotated[str | None, Query()] = None,
 ) -> Response:
-    """Fila pendente que cada papel pode de fato resolver.
-
-    O recorte de representante acontece no serviço, não no template: ele vê
-    somente o que abriu; `ADMIN` e `MANAGER` veem a fila do tenant inteiro.
-    """
-    intakes, total = await _intake_service(request, session).queue(
-        scope_for(current_user), actor_role=current_user.role
-    )
-    return _render(
-        request,
-        "intakes.html",
-        {"intakes": intakes, "total": total},
-        current_user=current_user,
-        mensagem=m,
-    )
+    """Compatibilidade: a fila agora é uma divisão da Carteira."""
+    destino = "/portal/customers?secao=pre-cadastros"
+    if m:
+        destino += f"&m={m}"
+    return RedirectResponse(destino, status_code=303)
 
 
 @router.post("/intakes/{intake_id}/accept", include_in_schema=False)
@@ -581,7 +614,7 @@ async def aceitar_pre_cadastro(
     csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
 ) -> Response:
     if not csrf_is_valid(request, csrf_token):
-        return _redirect("/portal/intakes", "csrf")
+        return _redirect("/portal/customers?secao=pre-cadastros", "csrf")
 
     try:
         intake = await _intake_service(request, session).accept(
@@ -598,7 +631,7 @@ async def aceitar_pre_cadastro(
         )
     except Exception as error:  # noqa: BLE001 -- reclassificado por _codigo_do_erro
         await session.rollback()
-        return _redirect("/portal/intakes", _codigo_do_erro(error))
+        return _redirect("/portal/customers?secao=pre-cadastros", _codigo_do_erro(error))
 
     await session.commit()
     # O CHECK da tabela exige customer_id em todo intake ACCEPTED. Mantemos a
@@ -618,7 +651,7 @@ async def rejeitar_pre_cadastro(
     csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
 ) -> Response:
     if not csrf_is_valid(request, csrf_token):
-        return _redirect("/portal/intakes", "csrf")
+        return _redirect("/portal/customers?secao=pre-cadastros", "csrf")
 
     try:
         await _intake_service(request, session).reject(
@@ -631,10 +664,10 @@ async def rejeitar_pre_cadastro(
         )
     except Exception as error:  # noqa: BLE001 -- reclassificado por _codigo_do_erro
         await session.rollback()
-        return _redirect("/portal/intakes", _codigo_do_erro(error))
+        return _redirect("/portal/customers?secao=pre-cadastros", _codigo_do_erro(error))
 
     await session.commit()
-    return _redirect("/portal/intakes", "intake-rejeitado")
+    return _redirect("/portal/customers?secao=pre-cadastros", "intake-rejeitado")
 
 
 @router.get("/customers/{customer_id}", include_in_schema=False)
