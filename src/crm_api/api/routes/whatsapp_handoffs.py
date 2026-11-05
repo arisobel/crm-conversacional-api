@@ -3,6 +3,7 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
@@ -126,6 +127,16 @@ async def create_customer_reminder(
     reminder = await repository.get_by_source(tenant.id, payload.source_wamid)
     created = reminder is None
     if reminder is None:
+        due_local = due_at.astimezone(ZoneInfo("America/Sao_Paulo"))
+        slot_start = due_local.replace(minute=0, second=0, microsecond=0).astimezone(UTC)
+        conflict = await repository.find_slot_conflict(
+            tenant.id,
+            representative.id,
+            slot_start,
+            slot_start + timedelta(hours=1),
+        )
+        if conflict is not None:
+            raise HTTPException(status_code=409, detail="representative reminder slot conflict")
         reminder = RepresentativeReminder(
             id=uuid.uuid4(),
             tenant_id=tenant.id,

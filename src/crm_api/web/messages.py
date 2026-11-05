@@ -31,6 +31,10 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
         "erro",
         "Confira cliente, tipo, descrição e um horário futuro para o compromisso.",
     ),
+    "compromisso-conflito": (
+        "erro",
+        "Esse representante já possui um compromisso nessa hora. Escolha outro horário.",
+    ),
     "titular-alterado": ("ok", "Titular atualizado."),
     "titular-sem-mudanca": ("ok", "Esse já era o titular; nada mudou."),
     "contato-criado": ("ok", "Contato adicionado."),

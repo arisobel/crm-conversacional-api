@@ -112,6 +112,21 @@ async def test_reenvio_do_mesmo_wamid_nao_duplica(world):
 
 
 @pytest.mark.asyncio
+async def test_nao_cria_dois_compromissos_na_mesma_hora_do_representante(world):
+    due_at = (datetime.now(UTC) + timedelta(days=2)).replace(minute=10, second=0, microsecond=0)
+    first = await create(world, wamid="wamid.SLOT.1", due_at=due_at)
+    conflict = await create(
+        world,
+        wamid="wamid.SLOT.2",
+        due_at=due_at.replace(minute=50),
+    )
+
+    assert first.status_code == 200
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"] == "representative reminder slot conflict"
+
+
+@pytest.mark.asyncio
 async def test_linha_que_nao_pertence_ao_titular_e_negada(world):
     response = await create(world, line="wrong-line")
 

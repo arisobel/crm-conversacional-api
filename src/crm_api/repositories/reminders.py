@@ -24,6 +24,27 @@ class ReminderRepository:
     def add(self, reminder: RepresentativeReminder) -> None:
         self._session.add(reminder)
 
+    async def find_slot_conflict(
+        self,
+        tenant_id: uuid.UUID,
+        representative_user_id: uuid.UUID,
+        slot_start: datetime,
+        slot_end: datetime,
+    ) -> RepresentativeReminder | None:
+        """Encontra outro compromisso ativo dentro da mesma hora comercial."""
+        return await self._session.scalar(
+            select(RepresentativeReminder)
+            .where(
+                RepresentativeReminder.tenant_id == tenant_id,
+                RepresentativeReminder.representative_user_id == representative_user_id,
+                RepresentativeReminder.status.in_(("PENDING_CONFIRMATION", "CONFIRMED")),
+                RepresentativeReminder.due_at >= slot_start,
+                RepresentativeReminder.due_at < slot_end,
+            )
+            .order_by(RepresentativeReminder.due_at, RepresentativeReminder.id)
+            .limit(1)
+        )
+
     async def due(self, now: datetime, *, limit: int = 100) -> list[RepresentativeReminder]:
         rows = await self._session.scalars(
             select(RepresentativeReminder)

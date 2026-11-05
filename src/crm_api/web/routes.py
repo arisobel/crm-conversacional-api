@@ -61,6 +61,7 @@ from crm_api.repositories.portfolio import (
 )
 from crm_api.repositories.price_entries import PriceEntryRepository
 from crm_api.repositories.price_lists import PriceListRepository
+from crm_api.repositories.reminders import ReminderRepository
 from crm_api.repositories.users import SessionRepository, UserRepository
 from crm_api.repositories.whatsapp_campaigns import WhatsappCampaignRepository
 from crm_api.repositories.whatsapp_connections import WhatsappConnectionRepository
@@ -647,10 +648,21 @@ async def criar_compromisso_manual(
     except (ValueError, CustomerNotInScope):
         return _redirect("/portal/customers", "compromisso-invalido")
 
+    representative_user_id = customer.owner_user_id or current_user.user_id
+    due_local_value = due_at.astimezone(ZoneInfo("America/Sao_Paulo"))
+    slot_start = due_local_value.replace(minute=0, second=0, microsecond=0).astimezone(UTC)
+    if await ReminderRepository(session).find_slot_conflict(
+        current_user.tenant_id,
+        representative_user_id,
+        slot_start,
+        slot_start + timedelta(hours=1),
+    ):
+        return _redirect("/portal/customers", "compromisso-conflito")
+
     reminder = RepresentativeReminder(
         id=uuid.uuid4(),
         tenant_id=current_user.tenant_id,
-        representative_user_id=customer.owner_user_id or current_user.user_id,
+        representative_user_id=representative_user_id,
         customer_id=customer.id,
         customer_contact_id=None,
         origin=ReminderOrigin.REPRESENTATIVE.value,
