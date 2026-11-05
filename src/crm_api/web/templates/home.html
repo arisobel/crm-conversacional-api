@@ -1,23 +1,62 @@
 {% extends "base.html" %}
 {% block title %}Início{% endblock %}
+{% block body_class %}pagina-inicio{% endblock %}
 {% block conteudo %}
-<div class="inicio-cabecalho">
-  <p class="inicio-etiqueta">VISÃO GERAL</p>
-  <h1>Olá, {{ current_user.full_name }}</h1>
-  <p>Seu espaço para acompanhar clientes e organizar o trabalho comercial.</p>
-</div>
-<section class="resumo-grade" aria-label="Resumo de clientes">
-  <a class="resumo-cartao" href="/portal/customers"><span>Clientes na carteira</span><strong>{{ total_clientes }}</strong><small>Ver clientes →</small></a>
-  <a class="resumo-cartao" href="/portal/customers?situacao=ativos"><span>Clientes ativos</span><strong>{{ clientes_ativos }}</strong><small>Ver clientes ativos →</small></a>
-  <a class="resumo-cartao" href="/portal/customers?contato=sem"><span>Sem interação registrada</span><strong>{{ clientes_sem_interacao }}</strong><small>Ver clientes →</small></a>
+<section class="inicio-hero">
+  <div class="inicio-cabecalho">
+    <p class="inicio-etiqueta">VISÃO GERAL</p>
+    <h1>Olá, {{ current_user.full_name }}</h1>
+    <p>Seu espaço para acompanhar clientes e organizar o trabalho comercial.</p>
+  </div>
+
+  <div class="resumo-grade" aria-label="Resumo de clientes">
+    <a class="resumo-cartao" href="/portal/customers">
+      <span class="resumo-icone" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="19" cy="15" r="7"/><circle cx="35" cy="18" r="5"/><path d="M5 40v-4c0-9 5-14 14-14s14 5 14 14v4M33 27c7-1 11 3 11 10v3"/></svg></span>
+      <span class="resumo-divisor" aria-hidden="true"></span>
+      <span class="resumo-conteudo"><span>Clientes na carteira</span><strong>{{ total_clientes }}</strong><small>Ver clientes <b aria-hidden="true">→</b></small></span>
+    </a>
+    <a class="resumo-cartao" href="/portal/customers?situacao=ativos">
+      <span class="resumo-icone" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="21" cy="15" r="8"/><path d="M7 39v-3c0-9 5-14 14-14 5 0 9 2 11 5"/><circle cx="36" cy="35" r="9"/><path d="m32 35 3 3 6-7"/></svg></span>
+      <span class="resumo-divisor" aria-hidden="true"></span>
+      <span class="resumo-conteudo"><span>Clientes ativos</span><strong>{{ clientes_ativos }}</strong><small>Ver clientes ativos <b aria-hidden="true">→</b></small></span>
+    </a>
+    <a class="resumo-cartao" href="/portal/customers?contato=sem">
+      <span class="resumo-icone" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M8 10h32v23H23l-9 7v-7H8Z"/><path d="m11 39 26-30"/></svg></span>
+      <span class="resumo-divisor" aria-hidden="true"></span>
+      <span class="resumo-conteudo"><span>Sem interação registrada</span><strong>{{ clientes_sem_interacao }}</strong><small>Ver clientes <b aria-hidden="true">→</b></small></span>
+    </a>
+  </div>
 </section>
-<section class="painel atalhos">
-  <p class="inicio-etiqueta">SEU TRABALHO</p><h2>Acesse rapidamente</h2><p class="dica">Continue de onde precisa.</p>
+
+<section class="painel atalhos inicio-trabalho">
+  <p class="inicio-etiqueta">SEU TRABALHO</p>
+  <h2>Acesse rapidamente</h2>
+  <p class="dica">Continue de onde precisa.</p>
   <div class="atalhos-grade">
-    <a href="/portal/customers">Carteira <span>Clientes e contatos →</span></a>
-    <a href="/portal/products">Produtos <span>Catálogo e artigos →</span></a>
-    <a href="/portal/customers?secao=pre-cadastros">Pré-cadastros <span>Solicitações de clientes →</span></a>
-    <a href="/portal/campaigns">Campanhas <span>Públicos e rascunhos →</span></a>
+    <a href="/portal/customers">
+      <span class="atalho-icone" aria-hidden="true"><svg viewBox="0 0 40 40"><rect x="7" y="5" width="25" height="30" rx="3"/><circle cx="19.5" cy="16" r="4"/><path d="M12 29c0-6 3-9 7.5-9s7.5 3 7.5 9M4 11h6M4 19h6M4 27h6"/></svg></span>
+      <span class="atalho-divisor" aria-hidden="true"></span>
+      <span class="atalho-conteudo"><strong>Carteira</strong><small>Clientes e contatos</small></span>
+      <span class="atalho-seta" aria-hidden="true">→</span>
+    </a>
+    <a href="/portal/products">
+      <span class="atalho-icone" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="m20 4 14 8-14 8-14-8Z"/><path d="m6 12 14 8 14-8v17l-14 7-14-7Z"/><path d="M20 20v16"/></svg></span>
+      <span class="atalho-divisor" aria-hidden="true"></span>
+      <span class="atalho-conteudo"><strong>Produtos</strong><small>Catálogo e artigos</small></span>
+      <span class="atalho-seta" aria-hidden="true">→</span>
+    </a>
+    <a href="/portal/customers?secao=pre-cadastros">
+      <span class="atalho-icone" aria-hidden="true"><svg viewBox="0 0 40 40"><rect x="8" y="7" width="24" height="29" rx="3"/><path d="M15 7V4h10v3M14 17h12M14 23h7M27 26v8M23 30h8"/><path d="m14 12 2 2 4-4"/></svg></span>
+      <span class="atalho-divisor" aria-hidden="true"></span>
+      <span class="atalho-conteudo"><strong>Pré-cadastros</strong><small>Solicitações de clientes</small></span>
+      <span class="atalho-seta" aria-hidden="true">→</span>
+    </a>
+    <a href="/portal/campaigns">
+      <span class="atalho-icone" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M6 17v8l18 6V11Z"/><path d="M24 15c5-1 8-4 11-7v26c-3-3-6-6-11-7M10 26l3 10h6l-3-8"/></svg></span>
+      <span class="atalho-divisor" aria-hidden="true"></span>
+      <span class="atalho-conteudo"><strong>Campanhas</strong><small>Públicos e rascunhos</small></span>
+      <span class="atalho-seta" aria-hidden="true">→</span>
+    </a>
   </div>
 </section>
 {% endblock %}

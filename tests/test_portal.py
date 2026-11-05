@@ -259,6 +259,9 @@ async def test_login_leva_para_inicio(world):
     assert "/portal/home" in str(resposta.url)
     assert "Gestora Exemplo" in resposta.text
     assert "Clientes na carteira" in resposta.text
+    assert 'id="tema-toggle"' in resposta.text
+    assert "Central dos robôs" in resposta.text
+    assert "resumo-icone" in resposta.text
 
 
 @pytest.mark.asyncio
