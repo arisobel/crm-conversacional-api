@@ -26,3 +26,28 @@ class CustomerReminderResponse(BaseModel):
     due_at: datetime
     kind: ReminderKindValue
 
+
+class ReminderNotificationClaimRequest(BaseModel):
+    limit: int = Field(default=25, ge=1, le=100)
+
+
+class ReminderNotificationItem(BaseModel):
+    reminder_id: UUID
+    claim_token: UUID
+    representative_phone_e164: str
+    representative_name: str
+    customer_name: str | None = None
+    due_at: datetime
+    kind: ReminderKindValue
+    note: str
+
+
+class ReminderNotificationClaimResponse(BaseModel):
+    reminders: list[ReminderNotificationItem]
+
+
+class ReminderNotificationAckRequest(BaseModel):
+    reminder_id: UUID
+    claim_token: UUID
+    delivered: bool
+

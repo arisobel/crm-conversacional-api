@@ -6,7 +6,7 @@ from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.api.security import verify_internal_request
@@ -21,7 +21,14 @@ from crm_api.models.whatsapp_connection import (
     WhatsappConnectionStatus,
 )
 from crm_api.repositories.reminders import ReminderRepository
-from crm_api.schemas.reminders import CustomerReminderRequest, CustomerReminderResponse
+from crm_api.schemas.reminders import (
+    CustomerReminderRequest,
+    CustomerReminderResponse,
+    ReminderNotificationAckRequest,
+    ReminderNotificationClaimRequest,
+    ReminderNotificationClaimResponse,
+    ReminderNotificationItem,
+)
 from crm_api.schemas.whatsapp_handoffs import HandoffReminderRequest, HandoffReminderResponse
 
 router = APIRouter(tags=["WhatsApp Handoffs"])
@@ -166,3 +173,89 @@ async def create_customer_reminder(
         due_at=reminder.due_at,
         kind=reminder.kind,
     )
+
+
+@router.post(
+    "/internal/whatsapp/reminder-notifications/claim",
+    response_model=ReminderNotificationClaimResponse,
+)
+async def claim_reminder_notifications(
+    payload: ReminderNotificationClaimRequest,
+    _: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ReminderNotificationClaimResponse:
+    """Reserva avisos da próxima hora; uma reserva abandonada expira em 5 minutos."""
+    now = datetime.now(UTC)
+    stale = now - timedelta(minutes=5)
+    rows = (
+        await session.execute(
+            select(RepresentativeReminder, User, Customer)
+            .join(User, User.id == RepresentativeReminder.representative_user_id)
+            .join(Tenant, Tenant.id == RepresentativeReminder.tenant_id)
+            .outerjoin(Customer, Customer.id == RepresentativeReminder.customer_id)
+            .where(
+                Tenant.slug == tenant_slug,
+                User.active.is_(True),
+                User.role == UserRole.REPRESENTATIVE,
+                User.whatsapp_e164.is_not(None),
+                RepresentativeReminder.status == ReminderStatus.CONFIRMED.value,
+                RepresentativeReminder.notified_at.is_(None),
+                RepresentativeReminder.due_at > now,
+                RepresentativeReminder.due_at <= now + timedelta(hours=1),
+                or_(
+                    RepresentativeReminder.notification_claimed_at.is_(None),
+                    RepresentativeReminder.notification_claimed_at < stale,
+                ),
+            )
+            .order_by(RepresentativeReminder.due_at, RepresentativeReminder.id)
+            .limit(payload.limit)
+            .with_for_update(skip_locked=True)
+        )
+    ).all()
+    claimed: list[ReminderNotificationItem] = []
+    for reminder, representative, customer in rows:
+        token = uuid.uuid4()
+        reminder.notification_claimed_at = now
+        reminder.notification_claim_token = token
+        claimed.append(
+            ReminderNotificationItem(
+                reminder_id=reminder.id,
+                claim_token=token,
+                representative_phone_e164=representative.whatsapp_e164,
+                representative_name=representative.full_name,
+                customer_name=customer.legal_name if customer is not None else None,
+                due_at=reminder.due_at,
+                kind=reminder.kind,
+                note=reminder.note,
+            )
+        )
+    await session.commit()
+    return ReminderNotificationClaimResponse(reminders=claimed)
+
+
+@router.post("/internal/whatsapp/reminder-notifications/ack")
+async def acknowledge_reminder_notification(
+    payload: ReminderNotificationAckRequest,
+    _: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, bool]:
+    reminder = await session.scalar(
+        select(RepresentativeReminder)
+        .join(Tenant, Tenant.id == RepresentativeReminder.tenant_id)
+        .where(
+            Tenant.slug == tenant_slug,
+            RepresentativeReminder.id == payload.reminder_id,
+            RepresentativeReminder.notification_claim_token == payload.claim_token,
+        )
+        .with_for_update()
+    )
+    if reminder is None:
+        raise HTTPException(status_code=409, detail="reminder notification claim not found")
+    if payload.delivered:
+        reminder.notified_at = datetime.now(UTC)
+    reminder.notification_claimed_at = None
+    reminder.notification_claim_token = None
+    await session.commit()
+    return {"acknowledged": True}

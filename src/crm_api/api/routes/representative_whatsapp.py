@@ -8,7 +8,9 @@ decidida aqui.
 """
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +19,8 @@ from crm_api.api.security import verify_internal_request
 from crm_api.core.database import get_session
 from crm_api.core.phone import InvalidWhatsappNumber, normalize_whatsapp_e164
 from crm_api.core.states import InvalidStateCode
+from crm_api.models.pricing import PriceListStatus
+from crm_api.models.reminder import ReminderOrigin, ReminderStatus, RepresentativeReminder
 from crm_api.repositories.assistant_settings import get_assistant_policy
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.campaign_audience import AudienceRepository
@@ -32,6 +36,7 @@ from crm_api.repositories.portfolio import (
     PortfolioScope,
 )
 from crm_api.repositories.price_entries import PriceEntryRepository
+from crm_api.repositories.reminders import ReminderRepository
 from crm_api.repositories.users import UserRepository
 from crm_api.repositories.whatsapp_connections import WhatsappConnectionRepository
 from crm_api.schemas.customer_intake import (
@@ -40,12 +45,18 @@ from crm_api.schemas.customer_intake import (
 )
 from crm_api.schemas.price_lists import CurrentPriceListItemResponse
 from crm_api.schemas.representative_whatsapp import (
+    AssistantConfirmPriceUpdateRequest,
+    AssistantCreateReminderRequest,
     AssistantCustomerConversationSummaryRequest,
     AssistantCustomerIntakeRequest,
     AssistantCustomerPriceListRequest,
     AssistantExecutionContext,
     AssistantListPortfolioCustomersRequest,
     AssistantLookupCustomersRequest,
+    AssistantPriceUpdateConfirmationResponse,
+    AssistantPriceUpdateProposalResponse,
+    AssistantProposePriceUpdateRequest,
+    AssistantReminderResponse,
     AssistantSearchPriceItemsRequest,
     CustomerConversationEntryResponse,
     CustomerConversationSummaryResponse,
@@ -53,6 +64,7 @@ from crm_api.schemas.representative_whatsapp import (
     CustomerMatchResponse,
     PortfolioCustomersResponse,
     PriceItemsResponse,
+    PriceUpdateChangeResponse,
     ResolvedCustomerPriceListResponse,
 )
 from crm_api.services.customer_admin import CustomerAdminService
@@ -77,6 +89,13 @@ from crm_api.services.icms import (
     OriginNotConfigured,
 )
 from crm_api.services.portfolio import CustomerNotInScope
+from crm_api.services.price_publication import PricePublicationService
+from crm_api.services.price_update import (
+    PriceUpdateProposalForbidden,
+    PriceUpdateProposalNotFound,
+    ProposedPriceRow,
+    RepresentativePriceUpdateService,
+)
 from crm_api.services.representative_whatsapp import (
     MAX_CANDIDATOS,
     NoPublishedCompetence,
@@ -651,6 +670,153 @@ async def assistant_open_customer_intake(
         preferred_products_text=result.preferred_products_text,
         created_at=result.created_at,
         created=opened.created,
+    )
+
+
+@router.post(
+    "/{phone}/assistant-v2/reminders",
+    response_model=AssistantReminderResponse,
+    responses=_RESPONSES,
+)
+async def assistant_create_reminder(
+    phone: str,
+    payload: AssistantCreateReminderRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> AssistantReminderResponse:
+    """Cria compromisso pessoal do representante, idempotente pelo wamid."""
+    tenant, actor = await _resolve_assistant_execution(
+        request, session, tenant_slug, phone, payload.context, "CRM_REP_CREATE_REMINDER"
+    )
+    if payload.due_at.tzinfo is None or payload.due_at.utcoffset() is None:
+        raise HTTPException(status_code=422, detail="due_at requires timezone")
+    due_at = payload.due_at.astimezone(UTC)
+    now = datetime.now(UTC)
+    if due_at <= now or due_at > now + timedelta(days=366):
+        raise HTTPException(status_code=422, detail="reminder due_at outside supported range")
+
+    repository = ReminderRepository(session)
+    reminder = await repository.get_by_source(tenant.id, payload.source_wamid)
+    created = reminder is None
+    if reminder is None:
+        due_local = due_at.astimezone(ZoneInfo("America/Sao_Paulo"))
+        slot_start = due_local.replace(minute=0, second=0, microsecond=0).astimezone(UTC)
+        conflict = await repository.find_slot_conflict(
+            tenant.id, actor.user_id, slot_start, slot_start + timedelta(hours=1)
+        )
+        if conflict is not None:
+            raise HTTPException(status_code=409, detail="representative reminder slot conflict")
+        reminder = RepresentativeReminder(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            representative_user_id=actor.user_id,
+            customer_id=None,
+            customer_contact_id=None,
+            origin=ReminderOrigin.REPRESENTATIVE.value,
+            kind=payload.kind,
+            status=ReminderStatus.CONFIRMED.value,
+            note=payload.note.strip(),
+            due_at=due_at,
+            timezone="America/Sao_Paulo",
+            source_wamid=payload.source_wamid,
+            source_line_reference=payload.context.assistant_line_phone_number_id,
+        )
+        repository.add(reminder)
+        await session.commit()
+    return AssistantReminderResponse(
+        created=created,
+        reminder_id=reminder.id,
+        status=reminder.status,
+        due_at=reminder.due_at,
+        kind=reminder.kind,
+    )
+
+
+@router.post(
+    "/{phone}/assistant-v2/price-updates/propose",
+    response_model=AssistantPriceUpdateProposalResponse,
+    responses=_RESPONSES,
+)
+async def assistant_propose_price_update(
+    phone: str,
+    payload: AssistantProposePriceUpdateRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> AssistantPriceUpdateProposalResponse:
+    tenant, actor = await _resolve_assistant_execution(
+        request, session, tenant_slug, phone, payload.context, "CRM_REP_UPDATE_PRICES"
+    )
+    try:
+        proposal = await RepresentativePriceUpdateService(session).propose(
+            tenant_id=tenant.id,
+            representative_user_id=actor.user_id,
+            source_wamid=payload.source_wamid,
+            reference_month=payload.reference_month,
+            rows=[ProposedPriceRow(row.sku, row.base_price) for row in payload.rows],
+        )
+    except PriceUpdateProposalForbidden as error:
+        raise HTTPException(status_code=403, detail="price update proposal denied") from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    await session.commit()
+    return AssistantPriceUpdateProposalResponse(
+        proposal_id=proposal.proposal_id,
+        reference_month=proposal.reference_month,
+        ready_for_confirmation=proposal.ready_for_confirmation,
+        duplicate_skus=proposal.duplicate_skus,
+        unknown_skus=proposal.unknown_skus,
+        changes=[PriceUpdateChangeResponse(**change.__dict__) for change in proposal.changes],
+    )
+
+
+@router.post(
+    "/{phone}/assistant-v2/price-updates/{proposal_id}/confirm",
+    response_model=AssistantPriceUpdateConfirmationResponse,
+    responses=_RESPONSES,
+)
+async def assistant_confirm_price_update(
+    phone: str,
+    proposal_id: uuid.UUID,
+    payload: AssistantConfirmPriceUpdateRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> AssistantPriceUpdateConfirmationResponse:
+    tenant, actor = await _resolve_assistant_execution(
+        request, session, tenant_slug, phone, payload.context, "CRM_REP_UPDATE_PRICES"
+    )
+    updates = RepresentativePriceUpdateService(session)
+    try:
+        batch = await updates.get_owned(tenant.id, actor.user_id, proposal_id)
+    except PriceUpdateProposalNotFound as error:
+        raise HTTPException(status_code=404, detail="price update proposal not found") from error
+    except PriceUpdateProposalForbidden as error:
+        raise HTTPException(status_code=403, detail="price update proposal denied") from error
+    if batch.status == PriceListStatus.PUBLISHED:
+        return AssistantPriceUpdateConfirmationResponse(
+            proposal_id=batch.id, published=True, already_published=True
+        )
+    if batch.status != PriceListStatus.DRAFT:
+        raise HTTPException(status_code=409, detail="price update proposal is not publishable")
+    result = await PricePublicationService(
+        session=session,
+        entries=PriceEntryRepository(session),
+        audit=AuditRepository(session),
+    ).publish_batch(
+        tenant_id=tenant.id,
+        batch_id=batch.id,
+        actor_user_id=actor.user_id,
+        request_id=payload.context.request_id,
+    )
+    await session.commit()
+    return AssistantPriceUpdateConfirmationResponse(
+        proposal_id=batch.id,
+        published=True,
+        created=result.criados,
+        updated=result.atualizados,
+        unchanged=result.inalterados,
     )
 
 

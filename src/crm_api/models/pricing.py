@@ -72,6 +72,10 @@ class PriceList(Base):
         SqlEnum(PriceListStatus, name="price_list_status"), default=PriceListStatus.DRAFT
     )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    source_wamid: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class PriceListItem(Base):

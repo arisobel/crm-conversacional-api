@@ -58,8 +58,12 @@ async def world():
 
 
 def signed(body: bytes) -> dict[str, str]:
+    return signed_for(PATH, body)
+
+
+def signed_for(path: str, body: bytes) -> dict[str, str]:
     timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    canonical = b".".join([timestamp.encode(), b"POST", PATH.encode(), body])
+    canonical = b".".join([timestamp.encode(), b"POST", path.encode(), body])
     return {
         "X-Tenant-Slug": "test-tenant",
         "X-Timestamp": timestamp,
@@ -138,3 +142,38 @@ async def test_horario_passado_e_rejeitado(world):
     response = await create(world, due_at=datetime.now(UTC) - timedelta(minutes=1))
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_aviso_e_reservado_uma_hora_antes_e_confirmado_sem_duplicar(world):
+    due_at = datetime.now(UTC) + timedelta(minutes=50)
+    created = await create(world, wamid="wamid.NOTIFY.1", due_at=due_at)
+    assert created.status_code == 200
+
+    claim_path = "/internal/whatsapp/reminder-notifications/claim"
+    body = json.dumps({"limit": 10}).encode()
+    async with AsyncClient(
+        transport=ASGITransport(app=world.app), base_url="http://test"
+    ) as client:
+        claim = await client.post(claim_path, content=body, headers=signed_for(claim_path, body))
+        assert claim.status_code == 200
+        [notification] = claim.json()["reminders"]
+        assert notification["representative_phone_e164"] == REP_PHONE
+        assert notification["customer_name"] == "Alfa Tecelagem Ltda."
+
+        ack_path = "/internal/whatsapp/reminder-notifications/ack"
+        ack_body = json.dumps({
+            "reminder_id": notification["reminder_id"],
+            "claim_token": notification["claim_token"],
+            "delivered": True,
+        }).encode()
+        ack = await client.post(
+            ack_path, content=ack_body, headers=signed_for(ack_path, ack_body)
+        )
+        assert ack.status_code == 200
+
+        again = await client.post(
+            claim_path, content=body, headers=signed_for(claim_path, body)
+        )
+        assert again.status_code == 200
+        assert again.json()["reminders"] == []

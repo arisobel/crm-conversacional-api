@@ -6,6 +6,7 @@ precisar de um formatador novo sem nenhuma razão de domínio.
 """
 
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -54,6 +55,64 @@ class AssistantCustomerConversationSummaryRequest(BaseModel):
 class AssistantCustomerIntakeRequest(BaseModel):
     context: AssistantExecutionContext
     intake: OpenCustomerIntakeRequest
+
+
+class AssistantCreateReminderRequest(BaseModel):
+    context: AssistantExecutionContext
+    source_wamid: str = Field(min_length=1, max_length=255)
+    kind: str = Field(pattern=r"^(CALL|MEETING|FOLLOW_UP)$")
+    due_at: datetime
+    note: str = Field(min_length=2, max_length=500)
+
+
+class AssistantReminderResponse(BaseModel):
+    created: bool
+    reminder_id: UUID
+    status: str
+    due_at: datetime
+    kind: str
+
+
+class PriceUpdateRow(BaseModel):
+    sku: str = Field(min_length=1, max_length=120)
+    base_price: Decimal = Field(ge=0, max_digits=14, decimal_places=4)
+
+
+class AssistantProposePriceUpdateRequest(BaseModel):
+    context: AssistantExecutionContext
+    source_wamid: str = Field(min_length=1, max_length=255)
+    reference_month: date
+    rows: list[PriceUpdateRow] = Field(min_length=1, max_length=500)
+
+
+class PriceUpdateChangeResponse(BaseModel):
+    sku: str
+    product_name: str
+    previous_price: Decimal | None = None
+    new_price: Decimal
+    change: str
+
+
+class AssistantPriceUpdateProposalResponse(BaseModel):
+    proposal_id: UUID | None = None
+    reference_month: date
+    ready_for_confirmation: bool
+    duplicate_skus: list[str] = Field(default_factory=list)
+    unknown_skus: list[str] = Field(default_factory=list)
+    changes: list[PriceUpdateChangeResponse] = Field(default_factory=list)
+
+
+class AssistantConfirmPriceUpdateRequest(BaseModel):
+    context: AssistantExecutionContext
+
+
+class AssistantPriceUpdateConfirmationResponse(BaseModel):
+    proposal_id: UUID
+    published: bool
+    already_published: bool = False
+    created: int = 0
+    updated: int = 0
+    unchanged: int = 0
 
 
 class PriceItemsResponse(BaseModel):
