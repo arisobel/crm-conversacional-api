@@ -15,14 +15,14 @@ depends_on = None
 def upgrade() -> None:
     op.execute(
         "ALTER TABLE representative_reminders "
-        "ADD COLUMN notification_claimed_at timestamptz"
+        "ADD COLUMN IF NOT EXISTS notification_claimed_at timestamptz"
     )
     op.execute(
         "ALTER TABLE representative_reminders "
-        "ADD COLUMN notification_claim_token uuid"
+        "ADD COLUMN IF NOT EXISTS notification_claim_token uuid"
     )
     op.execute(
-        "CREATE INDEX ix_reminders_notification_claim "
+        "CREATE INDEX IF NOT EXISTS ix_reminders_notification_claim "
         "ON representative_reminders(notified_at, notification_claimed_at, due_at)"
     )
 

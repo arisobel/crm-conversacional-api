@@ -13,10 +13,12 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TABLE price_lists ADD COLUMN created_by uuid REFERENCES users(id)")
-    op.execute("ALTER TABLE price_lists ADD COLUMN source_wamid varchar(255)")
     op.execute(
-        "CREATE UNIQUE INDEX ux_price_lists_whatsapp_source "
+        "ALTER TABLE price_lists ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES users(id)"
+    )
+    op.execute("ALTER TABLE price_lists ADD COLUMN IF NOT EXISTS source_wamid varchar(255)")
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_price_lists_whatsapp_source "
         "ON price_lists(tenant_id, source_wamid) WHERE source_wamid IS NOT NULL"
     )
     # O representante jÃ¡ habilitado no assistente recebe as duas capacidades
@@ -24,11 +26,16 @@ def upgrade() -> None:
     op.execute("""
         INSERT INTO assistant_representative_capabilities
             (tenant_id, user_id, capability_id)
-        SELECT settings.tenant_id, settings.user_id, capability.capability_id
+        SELECT settings.tenant_id, settings.user_id, 'CRM_REP_CREATE_REMINDER'
         FROM assistant_representative_settings AS settings
-        CROSS JOIN (
-            VALUES ('CRM_REP_CREATE_REMINDER'), ('CRM_REP_UPDATE_PRICES')
-        ) AS capability(capability_id)
+        WHERE settings.enabled = true
+        ON CONFLICT DO NOTHING
+    """)
+    op.execute("""
+        INSERT INTO assistant_representative_capabilities
+            (tenant_id, user_id, capability_id)
+        SELECT settings.tenant_id, settings.user_id, 'CRM_REP_UPDATE_PRICES'
+        FROM assistant_representative_settings AS settings
         WHERE settings.enabled = true
         ON CONFLICT DO NOTHING
     """)
