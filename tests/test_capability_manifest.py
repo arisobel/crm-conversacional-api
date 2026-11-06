@@ -62,6 +62,7 @@ _ACOES_CLIENTE = {"GET_CURRENT_PRICE_LIST", "SEARCH_CURRENT_PRICE_LIST_ITEMS"}
 _ACOES_REPRESENTANTE = {
     "CRM_REP_SEARCH_PRICE_ITEMS",
     "CRM_REP_LOOKUP_CUSTOMER",
+    "CRM_REP_LIST_PORTFOLIO_CUSTOMERS",
     "CRM_REP_GET_CUSTOMER_PRICE_LIST",
     "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
 }
@@ -72,6 +73,7 @@ _SLOTS_ESPERADOS = {
     "SEARCH_CURRENT_PRICE_LIST_ITEMS": {"product_query"},
     "CRM_REP_SEARCH_PRICE_ITEMS": {"product_query"},
     "CRM_REP_LOOKUP_CUSTOMER": {"customer_query"},
+    "CRM_REP_LIST_PORTFOLIO_CUSTOMERS": set(),
     "CRM_REP_GET_CUSTOMER_PRICE_LIST": {"customer_query"},
     "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY": {"customer_query"},
 }
@@ -238,17 +240,18 @@ async def test_cliente_recebe_as_duas_capacidades_de_hoje(world):
 
 
 @pytest.mark.asyncio
-async def test_representante_recebe_as_quatro_leituras_disponiveis(world):
+async def test_representante_recebe_as_cinco_leituras_disponiveis(world):
     corpo = (await _pedir(world, TELEFONE_REPRESENTANTE)).json()
 
     assert corpo["actor"]["role"] == "representante"
     assert [c["action"] for c in corpo["capabilities"]] == [
         "CRM_REP_SEARCH_PRICE_ITEMS",
         "CRM_REP_LOOKUP_CUSTOMER",
+        "CRM_REP_LIST_PORTFOLIO_CUSTOMERS",
         "CRM_REP_GET_CUSTOMER_PRICE_LIST",
         "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
     ]
-    assert len(corpo["capabilities"]) == 4
+    assert len(corpo["capabilities"]) == 5
 
 
 @pytest.mark.asyncio
@@ -280,6 +283,7 @@ async def test_cliente_nao_recebe_escrita_nem_capacidade_de_representante(world)
     assert not {
         "CRM_REP_SEARCH_PRICE_ITEMS",
         "CRM_REP_LOOKUP_CUSTOMER",
+        "CRM_REP_LIST_PORTFOLIO_CUSTOMERS",
         "CRM_REP_GET_CUSTOMER_PRICE_LIST",
         "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
     } & {capacidade["action"] for capacidade in corpo["capabilities"]}
@@ -313,6 +317,9 @@ async def test_apenas_o_slot_de_produto_declara_tipo(world):
 
     produto = por_acao["CRM_REP_SEARCH_PRICE_ITEMS"]["slots"][0]
     assert produto == {"id": "product_query", "required": True, "kind": "product_code"}
+
+    filtro_carteira = por_acao["CRM_REP_LIST_PORTFOLIO_CUSTOMERS"]["slots"][0]
+    assert filtro_carteira == {"id": "product_query", "required": False}
 
     for acao in (
         "CRM_REP_LOOKUP_CUSTOMER",

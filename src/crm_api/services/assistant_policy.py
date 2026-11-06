@@ -6,10 +6,10 @@ o manifesto e os executores ainda não consomem esta política.
 
 from dataclasses import dataclass
 
-
 REPRESENTATIVE_CAPABILITIES = frozenset({
     "CRM_REP_SEARCH_PRICE_ITEMS",
     "CRM_REP_LOOKUP_CUSTOMER",
+    "CRM_REP_LIST_PORTFOLIO_CUSTOMERS",
     "CRM_REP_GET_CUSTOMER_PRICE_LIST",
     "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
     "CRM_REP_CREATE_CUSTOMER_INTAKE",

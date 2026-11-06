@@ -11,7 +11,11 @@ from uuid import uuid4
 import pytest
 
 from crm_api.schemas.price_lists import CurrentPriceListItemResponse
-from crm_api.services.product_search import matches_search_terms, search_tokens
+from crm_api.services.product_search import (
+    matches_search_terms,
+    search_tokens,
+    suggest_search_items,
+)
 
 
 def _item(**overrides) -> CurrentPriceListItemResponse:
@@ -75,3 +79,11 @@ def test_acento_nao_impede_o_casamento():
     item = _item(display_name="Fio poliéster texturizado")
     assert matches_search_terms(item, search_tokens("poliester")) is True
     assert matches_search_terms(item, search_tokens("poliéster")) is True
+
+
+def test_erro_de_digitacao_sugere_o_artigo_sem_trata_lo_como_confirmado():
+    correto = _item(sku="PEU-20", display_name="PEU 20 texturizado")
+    distante = _item(sku="PA-66", display_name="Poliamida 66")
+
+    assert matches_search_terms(correto, search_tokens("PUE 10")) is False
+    assert suggest_search_items([distante, correto], "preço do PUE 10") == [correto]

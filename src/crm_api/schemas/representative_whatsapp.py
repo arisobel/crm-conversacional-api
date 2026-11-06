@@ -11,7 +11,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from crm_api.schemas.customer_intake import OpenCustomerIntakeRequest
-from crm_api.schemas.price_lists import CurrentPriceListItemResponse
+from crm_api.schemas.price_lists import CurrentPriceListItemResponse, ProductSuggestionResponse
 
 
 class AssistantExecutionContext(BaseModel):
@@ -38,6 +38,11 @@ class AssistantLookupCustomersRequest(BaseModel):
     query: str = Field(min_length=2, max_length=120)
 
 
+class AssistantListPortfolioCustomersRequest(BaseModel):
+    context: AssistantExecutionContext
+    query: str | None = Field(default=None, min_length=2, max_length=120)
+
+
 class AssistantCustomerPriceListRequest(BaseModel):
     context: AssistantExecutionContext
 
@@ -54,6 +59,7 @@ class AssistantCustomerIntakeRequest(BaseModel):
 class PriceItemsResponse(BaseModel):
     reference_month: date
     items: list[CurrentPriceListItemResponse]
+    suggestions: list[ProductSuggestionResponse] = Field(default_factory=list)
 
 
 class CustomerMatchResponse(BaseModel):
@@ -71,6 +77,11 @@ class CustomerMatchesResponse(BaseModel):
     truncated: bool = Field(
         description="Há mais candidatos do que os devolvidos; peça um termo mais específico."
     )
+
+
+class PortfolioCustomersResponse(CustomerMatchesResponse):
+    filter_label: str | None = None
+    filter_suggestions: list[str] = Field(default_factory=list)
 
 
 class ResolvedCustomerPriceListResponse(BaseModel):

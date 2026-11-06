@@ -19,6 +19,8 @@ from crm_api.core.phone import InvalidWhatsappNumber, normalize_whatsapp_e164
 from crm_api.core.states import InvalidStateCode
 from crm_api.repositories.assistant_settings import get_assistant_policy
 from crm_api.repositories.audit import AuditRepository
+from crm_api.repositories.campaign_audience import AudienceRepository
+from crm_api.repositories.catalog import CatalogRepository
 from crm_api.repositories.customer_admin import CustomerAdminRepository
 from crm_api.repositories.customer_intakes import CustomerIntakeRepository
 from crm_api.repositories.customers import CustomerRepository
@@ -38,16 +40,18 @@ from crm_api.schemas.customer_intake import (
 )
 from crm_api.schemas.price_lists import CurrentPriceListItemResponse
 from crm_api.schemas.representative_whatsapp import (
-    AssistantCustomerIntakeRequest,
     AssistantCustomerConversationSummaryRequest,
+    AssistantCustomerIntakeRequest,
     AssistantCustomerPriceListRequest,
     AssistantExecutionContext,
+    AssistantListPortfolioCustomersRequest,
     AssistantLookupCustomersRequest,
     AssistantSearchPriceItemsRequest,
-    CustomerMatchesResponse,
     CustomerConversationEntryResponse,
     CustomerConversationSummaryResponse,
+    CustomerMatchesResponse,
     CustomerMatchResponse,
+    PortfolioCustomersResponse,
     PriceItemsResponse,
     ResolvedCustomerPriceListResponse,
 )
@@ -114,6 +118,8 @@ def _service(request: Request, session: AsyncSession) -> RepresentativeWhatsappS
             resolver=IcmsResolver(IcmsRuleRepository(session)),
             settings=settings,
         ),
+        audience=AudienceRepository(session),
+        catalog=CatalogRepository(session),
         settings=settings,
     )
 
@@ -239,7 +245,11 @@ async def search_price_items(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
         ) from error
-    return PriceItemsResponse(reference_month=encontrados.reference_month, items=encontrados.items)
+    return PriceItemsResponse(
+        reference_month=encontrados.reference_month,
+        items=encontrados.items,
+        suggestions=encontrados.suggestions,
+    )
 
 
 @router.get("/{phone}/customers", response_model=CustomerMatchesResponse, responses=_RESPONSES)
@@ -269,6 +279,33 @@ async def lookup_customers(
             for match in encontrados[:MAX_CANDIDATOS]
         ],
         truncated=len(encontrados) > MAX_CANDIDATOS,
+    )
+
+
+@router.get(
+    "/{phone}/portfolio-customers",
+    response_model=PortfolioCustomersResponse,
+    responses=_RESPONSES,
+)
+async def list_portfolio_customers(
+    phone: str,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    query: Annotated[str | None, Query(min_length=2, max_length=120)] = None,
+) -> PortfolioCustomersResponse:
+    tenant, actor = await _resolve(session, tenant_slug, phone)
+    try:
+        result = await _service(request, session).list_portfolio_customers(
+            actor, tenant.id, query
+        )
+    except NotARepresentative as error:
+        raise _forbidden(error) from error
+    return PortfolioCustomersResponse(
+        matches=[CustomerMatchResponse(**match.__dict__) for match in result.matches],
+        truncated=result.truncated,
+        filter_label=result.filter_label,
+        filter_suggestions=list(result.filter_suggestions),
     )
 
 
@@ -411,7 +448,11 @@ async def assistant_search_price_items(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
         ) from error
-    return PriceItemsResponse(reference_month=result.reference_month, items=result.items)
+    return PriceItemsResponse(
+        reference_month=result.reference_month,
+        items=result.items,
+        suggestions=result.suggestions,
+    )
 
 
 @router.post(
@@ -429,7 +470,9 @@ async def assistant_lookup_customers(
     tenant, actor = await _resolve_assistant_execution(
         request, session, tenant_slug, phone, payload.context, "CRM_REP_LOOKUP_CUSTOMER"
     )
-    matches = await _service(request, session).lookup_customers(actor, tenant.id, payload.query)
+    matches = await _service(request, session).lookup_customers(
+        actor, tenant.id, payload.query
+    )
     if not matches:
         # Diagnóstico temporário, sem registrar o termo, telefone ou nome de
         # cliente: permite diferenciar falha de filtro da carteira de ausência
@@ -457,6 +500,37 @@ async def assistant_lookup_customers(
             for match in matches[:MAX_CANDIDATOS]
         ],
         truncated=len(matches) > MAX_CANDIDATOS,
+    )
+
+
+@router.post(
+    "/{phone}/assistant-v2/portfolio-customers",
+    response_model=PortfolioCustomersResponse,
+    responses=_RESPONSES,
+)
+async def assistant_list_portfolio_customers(
+    phone: str,
+    payload: AssistantListPortfolioCustomersRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> PortfolioCustomersResponse:
+    tenant, actor = await _resolve_assistant_execution(
+        request,
+        session,
+        tenant_slug,
+        phone,
+        payload.context,
+        "CRM_REP_LIST_PORTFOLIO_CUSTOMERS",
+    )
+    result = await _service(request, session).list_portfolio_customers(
+        actor, tenant.id, payload.query
+    )
+    return PortfolioCustomersResponse(
+        matches=[CustomerMatchResponse(**match.__dict__) for match in result.matches],
+        truncated=result.truncated,
+        filter_label=result.filter_label,
+        filter_suggestions=list(result.filter_suggestions),
     )
 
 
@@ -515,7 +589,9 @@ async def assistant_customer_conversation_summary(
             actor, tenant.id, customer_id
         )
     except CustomerNotInScope as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="customer not found") from error
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="customer not found"
+        ) from error
     return CustomerConversationSummaryResponse(
         customer_id=result.customer.id,
         customer_name=result.customer.trade_name or result.customer.legal_name,

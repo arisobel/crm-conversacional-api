@@ -76,7 +76,7 @@ async def admin(world):
 @pytest.mark.asyncio
 async def test_assistente_salva_configuracao_e_auditoria(world, admin):
     page = await admin.get("/portal/assistant")
-    assert "ainda não alteram as respostas" in page.text
+    assert "As escolhas salvas aqui controlam as permissões" in page.text
     token = _token(page.text)
     await admin.post("/portal/assistant/organization", data={
         "csrf_token": token, "enabled": "true",

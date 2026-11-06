@@ -18,10 +18,14 @@ cliente é explícito.
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from difflib import SequenceMatcher
 
 from crm_api.core.config import Settings
+from crm_api.core.text import normalize_group_name
 from crm_api.models.customer import Customer
 from crm_api.models.pricing import AvailabilityStatus
+from crm_api.repositories.campaign_audience import AudienceRepository
+from crm_api.repositories.catalog import CatalogRepository
 from crm_api.repositories.customer_admin import CustomerAdminRepository
 from crm_api.repositories.interactions import InteractionRepository
 from crm_api.repositories.portfolio import (
@@ -30,10 +34,14 @@ from crm_api.repositories.portfolio import (
     PortfolioScope,
 )
 from crm_api.repositories.price_entries import PriceEntryRepository
-from crm_api.schemas.price_lists import CurrentPriceListItemResponse
+from crm_api.schemas.price_lists import CurrentPriceListItemResponse, ProductSuggestionResponse
 from crm_api.services.customer_price_list import CustomerPriceListService
 from crm_api.services.portfolio import CustomerNotInScope
-from crm_api.services.product_search import matches_search_terms, search_tokens
+from crm_api.services.product_search import (
+    matches_search_terms,
+    search_tokens,
+    suggest_search_items,
+)
 from crm_api.services.whatsapp_actor import ActorRole, WhatsappActor
 
 # Mesma regra da tabela do cliente: indisponível não exibe preço, porque não
@@ -48,6 +56,7 @@ _SEM_PRECO = {
 # consegue apresentar numa mensagem sem virar parede de texto, e é o mesmo
 # número que o `GW-023` prevê para recuperação de ambiguidade.
 MAX_CANDIDATOS = 3
+MAX_CLIENTES_CARTEIRA = 10
 
 
 class NotARepresentative(Exception):
@@ -75,12 +84,21 @@ class CustomerMatch:
 class PriceItems:
     reference_month: date
     items: list[CurrentPriceListItemResponse]
+    suggestions: list[ProductSuggestionResponse]
 
 
 @dataclass(frozen=True)
 class CustomerConversationSummary:
     customer: Customer
     interactions: list
+
+
+@dataclass(frozen=True)
+class PortfolioCustomerList:
+    matches: list[CustomerMatch]
+    truncated: bool
+    filter_label: str | None = None
+    filter_suggestions: tuple[str, ...] = ()
 
 
 class RepresentativeWhatsappService:
@@ -92,6 +110,8 @@ class RepresentativeWhatsappService:
         entries: PriceEntryRepository,
         interactions: InteractionRepository,
         resolved: CustomerPriceListService,
+        audience: AudienceRepository,
+        catalog: CatalogRepository,
         settings: Settings,
     ) -> None:
         self._portfolio = portfolio
@@ -99,6 +119,8 @@ class RepresentativeWhatsappService:
         self._entries = entries
         self._interactions = interactions
         self._resolved = resolved
+        self._audience = audience
+        self._catalog = catalog
         self._settings = settings
 
     @staticmethod
@@ -145,9 +167,21 @@ class RepresentativeWhatsappService:
             )
             for entrada, produto, familia in linhas
         ]
+        encontrados = [item for item in itens if termos and matches_search_terms(item, termos)]
+        sugestoes = [] if encontrados else [
+            ProductSuggestionResponse(
+                product_id=item.product_id,
+                family_name=item.family_name,
+                sku=item.sku,
+                display_name=item.display_name,
+                specification=item.specification,
+            )
+            for item in suggest_search_items(itens, query)
+        ]
         return PriceItems(
             reference_month=competencia,
-            items=[item for item in itens if termos and matches_search_terms(item, termos)],
+            items=encontrados,
+            suggestions=sugestoes,
         )
 
     async def lookup_customers(
@@ -168,6 +202,112 @@ class RepresentativeWhatsappService:
             offset=0,
         )
         return [self._match(cliente) for cliente, _ in encontrados]
+
+    async def list_portfolio_customers(
+        self, actor: WhatsappActor, tenant_id: uuid.UUID, query: str | None = None
+    ) -> PortfolioCustomerList:
+        """Lista a própria carteira, opcionalmente por interesse cadastrado.
+
+        O filtro cruza grupos, fibras/composição e artigos preferidos. Ele não
+        infere compra nem potencial a partir de conversa livre: quando o CRM não
+        tem o vínculo, diz que não há interesse cadastrado em vez de inventar.
+        """
+        scope = self._escopo(actor, tenant_id)
+        assert scope.owner_user_id is not None
+
+        target_products: set[uuid.UUID] | None = None
+        filter_label = None
+        suggestions: tuple[str, ...] = ()
+        if query and query.strip():
+            normalized = normalize_group_name(query)
+            groups = await self._catalog.list_groups(tenant_id)
+            fibers = await self._audience.list_fibers(tenant_id)
+            matched_groups = [
+                group for group in groups
+                if group.normalized_name in normalized or normalized in group.normalized_name
+            ]
+            matched_fibers = [
+                fiber for fiber in fibers
+                if normalize_group_name(fiber.name) in normalized
+                or normalize_group_name(fiber.code) == normalized
+            ]
+
+            product_sets: list[set[uuid.UUID]] = []
+            labels: list[str] = []
+            if matched_groups:
+                product_sets.append(
+                    await self._audience.products_in_groups(
+                        tenant_id, [group.id for group in matched_groups]
+                    )
+                )
+                labels.extend(group.name for group in matched_groups)
+            if matched_fibers:
+                product_sets.append(
+                    await self._audience.products_with_fibers(
+                        tenant_id, [fiber.id for fiber in matched_fibers]
+                    )
+                )
+                labels.extend(fiber.name for fiber in matched_fibers)
+
+            products = await self._admin.list_products(tenant_id)
+            terms = search_tokens(query)
+            exact_products = {
+                product.id
+                for product, family in products
+                if terms and matches_search_terms(
+                    CurrentPriceListItemResponse(
+                        product_id=product.id,
+                        family_name=family.name,
+                        sku=product.sku,
+                        display_name=product.commercial_name,
+                        specification=product.specification,
+                        unit=product.unit,
+                        availability="AVAILABLE",
+                        base_price=None,
+                        expected_arrival_date=None,
+                        arrival_note=None,
+                        notes=None,
+                    ),
+                    terms,
+                )
+            }
+            if exact_products:
+                product_sets.append(exact_products)
+                labels.append(query.strip())
+
+            if product_sets:
+                target_products = set().union(*product_sets)
+                filter_label = ", ".join(dict.fromkeys(labels))
+            else:
+                candidates = [
+                    *(group.name for group in groups),
+                    *(fiber.name for fiber in fibers),
+                    *(product.commercial_name for product, _family in products),
+                ]
+                ranked = sorted(
+                    {
+                        candidate: SequenceMatcher(
+                            None, normalized, normalize_group_name(candidate)
+                        ).ratio()
+                        for candidate in candidates
+                    }.items(),
+                    key=lambda pair: (-pair[1], pair[0]),
+                )
+                suggestions = tuple(name for name, score in ranked[:3] if score >= 0.55)
+                target_products = set()
+
+        customers = await self._audience.customers_in_scope(
+            tenant_id,
+            owner_user_id=scope.owner_user_id,
+            preferring_any_of=target_products,
+        )
+        truncated = len(customers) > MAX_CLIENTES_CARTEIRA
+        return PortfolioCustomerList(
+            matches=[self._match(customer) for customer in customers[:MAX_CLIENTES_CARTEIRA]],
+            truncated=truncated,
+            filter_label=filter_label,
+            filter_suggestions=suggestions,
+        )
 
     @staticmethod
     def _match(cliente: Customer) -> CustomerMatch:

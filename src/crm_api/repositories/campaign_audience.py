@@ -85,6 +85,16 @@ class AudienceRepository:
         )
         return {fibra.code: fibra for fibra in encontradas}
 
+    async def list_fibers(self, tenant_id: uuid.UUID) -> list[Fiber]:
+        """Vocabulário ativo usado para resolver filtros naturais da carteira."""
+        return list(
+            await self._session.scalars(
+                select(Fiber)
+                .where(Fiber.tenant_id == tenant_id, Fiber.active.is_(True))
+                .order_by(Fiber.name, Fiber.code)
+            )
+        )
+
     # ------------------------------------------------------ eixos de produto
 
     async def products_in_groups(

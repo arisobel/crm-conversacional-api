@@ -204,6 +204,36 @@ _CAPACIDADES_REPRESENTANTE = [
         slots=[Slot(id="customer_query", required=True)],
     ),
     Capability(
+        id="CRM_REP_LIST_PORTFOLIO_CUSTOMERS",
+        action="CRM_REP_LIST_PORTFOLIO_CUSTOMERS",
+        mode=CapabilityMode.READ,
+        requires_confirmation=False,
+        idempotency=Idempotency.NONE,
+        title="Listar e filtrar minha carteira",
+        description=(
+            "Lista somente clientes da carteira do representante. Pode filtrar "
+            "pelos interesses cadastrados em produtos, grupos ou composição têxtil."
+        ),
+        vocabulary=Vocabulary(
+            aliases=[
+                "minha carteira",
+                "meus clientes",
+                "lista de clientes",
+                "clientes de poliéster",
+                "clientes por produto",
+                "quem devo contatar",
+            ],
+            examples=[
+                "me mande minha lista de clientes",
+                "quais são meus clientes de fio de poliéster?",
+                "liste meus clientes de PEU 20",
+                "mostre minha carteira para eu escolher quem contatar hoje",
+            ],
+        ),
+        # O filtro é opcional: sem ele, retorna a carteira ativa do representante.
+        slots=[Slot(id="product_query", required=False)],
+    ),
+    Capability(
         id="CRM_REP_GET_CUSTOMER_PRICE_LIST",
         action="CRM_REP_GET_CUSTOMER_PRICE_LIST",
         mode=CapabilityMode.READ,

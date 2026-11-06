@@ -202,6 +202,19 @@ async def test_termo_sem_correspondencia_devolve_lista_vazia(world):
 
 
 @pytest.mark.asyncio
+async def test_erro_curto_sugere_artigo_sem_revelar_preco(world):
+    resposta = await _get(
+        world, f"{BASE}/{TELEFONE_A}/price-items", params={"query": "75/63"}
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["items"] == []
+    assert [item["sku"] for item in corpo["suggestions"]] == ["TEX-75-36-CRU"]
+    assert "base_price" not in corpo["suggestions"][0]
+
+
+@pytest.mark.asyncio
 async def test_contato_de_cliente_nao_alcanca_a_busca_do_representante(world):
     """Segunda tranca: o manifesto de cliente não anuncia esta ação."""
     resposta = await _get(
@@ -283,6 +296,34 @@ async def test_linha_assistente_v2_isola_dois_representantes_por_conexao_politic
 
 
 # --------------------------------------------------------- busca de cliente
+
+
+@pytest.mark.asyncio
+async def test_representante_lista_somente_a_propria_carteira(world):
+    resposta = await _get(world, f"{BASE}/{TELEFONE_A}/portfolio-customers")
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert [item["customer_id"] for item in corpo["matches"]] == [
+        str(world.customer_a_id)
+    ]
+    assert corpo["truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_representante_filtra_carteira_por_artigo_preferido(world):
+    resposta = await _get(
+        world,
+        f"{BASE}/{TELEFONE_A}/portfolio-customers",
+        params={"query": "75/36"},
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert [item["customer_id"] for item in corpo["matches"]] == [
+        str(world.customer_a_id)
+    ]
+    assert corpo["filter_label"] == "75/36"
 
 
 @pytest.mark.asyncio

@@ -13,9 +13,14 @@ from crm_api.schemas.price_lists import (
     CurrentPriceListItemResponse,
     CurrentPriceListResponse,
     PriceListSummaryResponse,
+    ProductSuggestionResponse,
 )
 from crm_api.services.customer_price_list import CustomerPriceListService
-from crm_api.services.product_search import matches_search_terms, search_tokens
+from crm_api.services.product_search import (
+    matches_search_terms,
+    search_tokens,
+    suggest_search_items,
+)
 
 _NO_CURRENT_PRICE = {
     AvailabilityStatus.OUT_OF_STOCK,
@@ -226,4 +231,16 @@ class CurrentPriceListService:
         matching_items = [
             item for item in current_price_list.items if matches_search_terms(item, search_terms)
         ]
-        return current_price_list.model_copy(update={"items": matching_items})
+        suggestions = [] if matching_items else [
+            ProductSuggestionResponse(
+                product_id=item.product_id,
+                family_name=item.family_name,
+                sku=item.sku,
+                display_name=item.display_name,
+                specification=item.specification,
+            )
+            for item in suggest_search_items(current_price_list.items, query)
+        ]
+        return current_price_list.model_copy(
+            update={"items": matching_items, "suggestions": suggestions}
+        )

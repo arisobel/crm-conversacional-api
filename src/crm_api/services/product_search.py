@@ -9,6 +9,7 @@ divergiriam na primeira correção.
 
 import re
 import unicodedata
+from difflib import SequenceMatcher
 
 from crm_api.schemas.price_lists import CurrentPriceListItemResponse
 
@@ -26,6 +27,12 @@ _RUIDO = frozenset(
     }
 )
 
+_RUIDO_COMERCIAL = frozenset(
+    {
+        "preco", "precos", "valor", "valores", "produto", "produtos",
+        "artigo", "artigos", "consultar", "buscar", "procurar", "queria",
+    }
+)
 
 def search_tokens(value: str) -> list[str]:
     """Termos de busca, sem acento, em caixa baixa e sem ruído gramatical.
@@ -51,3 +58,56 @@ def matches_search_terms(item: CurrentPriceListItemResponse, terms: list[str]) -
     )
     searchable_tokens = set(search_tokens(searchable_value))
     return all(term in searchable_tokens for term in terms)
+
+
+def _similarity(left: str, right: str) -> float:
+    if left == right:
+        return 1.0
+    if left in right or right in left:
+        return 0.86
+    return SequenceMatcher(None, left, right).ratio()
+
+
+def fuzzy_search_score(item: CurrentPriceListItemResponse, query: str) -> float:
+    """Pontua uma sugestão sem transformá-la em correspondência confirmada.
+
+    Cada termo digitado precisa ter um candidato razoável no artigo. Isso lida
+    com transposição e erro curto (``PUE`` → ``PEU``), mas evita que uma única
+    palavra parecida esconda o restante de uma consulta diferente. O valor é
+    usado apenas para ordenar sugestões; preço nunca é liberado por este score.
+    """
+    raw_query_terms = search_tokens(query)
+    query_terms = [term for term in raw_query_terms if term not in _RUIDO_COMERCIAL]
+    query_terms = query_terms or raw_query_terms
+    if not query_terms:
+        return 0.0
+    searchable_value = " ".join(
+        part
+        for part in (item.sku, item.display_name, item.specification, item.family_name)
+        if part
+    )
+    candidate_terms = search_tokens(searchable_value)
+    if not candidate_terms:
+        return 0.0
+    return sum(
+        max(_similarity(term, candidate) for candidate in candidate_terms)
+        for term in query_terms
+    ) / len(query_terms)
+
+
+def suggest_search_items[Item: CurrentPriceListItemResponse](
+    items: list[Item], query: str, *, limit: int = 3, minimum_score: float = 0.55
+) -> list[Item]:
+    """Devolve os artigos mais próximos para uma pergunta de confirmação.
+
+    A função não mistura sugestões com resultados exatos. Quem chama só deve
+    usá-la quando a busca normal não encontrou nada e deve pedir confirmação ao
+    usuário antes de consultar/exibir o preço do artigo sugerido.
+    """
+    ranked = [
+        (fuzzy_search_score(item, query), item)
+        for item in items
+    ]
+    eligible = [(score, item) for score, item in ranked if score >= minimum_score]
+    eligible.sort(key=lambda pair: (-pair[0], pair[1].display_name, pair[1].sku))
+    return [item for _score, item in eligible[:limit]]

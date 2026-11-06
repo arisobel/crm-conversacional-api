@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from crm_api.schemas.customers import CustomerContactResponse
 
@@ -38,6 +38,16 @@ class CurrentPriceListItemResponse(BaseModel):
     notes: str | None
 
 
+class ProductSuggestionResponse(BaseModel):
+    """Identidade suficiente para confirmar um artigo, deliberadamente sem preço."""
+
+    product_id: UUID
+    family_name: str
+    sku: str
+    display_name: str
+    specification: str | None
+
+
 class CurrentPriceListResponse(BaseModel):
     customer: CustomerContactResponse
     price_list: PriceListSummaryResponse
@@ -46,3 +56,4 @@ class CurrentPriceListResponse(BaseModel):
     origin_state: str | None = None
     destination_state: str | None = None
     items: list[CurrentPriceListItemResponse]
+    suggestions: list[ProductSuggestionResponse] = Field(default_factory=list)
