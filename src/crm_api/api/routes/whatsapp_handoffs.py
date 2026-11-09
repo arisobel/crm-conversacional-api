@@ -187,47 +187,8 @@ async def claim_reminder_notifications(
 ) -> ReminderNotificationClaimResponse:
     """Reserva avisos no momento correto; uma reserva abandonada expira em 5 minutos."""
     now = datetime.now(UTC)
-    stale = now - timedelta(minutes=5)
     rows = (
-        await session.execute(
-            select(RepresentativeReminder, User, Customer)
-            .join(User, User.id == RepresentativeReminder.representative_user_id)
-            .join(Tenant, Tenant.id == RepresentativeReminder.tenant_id)
-            .outerjoin(Customer, Customer.id == RepresentativeReminder.customer_id)
-            .where(
-                Tenant.slug == tenant_slug,
-                User.active.is_(True),
-                User.role == UserRole.REPRESENTATIVE,
-                User.whatsapp_e164.is_not(None),
-                RepresentativeReminder.status == ReminderStatus.CONFIRMED.value,
-                RepresentativeReminder.notified_at.is_(None),
-                or_(
-                    # Lembrete pessoal pedido ao assistente: avisa no horário.
-                    and_(
-                        RepresentativeReminder.origin == ReminderOrigin.REPRESENTATIVE.value,
-                        RepresentativeReminder.kind == "FOLLOW_UP",
-                        RepresentativeReminder.due_at <= now,
-                        RepresentativeReminder.due_at > now - timedelta(days=1),
-                    ),
-                    # Compromisso comercial: avisa uma hora antes.
-                    and_(
-                        or_(
-                            RepresentativeReminder.origin != ReminderOrigin.REPRESENTATIVE.value,
-                            RepresentativeReminder.kind != "FOLLOW_UP",
-                        ),
-                        RepresentativeReminder.due_at > now,
-                        RepresentativeReminder.due_at <= now + timedelta(hours=1),
-                    ),
-                ),
-                or_(
-                    RepresentativeReminder.notification_claimed_at.is_(None),
-                    RepresentativeReminder.notification_claimed_at < stale,
-                ),
-            )
-            .order_by(RepresentativeReminder.due_at, RepresentativeReminder.id)
-            .limit(payload.limit)
-            .with_for_update(skip_locked=True)
-        )
+        await session.execute(_reminder_notification_claim_statement(tenant_slug, payload.limit, now))
     ).all()
     claimed: list[ReminderNotificationItem] = []
     for reminder, representative, customer in rows:
@@ -249,6 +210,48 @@ async def claim_reminder_notifications(
         )
     await session.commit()
     return ReminderNotificationClaimResponse(reminders=claimed)
+
+
+def _reminder_notification_claim_statement(tenant_slug: str, limit: int, now: datetime):
+    stale = now - timedelta(minutes=5)
+    return (
+        select(RepresentativeReminder, User, Customer)
+        .join(User, User.id == RepresentativeReminder.representative_user_id)
+        .join(Tenant, Tenant.id == RepresentativeReminder.tenant_id)
+        .outerjoin(Customer, Customer.id == RepresentativeReminder.customer_id)
+        .where(
+            Tenant.slug == tenant_slug,
+            User.active.is_(True),
+            User.role == UserRole.REPRESENTATIVE,
+            User.whatsapp_e164.is_not(None),
+            RepresentativeReminder.status == ReminderStatus.CONFIRMED.value,
+            RepresentativeReminder.notified_at.is_(None),
+            or_(
+                and_(
+                    RepresentativeReminder.origin == ReminderOrigin.REPRESENTATIVE.value,
+                    RepresentativeReminder.kind == "FOLLOW_UP",
+                    RepresentativeReminder.due_at <= now,
+                    RepresentativeReminder.due_at > now - timedelta(days=1),
+                ),
+                and_(
+                    or_(
+                        RepresentativeReminder.origin != ReminderOrigin.REPRESENTATIVE.value,
+                        RepresentativeReminder.kind != "FOLLOW_UP",
+                    ),
+                    RepresentativeReminder.due_at > now,
+                    RepresentativeReminder.due_at <= now + timedelta(hours=1),
+                ),
+            ),
+            or_(
+                RepresentativeReminder.notification_claimed_at.is_(None),
+                RepresentativeReminder.notification_claimed_at < stale,
+            ),
+        )
+        .order_by(RepresentativeReminder.due_at, RepresentativeReminder.id)
+        .limit(limit)
+        # PostgreSQL recusa FOR UPDATE no lado anulável de um OUTER JOIN.
+        .with_for_update(of=RepresentativeReminder, skip_locked=True)
+    )
 
 
 @router.post("/internal/whatsapp/reminder-notifications/ack")

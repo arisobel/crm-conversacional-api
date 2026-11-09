@@ -9,6 +9,9 @@ import pytest_asyncio
 from conftest import build_portal_world
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
+
+from crm_api.api.routes.whatsapp_handoffs import _reminder_notification_claim_statement
 
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.reminder import ReminderOrigin, ReminderStatus, RepresentativeReminder
@@ -22,6 +25,12 @@ PATH = "/internal/whatsapp/customer-reminders"
 LINE = "coexistence-line-a"
 PHONE = "+5511987654321"
 REP_PHONE = "+5511912345678"
+
+
+def test_claim_bloqueia_apenas_lembrete_no_postgresql():
+    statement = _reminder_notification_claim_statement("test-tenant", 25, datetime.now(UTC))
+    sql = str(statement.compile(dialect=postgresql.dialect())).upper()
+    assert "FOR UPDATE OF REPRESENTATIVE_REMINDERS SKIP LOCKED" in sql
 
 
 @pytest_asyncio.fixture
