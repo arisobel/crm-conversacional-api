@@ -6,12 +6,15 @@ mesmo commit da confirmacao explicita do representante.
 """
 
 import hashlib
+import re
+import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from difflib import SequenceMatcher
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.models.catalog import Product, ProductFamily
@@ -40,6 +43,7 @@ class ProposedPriceRow:
     sku: str
     base_price: Decimal | None = None
     availability: AvailabilityStatus | None = None
+    generated_sku: bool = False
     commercial_name: str | None = None
     family_name: str | None = None
     specification: str | None = None
@@ -74,6 +78,7 @@ class PriceChange:
     previous_availability: str | None
     new_availability: str
     change: str
+    generated_sku: bool = False
     field_changes: list[FieldChange] = field(default_factory=list)
     new_family: bool = False
 
@@ -117,6 +122,44 @@ def _text(value: str | None, limit: int) -> str | None:
     return normalized or None
 
 
+def _name_key(value: str | None) -> str:
+    plain = unicodedata.normalize("NFKD", value or "")
+    plain = "".join(character for character in plain if not unicodedata.combining(character))
+    return " ".join(re.sub(r"[^a-zA-Z0-9]+", " ", plain).lower().split())
+
+
+def _numbers(value: str | None) -> tuple[str, ...]:
+    return tuple(re.findall(r"\d+", _name_key(value)))
+
+
+def _match_generated_product(
+    row: ProposedPriceRow,
+    products: list[tuple[Product, ProductFamily]],
+) -> tuple[Product, ProductFamily] | None:
+    """Resolve artigo sem SKU de origem por nome, sem confundir titulacoes proximas."""
+
+    if not row.generated_sku or not row.commercial_name:
+        return None
+    wanted = _name_key(row.commercial_name)
+    exact = [pair for pair in products if _name_key(pair[0].commercial_name) == wanted]
+    if len(exact) == 1:
+        return exact[0]
+    wanted_numbers = _numbers(row.commercial_name)
+    candidates: list[tuple[float, tuple[Product, ProductFamily]]] = []
+    for pair in products:
+        if _numbers(pair[0].commercial_name) != wanted_numbers:
+            continue
+        score = SequenceMatcher(None, wanted, _name_key(pair[0].commercial_name)).ratio()
+        if score >= 0.84:
+            candidates.append((score, pair))
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    if not candidates:
+        return None
+    if len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.05:
+        return None
+    return candidates[0][1]
+
+
 def _shown(value) -> str | None:
     if value is None:
         return None
@@ -132,6 +175,7 @@ def _shown(value) -> str | None:
 def _row_payload(row: ProposedPriceRow) -> dict:
     return {
         "sku": row.sku,
+        "generated_sku": row.generated_sku,
         "commercial_name": row.commercial_name,
         "family_name": row.family_name,
         "specification": row.specification,
@@ -151,6 +195,7 @@ def _row_payload(row: ProposedPriceRow) -> dict:
 def _row_from_payload(payload: dict) -> ProposedPriceRow:
     return ProposedPriceRow(
         sku=payload["sku"],
+        generated_sku=bool(payload.get("generated_sku", False)),
         commercial_name=payload.get("commercial_name"),
         family_name=payload.get("family_name"),
         specification=payload.get("specification"),
@@ -281,10 +326,7 @@ class RepresentativePriceUpdateService:
             await self._session.execute(
                 select(Product, ProductFamily)
                 .join(ProductFamily, ProductFamily.id == Product.family_id)
-                .where(
-                    Product.tenant_id == batch.tenant_id,
-                    func.upper(Product.sku).in_([row.sku for row in rows]),
-                )
+                .where(Product.tenant_id == batch.tenant_id)
             )
         ).all()
         products = {_sku(product.sku): (product, family) for product, family in product_rows}
@@ -297,7 +339,7 @@ class RepresentativePriceUpdateService:
         next_family_order = max((family.display_order for family in families), default=0) + 10
 
         for order, row in enumerate(rows):
-            current_pair = products.get(row.sku)
+            current_pair = products.get(row.sku) or _match_generated_product(row, product_rows)
             family = None
             if row.family_name:
                 family = families_by_name.get(row.family_name.casefold())
@@ -444,6 +486,7 @@ class RepresentativePriceUpdateService:
         unit = _text(row.unit, 30)
         return ProposedPriceRow(
             sku=_sku(row.sku),
+            generated_sku=row.generated_sku,
             commercial_name=_text(row.commercial_name, 300),
             family_name=_text(row.family_name, 200),
             specification=_text(row.specification, 500),
@@ -465,10 +508,7 @@ class RepresentativePriceUpdateService:
             await self._session.execute(
                 select(Product, ProductFamily)
                 .join(ProductFamily, ProductFamily.id == Product.family_id)
-                .where(
-                    Product.tenant_id == tenant_id,
-                    func.upper(Product.sku).in_([row.sku for row in rows]),
-                )
+                .where(Product.tenant_id == tenant_id)
             )
         ).all()
         by_sku = {_sku(product.sku): (product, family) for product, family in product_rows}
@@ -480,7 +520,7 @@ class RepresentativePriceUpdateService:
         }
 
         for row in rows:
-            pair = by_sku.get(row.sku)
+            pair = by_sku.get(row.sku) or _match_generated_product(row, product_rows)
             if pair is None:
                 missing = []
                 if not row.commercial_name:
@@ -504,6 +544,7 @@ class RepresentativePriceUpdateService:
                         previous_availability=None,
                         new_availability=availability.value,
                         change="NEW",
+                        generated_sku=row.generated_sku,
                         field_changes=changes,
                         new_family=bool(
                             row.family_name and row.family_name.casefold() not in family_names
@@ -576,6 +617,7 @@ class RepresentativePriceUpdateService:
                     previous_availability=current.availability.value if current else None,
                     new_availability=availability.value,
                     change="CHANGED" if changes else "UNCHANGED",
+                    generated_sku=False,
                     field_changes=changes,
                     new_family=bool(
                         row.family_name and row.family_name.casefold() not in family_names

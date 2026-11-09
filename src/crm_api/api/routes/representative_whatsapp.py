@@ -318,9 +318,7 @@ async def list_portfolio_customers(
 ) -> PortfolioCustomersResponse:
     tenant, actor = await _resolve(session, tenant_slug, phone)
     try:
-        result = await _service(request, session).list_portfolio_customers(
-            actor, tenant.id, query
-        )
+        result = await _service(request, session).list_portfolio_customers(actor, tenant.id, query)
     except NotARepresentative as error:
         raise _forbidden(error) from error
     return PortfolioCustomersResponse(
@@ -492,9 +490,7 @@ async def assistant_lookup_customers(
     tenant, actor = await _resolve_assistant_execution(
         request, session, tenant_slug, phone, payload.context, "CRM_REP_LOOKUP_CUSTOMER"
     )
-    matches = await _service(request, session).lookup_customers(
-        actor, tenant.id, payload.query
-    )
+    matches = await _service(request, session).lookup_customers(actor, tenant.id, payload.query)
     if not matches:
         # Diagnóstico temporário, sem registrar o termo, telefone ou nome de
         # cliente: permite diferenciar falha de filtro da carteira de ausência
@@ -538,7 +534,11 @@ async def assistant_list_portfolio_customers(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> PortfolioCustomersResponse:
     tenant, actor = await _resolve_assistant_execution(
-        request, session, tenant_slug, phone, payload.context,
+        request,
+        session,
+        tenant_slug,
+        phone,
+        payload.context,
         "CRM_REP_LIST_PORTFOLIO_CUSTOMERS",
     )
     result = await _service(request, session).list_portfolio_customers(
@@ -773,6 +773,7 @@ async def assistant_propose_price_update(
             rows=[
                 ProposedPriceRow(
                     sku=row.sku,
+                    generated_sku=row.generated_sku,
                     base_price=row.base_price,
                     availability=row.availability,
                     commercial_name=row.commercial_name,

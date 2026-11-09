@@ -76,6 +76,7 @@ class AssistantReminderResponse(BaseModel):
 
 class PriceUpdateRow(BaseModel):
     sku: str = Field(min_length=1, max_length=120)
+    generated_sku: bool = False
     commercial_name: str | None = Field(default=None, max_length=300)
     family_name: str | None = Field(default=None, max_length=200)
     specification: str | None = Field(default=None, max_length=500)
@@ -112,6 +113,7 @@ class PriceUpdateFieldChangeResponse(BaseModel):
 
 class PriceUpdateChangeResponse(BaseModel):
     sku: str
+    generated_sku: bool = False
     product_name: str
     previous_price: Decimal | None = None
     new_price: Decimal | None = None

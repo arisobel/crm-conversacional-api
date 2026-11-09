@@ -339,3 +339,32 @@ async def test_alteracao_cadastral_e_comparada_e_so_aplicada_apos_confirmar():
             assert materialized.products_updated == 1
     finally:
         await world.app.state.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_linha_sem_sku_de_origem_encontra_produto_existente_pelo_nome():
+    world = await build_portal_world()
+    try:
+        async with world.app.state.session_factory() as session:
+            product = await session.get(Product, world.product_id)
+            proposal = await RepresentativePriceUpdateService(session).propose(
+                tenant_id=world.tenant_id,
+                representative_user_id=world.representative_a_id,
+                source_wamid="wamid.generated-name-match",
+                reference_month=date(2026, 11, 1),
+                rows=[
+                    ProposedPriceRow(
+                        sku="AUTO-1234567890",
+                        generated_sku=True,
+                        commercial_name=product.commercial_name,
+                        family_name="Texturizado cru",
+                        base_price=Decimal("14.38"),
+                    )
+                ],
+            )
+            assert proposal.ready_for_confirmation is True
+            assert proposal.changes[0].sku == product.sku
+            assert proposal.changes[0].change != "NEW"
+            assert proposal.changes[0].generated_sku is False
+    finally:
+        await world.app.state.engine.dispose()
