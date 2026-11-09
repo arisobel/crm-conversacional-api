@@ -231,9 +231,11 @@ async def test_grupos_aparecem_na_lista_de_produtos(world):
         await _criar_grupo(admin, "Poliéster")
         await _etiquetar(admin, world, world.product_id, "Poliéster")
         pagina = await admin.get("/portal/products")
+        cadastros = await admin.get("/portal/products?aba=cadastros")
 
     assert "Poliéster" in pagina.text
-    assert "Grupos de artigo" in pagina.text
+    assert "Grupos e famílias" in pagina.text
+    assert "Grupos de artigo" in cadastros.text
 
 
 # ----------------------------------------------------------------- alçadas

@@ -754,7 +754,11 @@ async def assistant_propose_price_update(
             representative_user_id=actor.user_id,
             source_wamid=payload.source_wamid,
             reference_month=payload.reference_month,
-            rows=[ProposedPriceRow(row.sku, row.base_price) for row in payload.rows],
+            source_kind=payload.source_kind,
+            rows=[
+                ProposedPriceRow(row.sku, row.base_price, row.availability)
+                for row in payload.rows
+            ],
         )
     except PriceUpdateProposalForbidden as error:
         raise HTTPException(status_code=403, detail="price update proposal denied") from error

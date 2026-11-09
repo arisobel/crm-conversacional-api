@@ -1,24 +1,35 @@
 {% extends "base.html" %}
-{% block title %}Produtos{% endblock %}
+{% block title %}Tabela e produtos{% endblock %}
 
 {% block conteudo %}
 <div class="cabecalho">
-  <h1>Produtos</h1>
+  <div>
+    <h1>Tabela e produtos</h1>
+    <p class="dica">Catálogo, preços, importações e dados cadastrais em um só lugar.</p>
+  </div>
   {% if pode_gerir %}
   <div class="acoes-cabecalho">
-    <button type="button" class="link" data-abre="modal-produto">Novo artigo</button>
-    <button type="button" class="link" data-abre="modal-familia">Nova família</button>
+    <button type="button" class="botao botao-glass" data-abre="modal-produto">+ Novo artigo</button>
   </div>
   {% endif %}
 </div>
 
+<nav class="abas-produtos" aria-label="Seções de tabela e produtos">
+  <a href="/portal/products?aba=catalogo" class="{% if aba == 'catalogo' %}atual{% endif %}">Catálogo</a>
+  {% if current_user.role.value == 'ADMIN' %}
+  <a href="/portal/products?aba=tabelas" class="{% if aba == 'tabelas' %}atual{% endif %}">Tabelas e histórico</a>
+  {% endif %}
+  <a href="/portal/products?aba=cadastros" class="{% if aba == 'cadastros' %}atual{% endif %}">Grupos e famílias</a>
+</nav>
+
+{% if aba == 'catalogo' %}
 <section class="painel">
   <h2>Catálogo</h2>
   <p class="dica">
     Este é o cadastro do artigo: SKU, nome, especificação e família. O preço não
     mora aqui — ele pertence à
     {% if competencia %}competência {{ competencia.strftime('%m/%Y') }}{% else %}tabela do mês{% endif %},
-    em <a href="/portal/prices">Tabelas</a>. A coluna de preço abaixo é leitura.
+    nesta mesma tela. A coluna de preço abaixo é leitura.
   </p>
 
   <form method="get" class="filtros">
@@ -52,9 +63,10 @@
         <th>Família</th>
         <th>Grupos</th>
         <th>Un.</th>
-        <th class="numero">Preço no mês</th>
-        <th class="numero">Preferido por</th>
-        <th>Situação</th>
+        <th>Disponibilidade</th>
+        <th class="numero">Preço-base (R$/kg)</th>
+        <th class="numero">Clientes interessados</th>
+        <th>Situação cadastral</th>
         <th></th>
       </tr>
     </thead>
@@ -78,6 +90,11 @@
           {%- endfor -%}
         </td>
         <td>{{ produto.unit }}</td>
+        <td>
+          {% if linha.availability %}
+          <span class="status-produto status-{{ linha.availability.value|lower }}">{{ linha.availability.value }}</span>
+          {% else %}<span class="vazio">—</span>{% endif %}
+        </td>
         <td class="numero">
           {%- if linha.base_price is not none -%}
           {{ linha.base_price }}
@@ -85,11 +102,8 @@
           <span class="etiqueta neutra">sem preço</span>
           {%- endif -%}
         </td>
-        <td class="numero">
-          {%- if linha.preferred_by -%}{{ linha.preferred_by }}{%- else -%}
-          <span class="vazio">—</span>{%- endif -%}
-        </td>
-        <td>{% if produto.active %}ativo{% else %}<span class="vazio">inativo</span>{% endif %}</td>
+        <td class="numero">{{ linha.preferred_by }}</td>
+        <td>{% if produto.active %}<span class="situacao-ativa">ativo</span>{% else %}<span class="status-produto status-inativo">inativo</span>{% endif %}</td>
         <td class="acoes">
           {% if pode_gerir %}
           <form method="post" action="/portal/products/{{ produto.id }}">
@@ -98,12 +112,12 @@
             <input type="hidden" name="familia" value="{{ familia_escolhida }}">
             <input type="hidden" name="situacao" value="{{ situacao }}">
             {% if produto.active %}
-            <button type="submit" name="acao" value="desativar" class="link">desativar</button>
+            <button type="submit" name="acao" value="desativar" class="acao-glass">suspender</button>
             {% else %}
-            <button type="submit" name="acao" value="ativar" class="link">reativar</button>
+            <button type="submit" name="acao" value="ativar" class="acao-glass">ativar</button>
             {% endif %}
           </form>
-          <button type="button" class="link" data-abre="editar-{{ produto.id }}">editar</button>
+          <button type="button" class="acao-glass" data-abre="editar-{{ produto.id }}">editar</button>
           {% endif %}
         </td>
       </tr>
@@ -112,7 +126,7 @@
          em linha. `tr.detalhe` é o padrão da lista de preço e da tela de
          usuários. #}
       <tr class="detalhe">
-        <td colspan="9">
+        <td colspan="10">
           <div class="gaveta">
             <details>
               <summary>grupos deste artigo</summary>
@@ -153,6 +167,23 @@
               </form>
               {% endfor %}
             </details>
+            {% if revisoes_por_produto.get(produto.id) %}
+            <details class="historico-produto">
+              <summary>histórico de preço e disponibilidade</summary>
+              <div class="tabela-rolagem"><table>
+                <thead><tr><th>Quando</th><th>De</th><th>Para</th></tr></thead>
+                <tbody>
+                {% for revisao in revisoes_por_produto.get(produto.id, []) %}
+                <tr>
+                  <td>{{ revisao.changed_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                  <td>{% if revisao.previous %}{{ revisao.previous.base_price }} · {{ revisao.previous.availability }}{% else %}<span class="vazio">primeira publicação</span>{% endif %}</td>
+                  <td>{{ revisao.current.base_price }} · {{ revisao.current.availability }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+              </table></div>
+            </details>
+            {% endif %}
           </div>
         </td>
       </tr>
@@ -220,6 +251,13 @@
 {% endfor %}
 {% endif %}
 
+{% endif %}
+
+{% if aba == 'tabelas' and current_user.role.value == 'ADMIN' %}
+  {% include "_prices_panels.html" %}
+{% endif %}
+
+{% if aba == 'cadastros' or current_user.role.value == 'REPRESENTATIVE' %}
 <section class="painel">
   <h2>Grupos de artigo</h2>
   <p class="dica">
@@ -349,6 +387,7 @@
   <p class="vazio">Nenhuma família cadastrada.</p>
   {% endif %}
 </section>
+{% endif %}
 {% endif %}
 
 {% if pode_gerir %}

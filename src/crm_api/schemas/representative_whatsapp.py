@@ -11,6 +11,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from crm_api.models.pricing import AvailabilityStatus
 from crm_api.schemas.customer_intake import OpenCustomerIntakeRequest
 from crm_api.schemas.price_lists import CurrentPriceListItemResponse, ProductSuggestionResponse
 
@@ -75,13 +76,15 @@ class AssistantReminderResponse(BaseModel):
 
 class PriceUpdateRow(BaseModel):
     sku: str = Field(min_length=1, max_length=120)
-    base_price: Decimal = Field(ge=0, max_digits=14, decimal_places=4)
+    base_price: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=4)
+    availability: AvailabilityStatus | None = None
 
 
 class AssistantProposePriceUpdateRequest(BaseModel):
     context: AssistantExecutionContext
     source_wamid: str = Field(min_length=1, max_length=255)
     reference_month: date
+    source_kind: str = Field(default="WHATSAPP_MESSAGE", max_length=32)
     rows: list[PriceUpdateRow] = Field(min_length=1, max_length=500)
 
 
@@ -89,7 +92,9 @@ class PriceUpdateChangeResponse(BaseModel):
     sku: str
     product_name: str
     previous_price: Decimal | None = None
-    new_price: Decimal
+    new_price: Decimal | None = None
+    previous_availability: str | None = None
+    new_availability: str
     change: str
 
 

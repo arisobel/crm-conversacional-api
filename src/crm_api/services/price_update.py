@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.models.catalog import Product
 from crm_api.models.pricing import (
+    NO_PRICE_AVAILABILITIES,
     AvailabilityStatus,
     PriceEntry,
     PriceList,
@@ -30,7 +31,8 @@ class PriceUpdateProposalForbidden(Exception):
 @dataclass(frozen=True)
 class ProposedPriceRow:
     sku: str
-    base_price: Decimal
+    base_price: Decimal | None = None
+    availability: AvailabilityStatus | None = None
 
 
 @dataclass(frozen=True)
@@ -38,7 +40,9 @@ class PriceChange:
     sku: str
     product_name: str
     previous_price: Decimal | None
-    new_price: Decimal
+    new_price: Decimal | None
+    previous_availability: str | None
+    new_availability: str
     change: str
 
 
@@ -71,6 +75,7 @@ class RepresentativePriceUpdateService:
         source_wamid: str,
         reference_month: date,
         rows: list[ProposedPriceRow],
+        source_kind: str = "WHATSAPP_MESSAGE",
     ) -> PriceUpdateProposal:
         if reference_month.day != 1:
             raise ValueError("reference_month must be the first day of the month")
@@ -85,7 +90,11 @@ class RepresentativePriceUpdateService:
                 raise PriceUpdateProposalForbidden
             return await self._describe(existing)
 
-        normalized = [ProposedPriceRow(_sku(row.sku), row.base_price) for row in rows]
+        normalized = [
+            ProposedPriceRow(_sku(row.sku), row.base_price, row.availability) for row in rows
+        ]
+        if any(row.base_price is None and row.availability is None for row in normalized):
+            raise ValueError("each row must change price or availability")
         counts: dict[str, int] = {}
         for row in normalized:
             counts[row.sku] = counts.get(row.sku, 0) + 1
@@ -121,6 +130,7 @@ class RepresentativePriceUpdateService:
             status=PriceListStatus.DRAFT,
             created_by=representative_user_id,
             source_wamid=source_wamid,
+            source_kind=source_kind[:32],
         )
         self._session.add(batch)
         for order, row in enumerate(normalized):
@@ -133,11 +143,22 @@ class RepresentativePriceUpdateService:
                 )
             )
             previous = current.base_price if current is not None else None
+            previous_availability = current.availability if current is not None else None
+            availability = row.availability or previous_availability or AvailabilityStatus.AVAILABLE
+            if (
+                row.base_price is None
+                and previous is None
+                and availability not in NO_PRICE_AVAILABILITIES
+            ):
+                raise ValueError(f"base price is required for {product.sku}")
+            price = row.base_price
+            if price is None:
+                price = previous if previous is not None else Decimal("0")
             change = (
                 "NEW"
-                if previous is None
+                if current is None
                 else "UNCHANGED"
-                if previous == row.base_price
+                if previous == price and previous_availability == availability
                 else "CHANGED"
             )
             result.changes.append(
@@ -145,7 +166,11 @@ class RepresentativePriceUpdateService:
                     sku=product.sku,
                     product_name=product.commercial_name,
                     previous_price=previous,
-                    new_price=row.base_price,
+                    new_price=price,
+                    previous_availability=(
+                        previous_availability.value if previous_availability else None
+                    ),
+                    new_availability=availability.value,
                     change=change,
                 )
             )
@@ -155,8 +180,8 @@ class RepresentativePriceUpdateService:
                     tenant_id=tenant_id,
                     price_list_id=batch.id,
                     product_id=product.id,
-                    base_price=row.base_price,
-                    availability=current.availability if current else AvailabilityStatus.AVAILABLE,
+                    base_price=price,
+                    availability=availability,
                     expected_arrival_date=current.expected_arrival_date if current else None,
                     available_quantity_kg=current.available_quantity_kg if current else None,
                     arrival_note=current.arrival_note if current else None,
@@ -203,16 +228,22 @@ class RepresentativePriceUpdateService:
                 )
             )
             previous = current.base_price if current is not None else None
+            previous_availability = current.availability if current is not None else None
             result.changes.append(
                 PriceChange(
                     sku=product.sku,
                     product_name=product.commercial_name,
                     previous_price=previous,
                     new_price=item.base_price,
+                    previous_availability=(
+                        previous_availability.value if previous_availability else None
+                    ),
+                    new_availability=item.availability.value,
                     change="NEW"
-                    if previous is None
+                    if current is None
                     else "UNCHANGED"
                     if previous == item.base_price
+                    and previous_availability == item.availability
                     else "CHANGED",
                 )
             )

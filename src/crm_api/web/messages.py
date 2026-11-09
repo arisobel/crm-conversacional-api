@@ -52,6 +52,14 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
         "a valer.",
     ),
     "lote-publicado": ("ok", "Tabela publicada na competência."),
+    "tabela-importada": (
+        "ok",
+        "Tabela importada como rascunho. Revise as alterações antes de publicar.",
+    ),
+    "tabela-invalida": (
+        "erro",
+        "Não foi possível importar. Use o CSV exportado por esta tela e confira a competência.",
+    ),
     "regra-criada": ("ok", "Regra de ICMS cadastrada."),
     "artigo-criado": (
         "ok",

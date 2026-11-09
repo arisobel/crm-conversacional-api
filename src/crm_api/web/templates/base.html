@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/portal/static/crm-icon.png">
   <link rel="apple-touch-icon" href="/portal/static/crm-icon.png">
   <script src="/portal/static/theme.js?v=20261104-glass"></script>
-  <link rel="stylesheet" href="/portal/static/portal.css?v=20261104-glass">
+  <link rel="stylesheet" href="/portal/static/portal.css?v=20261109-tabelas">
   <noscript><link rel="stylesheet" href="/portal/static/portal-nojs.css"></noscript>
 </head>
 <body class="{% block body_class %}{% endblock %}{% if current_user %} portal-autenticado{% endif %}">
@@ -21,8 +21,8 @@
     <a href="/portal/customers" class="{% if path.startswith('/portal/customers') or path.startswith('/portal/intakes') %}atual{% endif %}">
       <span class="icone-menu" aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="11" cy="9" r="4"/><circle cx="22" cy="10" r="3"/><path d="M3 25c0-5 3-8 8-8s8 3 8 8M19 18c4-1 8 2 8 7"/><circle cx="24" cy="23" r="4"/><path d="M24 17v2M24 27v2M18 23h2M28 23h2"/></svg></span> Carteira &amp; Agenda
     </a>
-    <a href="/portal/products" class="{% if path.startswith('/portal/products') %}atual{% endif %}">
-      <span class="icone-menu" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="m16 3 11 6-11 6L5 9Z"/><path d="m5 9 11 6 11-6v14l-11 6-11-6Z"/><path d="M16 15v14"/></svg></span> Produtos
+    <a href="/portal/products" class="{% if path.startswith('/portal/products') or path.startswith('/portal/prices') %}atual{% endif %}">
+      <span class="icone-menu" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="m16 3 11 6-11 6L5 9Z"/><path d="m5 9 11 6 11-6v14l-11 6-11-6Z"/><path d="M16 15v14"/></svg></span> Tabela e produtos
     </a>
     <a href="/portal/campaigns" class="{% if path.startswith('/portal/campaigns') %}atual{% endif %}">
       <span class="icone-menu" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M5 13v6l14 5V8Z"/><path d="M19 11c4-1 7-3 9-5v20c-2-2-5-4-9-5M8 20l2 7h5l-2-6"/></svg></span> Campanhas
@@ -31,9 +31,6 @@
     <a href="/portal/whatsapp/{{ current_user.user_id }}" class="{% if path.startswith('/portal/whatsapp') %}atual{% endif %}"><span aria-hidden="true">◉</span> WhatsApp Business</a>
     {% endif %}
     {% if current_user.role.value == 'ADMIN' %}
-    <a href="/portal/prices" class="{% if path.startswith('/portal/prices') %}atual{% endif %}">
-      <span class="icone-menu" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="4" y="5" width="24" height="22" rx="2"/><path d="M4 12h24M11 5v22M19 5v22M4 19h24"/></svg></span> Tabelas
-    </a>
     <a href="/portal/icms-rules" class="{% if path.startswith('/portal/icms-rules') %}atual{% endif %}">
       <span class="icone-menu" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="6" y="3" width="20" height="26" rx="2"/><path d="M11 10h10M11 16h10M11 22h10"/></svg></span> ICMS
     </a>

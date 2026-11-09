@@ -99,3 +99,63 @@ async def test_proposta_rejeita_sku_desconhecido_sem_criar_rascunho():
             assert proposal.proposal_id is None
     finally:
         await world.app.state.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_proposta_suspende_produto_sem_apagar_preco_anterior():
+    world = await build_portal_world()
+    reference_month = date(2026, 11, 1)
+    try:
+        async with world.app.state.session_factory() as session:
+            session.add(
+                PriceEntry(
+                    tenant_id=world.tenant_id,
+                    reference_month=reference_month,
+                    product_id=world.product_id,
+                    base_price=Decimal("10.0000"),
+                    availability=AvailabilityStatus.AVAILABLE,
+                )
+            )
+            await session.commit()
+
+        async with world.app.state.session_factory() as session:
+            proposal = await RepresentativePriceUpdateService(session).propose(
+                tenant_id=world.tenant_id,
+                representative_user_id=world.representative_a_id,
+                source_wamid="wamid.suspended",
+                reference_month=reference_month,
+                rows=[
+                    ProposedPriceRow(
+                        "TEX-75-36-CRU",
+                        availability=AvailabilityStatus.SUSPENDED,
+                    )
+                ],
+            )
+            await session.commit()
+            assert proposal.changes[0].previous_price == Decimal("10.0000")
+            assert proposal.changes[0].new_price == Decimal("10.0000")
+            assert proposal.changes[0].new_availability == "SUSPENDED"
+
+            batch = await session.get(PriceList, proposal.proposal_id)
+            await PricePublicationService(
+                session=session,
+                entries=PriceEntryRepository(session),
+                audit=AuditRepository(session),
+            ).publish_batch(
+                tenant_id=world.tenant_id,
+                batch_id=batch.id,
+                actor_user_id=world.representative_a_id,
+                request_id="wamid.suspended.confirm",
+            )
+            await session.commit()
+            current = await session.scalar(
+                select(PriceEntry).where(
+                    PriceEntry.tenant_id == world.tenant_id,
+                    PriceEntry.reference_month == reference_month,
+                    PriceEntry.product_id == world.product_id,
+                )
+            )
+            assert current.availability is AvailabilityStatus.SUSPENDED
+            assert current.base_price == Decimal("10.0000")
+    finally:
+        await world.app.state.engine.dispose()

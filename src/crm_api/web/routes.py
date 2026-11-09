@@ -6,14 +6,16 @@ traduz o resultado em redirecionamento. Nenhuma regra de negócio vive aqui.
 
 import csv
 import io
+import tempfile
 import uuid
 from calendar import Calendar
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Form, Query, Request
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,13 +27,14 @@ from crm_api.core.database import get_session
 from crm_api.core.numbers import InvalidDecimal, parse_decimal
 from crm_api.core.passwords import WeakPassword
 from crm_api.core.states import InvalidStateCode, normalize_state_code
+from crm_api.imports.price_table import import_price_table
 from crm_api.models.assistant_settings import (
     AssistantOrganizationSettings,
     AssistantRepresentativeCapability,
     AssistantRepresentativeSettings,
     ConversationBehaviorSettings,
 )
-from crm_api.models.customer import Customer
+from crm_api.models.customer import Customer, Tenant
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.interaction import (
     GATEWAY_SOURCE,
@@ -2237,6 +2240,8 @@ async def pagina_produtos(
     familia: Annotated[str | None, Query()] = None,
     situacao: Annotated[str, Query()] = "ativos",
     sem_preco: Annotated[str | None, Query()] = None,
+    aba: Annotated[str, Query()] = "catalogo",
+    mes: Annotated[str | None, Query()] = None,
     editar: Annotated[str | None, Query()] = None,
     m: Annotated[str | None, Query()] = None,
 ) -> Response:
@@ -2257,7 +2262,40 @@ async def pagina_produtos(
         without_price=bool(sem_preco),
     )
 
+    if aba not in {"catalogo", "tabelas", "cadastros"}:
+        aba = "catalogo"
+    if aba == "tabelas" and current_user.role is not UserRole.ADMIN:
+        aba = "catalogo"
+
     linhas = await catalogo.list_products(current_user.tenant_id, filtros, month=competencia)
+    entradas = PriceEntryRepository(session)
+    competencias = await entradas.list_months(current_user.tenant_id) if pode_gerir else []
+    selecionada = _competencia(mes) or (competencias[0] if competencias else competencia)
+    lotes = (
+        await PriceListRepository(session).list_batches(current_user.tenant_id)
+        if current_user.role is UserRole.ADMIN
+        else []
+    )
+    autores_ids = {lote.created_by for lote in lotes if lote.created_by}
+    autores_lotes = {}
+    if autores_ids:
+        autores_lotes = {
+            usuario.id: usuario.full_name
+            for usuario in await session.scalars(
+                select(User).where(
+                    User.tenant_id == current_user.tenant_id,
+                    User.id.in_(autores_ids),
+                )
+            )
+        }
+    revisoes = (
+        await entradas.list_revisions_with_product(current_user.tenant_id, selecionada)
+        if selecionada and current_user.role is UserRole.ADMIN
+        else []
+    )
+    revisoes_por_produto: dict[uuid.UUID, list] = {}
+    for revisao, produto in revisoes:
+        revisoes_por_produto.setdefault(produto.id, []).append(revisao)
     return _render(
         request,
         "products.html",
@@ -2278,6 +2316,16 @@ async def pagina_produtos(
             # Qual linha abre já em modo de edição, depois do redirecionamento.
             "editando": editar or "",
             "pode_gerir": pode_gerir,
+            "aba": aba,
+            "lotes": lotes,
+            "autores_lotes": autores_lotes,
+            "competencias": competencias,
+            "selecionada": selecionada,
+            "itens_tabela": await entradas.list_items(current_user.tenant_id, selecionada)
+            if selecionada and current_user.role is UserRole.ADMIN
+            else [],
+            "revisoes": revisoes,
+            "revisoes_por_produto": revisoes_por_produto,
         },
         current_user=current_user,
         mensagem=m,
@@ -2655,29 +2703,117 @@ async def pagina_tabelas(
     if current_user.role is not UserRole.ADMIN:
         return _redirect("/portal/customers", "sem-permissao")
 
-    entradas = PriceEntryRepository(session)
-    competencias = await entradas.list_months(current_user.tenant_id)
-    selecionada = _competencia(mes) or (competencias[0] if competencias else None)
+    destino = "/portal/products?aba=tabelas"
+    if mes:
+        destino += f"&mes={mes}"
+    if m:
+        destino += f"&m={m}"
+    return RedirectResponse(destino, status_code=303)
 
-    return _render(
-        request,
-        "prices.html",
-        {
-            "lotes": await PriceListRepository(session).list_batches(current_user.tenant_id),
-            "competencias": competencias,
-            "selecionada": selecionada,
-            "itens": await entradas.list_items(current_user.tenant_id, selecionada)
-            if selecionada
-            else [],
-            "revisoes": await entradas.list_revisions_with_product(
-                current_user.tenant_id, selecionada
-            )
-            if selecionada
-            else [],
-        },
-        current_user=current_user,
-        mensagem=m,
+
+@router.get("/prices/export", include_in_schema=False)
+async def exportar_tabela_atualizacao(
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    mes: Annotated[str | None, Query()] = None,
+) -> Response:
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    entradas = PriceEntryRepository(session)
+    competencia = _competencia(mes) or await entradas.latest_month(
+        current_user.tenant_id, at=datetime.now(UTC).date()
     )
+    itens = await entradas.list_items(current_user.tenant_id, competencia) if competencia else []
+    arquivo = io.StringIO()
+    escritor = csv.writer(arquivo, delimiter=";")
+    escritor.writerow(
+        [
+            "family_name", "family_order", "sku", "commercial_name", "specification",
+            "availability", "base_price", "expected_arrival_date", "arrival_note",
+            "display_order", "notes",
+        ]
+    )
+    for entrada, produto, familia in itens:
+        escritor.writerow(
+            [
+                familia.name,
+                familia.display_order,
+                produto.sku,
+                produto.commercial_name,
+                produto.specification or "",
+                entrada.availability.value,
+                str(entrada.base_price),
+                entrada.expected_arrival_date.isoformat() if entrada.expected_arrival_date else "",
+                entrada.arrival_note or "",
+                entrada.display_order,
+                entrada.notes or "",
+            ]
+        )
+    nome = (
+        f"tabela-atualizacao-{competencia:%Y-%m}.csv"
+        if competencia
+        else "tabela-atualizacao.csv"
+    )
+    return Response(
+        arquivo.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{nome}"'},
+    )
+
+
+@router.post("/prices/import", include_in_schema=False)
+async def importar_tabela_portal(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    arquivo: Annotated[UploadFile, File()],
+    nome: Annotated[str, Form()],
+    referencia: Annotated[str, Form()],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    destino = "/portal/products?aba=tabelas"
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    competencia = _competencia(referencia)
+    conteudo = await arquivo.read(5_000_001)
+    if (
+        competencia is None
+        or not nome.strip()
+        or len(conteudo) > 5_000_000
+        or not (arquivo.filename or "").lower().endswith(".csv")
+    ):
+        return _redirect(destino, "tabela-invalida")
+
+    caminho = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temporario:
+            temporario.write(conteudo)
+            caminho = temporario.name
+        tenant_slug = await session.scalar(
+            select(Tenant.slug).where(Tenant.id == current_user.tenant_id)
+        )
+        resultado = await import_price_table(
+            session,
+            tenant_slug=tenant_slug,
+            source_path=Path(caminho),
+            name=nome.strip(),
+            reference_month=competencia,
+            valid_from=datetime(competencia.year, competencia.month, 1, tzinfo=UTC),
+            valid_until=None,
+        )
+        resultado.price_list.created_by = current_user.user_id
+        resultado.price_list.source_wamid = f"portal:{uuid.uuid4()}"
+        resultado.price_list.source_kind = "PORTAL_CSV"
+        await session.commit()
+    except (UnicodeDecodeError, ValueError, csv.Error):
+        await session.rollback()
+        return _redirect(destino, "tabela-invalida")
+    finally:
+        if caminho:
+            Path(caminho).unlink(missing_ok=True)
+    return _redirect(destino, "tabela-importada")
 
 
 @router.post("/prices/publish", include_in_schema=False)
@@ -2689,7 +2825,7 @@ async def publicar_lote(
     csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
 ) -> Response:
     if not csrf_is_valid(request, csrf_token):
-        return _redirect("/portal/prices", "csrf")
+        return _redirect("/portal/products?aba=tabelas", "csrf")
     if current_user.role is not UserRole.ADMIN:
         return _redirect("/portal/customers", "sem-permissao")
 
@@ -2702,10 +2838,13 @@ async def publicar_lote(
         )
     except Exception as error:  # noqa: BLE001
         await session.rollback()
-        return _redirect("/portal/prices", _codigo_do_erro(error))
+        return _redirect("/portal/products?aba=tabelas", _codigo_do_erro(error))
 
     await session.commit()
-    return _redirect(f"/portal/prices?mes={resultado.reference_month:%Y-%m}", "lote-publicado")
+    return _redirect(
+        f"/portal/products?aba=tabelas&mes={resultado.reference_month:%Y-%m}",
+        "lote-publicado",
+    )
 
 
 __all__ = ["router", "PortalRedirect"]

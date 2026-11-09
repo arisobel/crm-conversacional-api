@@ -76,6 +76,7 @@ class PriceList(Base):
         ForeignKey("users.id"), nullable=True
     )
     source_wamid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class PriceListItem(Base):
