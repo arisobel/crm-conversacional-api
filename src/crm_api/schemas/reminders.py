@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 ReminderKindValue = Literal["CALL", "MEETING", "FOLLOW_UP"]
+ReminderOriginValue = Literal["CUSTOMER", "REPRESENTATIVE"]
 
 
 class CustomerReminderRequest(BaseModel):
@@ -37,6 +38,7 @@ class ReminderNotificationItem(BaseModel):
     representative_phone_e164: str
     representative_name: str
     customer_name: str | None = None
+    origin: ReminderOriginValue
     due_at: datetime
     kind: ReminderKindValue
     note: str

@@ -6,7 +6,7 @@ from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.api.security import verify_internal_request
@@ -185,7 +185,7 @@ async def claim_reminder_notifications(
     tenant_slug: Annotated[str, Depends(verify_internal_request)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ReminderNotificationClaimResponse:
-    """Reserva avisos da próxima hora; uma reserva abandonada expira em 5 minutos."""
+    """Reserva avisos no momento correto; uma reserva abandonada expira em 5 minutos."""
     now = datetime.now(UTC)
     stale = now - timedelta(minutes=5)
     rows = (
@@ -201,8 +201,24 @@ async def claim_reminder_notifications(
                 User.whatsapp_e164.is_not(None),
                 RepresentativeReminder.status == ReminderStatus.CONFIRMED.value,
                 RepresentativeReminder.notified_at.is_(None),
-                RepresentativeReminder.due_at > now,
-                RepresentativeReminder.due_at <= now + timedelta(hours=1),
+                or_(
+                    # Lembrete pessoal pedido ao assistente: avisa no horário.
+                    and_(
+                        RepresentativeReminder.origin == ReminderOrigin.REPRESENTATIVE.value,
+                        RepresentativeReminder.kind == "FOLLOW_UP",
+                        RepresentativeReminder.due_at <= now,
+                        RepresentativeReminder.due_at > now - timedelta(days=1),
+                    ),
+                    # Compromisso comercial: avisa uma hora antes.
+                    and_(
+                        or_(
+                            RepresentativeReminder.origin != ReminderOrigin.REPRESENTATIVE.value,
+                            RepresentativeReminder.kind != "FOLLOW_UP",
+                        ),
+                        RepresentativeReminder.due_at > now,
+                        RepresentativeReminder.due_at <= now + timedelta(hours=1),
+                    ),
+                ),
                 or_(
                     RepresentativeReminder.notification_claimed_at.is_(None),
                     RepresentativeReminder.notification_claimed_at < stale,
@@ -225,6 +241,7 @@ async def claim_reminder_notifications(
                 representative_phone_e164=representative.whatsapp_e164,
                 representative_name=representative.full_name,
                 customer_name=customer.legal_name if customer is not None else None,
+                origin=reminder.origin,
                 due_at=reminder.due_at,
                 kind=reminder.kind,
                 note=reminder.note,

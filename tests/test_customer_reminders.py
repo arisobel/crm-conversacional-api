@@ -11,7 +11,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
 from crm_api.models.customer_contact import CustomerContact
-from crm_api.models.reminder import ReminderStatus, RepresentativeReminder
+from crm_api.models.reminder import ReminderOrigin, ReminderStatus, RepresentativeReminder
 from crm_api.models.user import User
 from crm_api.models.whatsapp_connection import (
     RepresentativeWhatsappConnection,
@@ -160,6 +160,7 @@ async def test_aviso_e_reservado_uma_hora_antes_e_confirmado_sem_duplicar(world)
         [notification] = claim.json()["reminders"]
         assert notification["representative_phone_e164"] == REP_PHONE
         assert notification["customer_name"] == "Alfa Tecelagem Ltda."
+        assert notification["origin"] == ReminderOrigin.CUSTOMER
 
         ack_path = "/internal/whatsapp/reminder-notifications/ack"
         ack_body = json.dumps({
@@ -177,3 +178,54 @@ async def test_aviso_e_reservado_uma_hora_antes_e_confirmado_sem_duplicar(world)
         )
         assert again.status_code == 200
         assert again.json()["reminders"] == []
+
+
+@pytest.mark.asyncio
+async def test_lembrete_pessoal_so_e_reservado_no_horario(world):
+    now = datetime.now(UTC)
+    async with world.app.state.session_factory() as session:
+        session.add(
+            RepresentativeReminder(
+                id=uuid4(),
+                tenant_id=world.tenant_id,
+                representative_user_id=world.representative_a_id,
+                customer_id=None,
+                customer_contact_id=None,
+                origin=ReminderOrigin.REPRESENTATIVE.value,
+                kind="FOLLOW_UP",
+                status=ReminderStatus.CONFIRMED.value,
+                note="Mandar mensagem para Patrick",
+                due_at=now + timedelta(minutes=10),
+                timezone="America/Sao_Paulo",
+                source_wamid="wamid.PERSONAL.FUTURE",
+                source_line_reference="assistant-line",
+            )
+        )
+        await session.commit()
+
+    claim_path = "/internal/whatsapp/reminder-notifications/claim"
+    body = json.dumps({"limit": 10}).encode()
+    async with AsyncClient(
+        transport=ASGITransport(app=world.app), base_url="http://test"
+    ) as client:
+        early = await client.post(claim_path, content=body, headers=signed_for(claim_path, body))
+        assert early.status_code == 200
+        assert early.json()["reminders"] == []
+
+    async with world.app.state.session_factory() as session:
+        reminder = await session.scalar(
+            select(RepresentativeReminder).where(
+                RepresentativeReminder.source_wamid == "wamid.PERSONAL.FUTURE"
+            )
+        )
+        reminder.due_at = datetime.now(UTC) - timedelta(seconds=1)
+        await session.commit()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=world.app), base_url="http://test"
+    ) as client:
+        on_time = await client.post(claim_path, content=body, headers=signed_for(claim_path, body))
+        assert on_time.status_code == 200
+        [notification] = on_time.json()["reminders"]
+        assert notification["origin"] == ReminderOrigin.REPRESENTATIVE
+        assert notification["customer_name"] is None
