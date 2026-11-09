@@ -136,18 +136,25 @@ def _match_generated_product(
     row: ProposedPriceRow,
     products: list[tuple[Product, ProductFamily]],
 ) -> tuple[Product, ProductFamily] | None:
-    """Resolve artigo sem SKU de origem por nome, sem confundir titulacoes proximas."""
+    """Resolve artigo sem SKU por nome + familia, sem confundir titulacoes proximas."""
 
     if not row.generated_sku or not row.commercial_name:
         return None
     wanted = _name_key(row.commercial_name)
+    wanted_family = _name_key(row.family_name)
     exact = [pair for pair in products if _name_key(pair[0].commercial_name) == wanted]
+    if wanted_family:
+        exact_in_family = [pair for pair in exact if _name_key(pair[1].name) == wanted_family]
+        if len(exact_in_family) == 1:
+            return exact_in_family[0]
     if len(exact) == 1:
         return exact[0]
     wanted_numbers = _numbers(row.commercial_name)
     candidates: list[tuple[float, tuple[Product, ProductFamily]]] = []
     for pair in products:
         if _numbers(pair[0].commercial_name) != wanted_numbers:
+            continue
+        if wanted_family and _name_key(pair[1].name) != wanted_family:
             continue
         score = SequenceMatcher(None, wanted, _name_key(pair[0].commercial_name)).ratio()
         if score >= 0.84:

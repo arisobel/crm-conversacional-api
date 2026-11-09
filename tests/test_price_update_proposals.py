@@ -5,7 +5,7 @@ import pytest
 from conftest import build_portal_world
 from sqlalchemy import select
 
-from crm_api.models.catalog import Product
+from crm_api.models.catalog import Product, ProductFamily
 from crm_api.models.pricing import (
     AvailabilityStatus,
     PriceEntry,
@@ -364,6 +364,55 @@ async def test_linha_sem_sku_de_origem_encontra_produto_existente_pelo_nome():
             )
             assert proposal.ready_for_confirmation is True
             assert proposal.changes[0].sku == product.sku
+            assert proposal.changes[0].change != "NEW"
+            assert proposal.changes[0].generated_sku is False
+    finally:
+        await world.app.state.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_linha_sem_sku_usa_familia_para_desempatar_nome_repetido():
+    world = await build_portal_world()
+    try:
+        async with world.app.state.session_factory() as session:
+            original = await session.get(Product, world.product_id)
+            original_family = await session.get(ProductFamily, original.family_id)
+            other_family = ProductFamily(
+                tenant_id=world.tenant_id,
+                name="Outra familia",
+                display_order=999,
+            )
+            session.add(other_family)
+            await session.flush()
+            session.add(
+                Product(
+                    tenant_id=world.tenant_id,
+                    family_id=other_family.id,
+                    sku="OUTRO-SKU-MESMO-NOME",
+                    commercial_name=original.commercial_name,
+                    unit="KG",
+                )
+            )
+            await session.flush()
+
+            proposal = await RepresentativePriceUpdateService(session).propose(
+                tenant_id=world.tenant_id,
+                representative_user_id=world.representative_a_id,
+                source_wamid="wamid.generated-family-match",
+                reference_month=date(2026, 11, 1),
+                rows=[
+                    ProposedPriceRow(
+                        sku="AUTO-FAMILY-MATCH",
+                        generated_sku=True,
+                        commercial_name=original.commercial_name,
+                        family_name=original_family.name,
+                        base_price=Decimal("14.38"),
+                    )
+                ],
+            )
+
+            assert proposal.ready_for_confirmation is True
+            assert proposal.changes[0].sku == original.sku
             assert proposal.changes[0].change != "NEW"
             assert proposal.changes[0].generated_sku is False
     finally:
