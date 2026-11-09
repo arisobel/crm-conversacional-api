@@ -1,12 +1,12 @@
 """Add retry-safe one-hour reminder notification claims.
 
-Revision ID: 0021_reminder_notification_claims
+Revision ID: 0021_reminder_claims
 Revises: 0020_representative_reminders
 """
 
 from alembic import op
 
-revision = "0021_reminder_notification_claims"
+revision = "0021_reminder_claims"
 down_revision = "0020_representative_reminders"
 branch_labels = None
 depends_on = None

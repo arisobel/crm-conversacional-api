@@ -1,13 +1,13 @@
 """Identify WhatsApp price update proposals and their representative.
 
 Revision ID: 0022_price_update_proposals
-Revises: 0021_reminder_notification_claims
+Revises: 0021_reminder_claims
 """
 
 from alembic import op
 
 revision = "0022_price_update_proposals"
-down_revision = "0021_reminder_notification_claims"
+down_revision = "0021_reminder_claims"
 branch_labels = None
 depends_on = None
 
