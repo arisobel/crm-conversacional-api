@@ -80,11 +80,18 @@ class PriceUpdateRow(BaseModel):
     availability: AvailabilityStatus | None = None
 
 
+class PriceUpdateSourceFile(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    mime_type: str = Field(min_length=1, max_length=160)
+    content_base64: str = Field(min_length=1, max_length=21_000_000)
+
+
 class AssistantProposePriceUpdateRequest(BaseModel):
     context: AssistantExecutionContext
     source_wamid: str = Field(min_length=1, max_length=255)
     reference_month: date
     source_kind: str = Field(default="WHATSAPP_MESSAGE", max_length=32)
+    source_file: PriceUpdateSourceFile | None = None
     rows: list[PriceUpdateRow] = Field(min_length=1, max_length=500)
 
 

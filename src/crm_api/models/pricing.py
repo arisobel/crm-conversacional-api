@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -77,6 +78,25 @@ class PriceList(Base):
     )
     source_wamid: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+class PriceListSourceFile(Base):
+    """Arquivo original que deu origem a um lote de precos."""
+
+    __tablename__ = "price_list_source_files"
+    __table_args__ = (UniqueConstraint("price_list_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    price_list_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("price_lists.id", ondelete="CASCADE"), index=True
+    )
+    filename: Mapped[str] = mapped_column(String(255))
+    mime_type: Mapped[str] = mapped_column(String(160))
+    byte_size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
 class PriceListItem(Base):

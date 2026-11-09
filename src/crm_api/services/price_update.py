@@ -16,6 +16,7 @@ from crm_api.models.pricing import (
     PriceEntry,
     PriceList,
     PriceListItem,
+    PriceListSourceFile,
     PriceListStatus,
 )
 
@@ -33,6 +34,13 @@ class ProposedPriceRow:
     sku: str
     base_price: Decimal | None = None
     availability: AvailabilityStatus | None = None
+
+
+@dataclass(frozen=True)
+class ProposedPriceSourceFile:
+    filename: str
+    mime_type: str
+    content: bytes
 
 
 @dataclass(frozen=True)
@@ -76,6 +84,7 @@ class RepresentativePriceUpdateService:
         reference_month: date,
         rows: list[ProposedPriceRow],
         source_kind: str = "WHATSAPP_MESSAGE",
+        source_file: ProposedPriceSourceFile | None = None,
     ) -> PriceUpdateProposal:
         if reference_month.day != 1:
             raise ValueError("reference_month must be the first day of the month")
@@ -133,6 +142,34 @@ class RepresentativePriceUpdateService:
             source_kind=source_kind[:32],
         )
         self._session.add(batch)
+        if source_file is not None:
+            allowed_mime_types = {
+                "application/pdf",
+                "text/csv",
+                "text/plain",
+                "application/vnd.ms-excel",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "application/msword",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            }
+            mime_type = source_file.mime_type.strip().lower()
+            filename = source_file.filename.strip()[:255]
+            if not filename or mime_type not in allowed_mime_types:
+                raise ValueError("unsupported price source file")
+            if not source_file.content or len(source_file.content) > 15 * 1024 * 1024:
+                raise ValueError("invalid price source file size")
+            self._session.add(
+                PriceListSourceFile(
+                    id=uuid.uuid4(),
+                    tenant_id=tenant_id,
+                    price_list_id=batch.id,
+                    filename=filename,
+                    mime_type=mime_type,
+                    byte_size=len(source_file.content),
+                    sha256=hashlib.sha256(source_file.content).hexdigest(),
+                    content=source_file.content,
+                )
+            )
         for order, row in enumerate(normalized):
             product = by_sku[row.sku]
             current = await self._session.scalar(

@@ -7,6 +7,8 @@ Gateway escolher a carteira que quisesse, e a autorização deixaria de ser
 decidida aqui.
 """
 
+import base64
+import binascii
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
@@ -94,6 +96,7 @@ from crm_api.services.price_update import (
     PriceUpdateProposalForbidden,
     PriceUpdateProposalNotFound,
     ProposedPriceRow,
+    ProposedPriceSourceFile,
     RepresentativePriceUpdateService,
 )
 from crm_api.services.representative_whatsapp import (
@@ -749,12 +752,24 @@ async def assistant_propose_price_update(
         request, session, tenant_slug, phone, payload.context, "CRM_REP_UPDATE_PRICES"
     )
     try:
+        source_file = None
+        if payload.source_file is not None:
+            try:
+                content = base64.b64decode(payload.source_file.content_base64, validate=True)
+            except (binascii.Error, ValueError) as error:
+                raise ValueError("invalid source file encoding") from error
+            source_file = ProposedPriceSourceFile(
+                filename=payload.source_file.filename,
+                mime_type=payload.source_file.mime_type,
+                content=content,
+            )
         proposal = await RepresentativePriceUpdateService(session).propose(
             tenant_id=tenant.id,
             representative_user_id=actor.user_id,
             source_wamid=payload.source_wamid,
             reference_month=payload.reference_month,
             source_kind=payload.source_kind,
+            source_file=source_file,
             rows=[
                 ProposedPriceRow(row.sku, row.base_price, row.availability)
                 for row in payload.rows

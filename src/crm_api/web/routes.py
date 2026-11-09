@@ -5,7 +5,9 @@ traduz o resultado em redirecionamento. Nenhuma regra de negócio vive aqui.
 """
 
 import csv
+import hashlib
 import io
+import re
 import tempfile
 import uuid
 from calendar import Calendar
@@ -13,6 +15,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
@@ -42,7 +45,7 @@ from crm_api.models.interaction import (
     CustomerInteraction,
     InteractionDirection,
 )
-from crm_api.models.pricing import AvailabilityStatus
+from crm_api.models.pricing import AvailabilityStatus, PriceList, PriceListSourceFile
 from crm_api.models.reminder import (
     ReminderKind,
     ReminderOrigin,
@@ -2288,6 +2291,17 @@ async def pagina_produtos(
                 )
             )
         }
+    anexos_lotes = {}
+    if lotes:
+        anexos_lotes = {
+            anexo.price_list_id: anexo
+            for anexo in await session.scalars(
+                select(PriceListSourceFile).where(
+                    PriceListSourceFile.tenant_id == current_user.tenant_id,
+                    PriceListSourceFile.price_list_id.in_([lote.id for lote in lotes]),
+                )
+            )
+        }
     revisoes = (
         await entradas.list_revisions_with_product(current_user.tenant_id, selecionada)
         if selecionada and current_user.role is UserRole.ADMIN
@@ -2319,6 +2333,7 @@ async def pagina_produtos(
             "aba": aba,
             "lotes": lotes,
             "autores_lotes": autores_lotes,
+            "anexos_lotes": anexos_lotes,
             "competencias": competencias,
             "selecionada": selecionada,
             "itens_tabela": await entradas.list_items(current_user.tenant_id, selecionada)
@@ -2761,6 +2776,42 @@ async def exportar_tabela_atualizacao(
     )
 
 
+@router.get("/prices/batches/{batch_id}/source-file", include_in_schema=False)
+async def baixar_arquivo_original_do_lote(
+    batch_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    anexo = await session.scalar(
+        select(PriceListSourceFile)
+        .join(PriceList, PriceList.id == PriceListSourceFile.price_list_id)
+        .where(
+            PriceListSourceFile.price_list_id == batch_id,
+            PriceListSourceFile.tenant_id == current_user.tenant_id,
+            PriceList.tenant_id == current_user.tenant_id,
+        )
+    )
+    if anexo is None:
+        return _redirect("/portal/products?aba=tabelas", "anexo-nao-encontrado")
+    nome_original = Path(anexo.filename).name[:255] or "arquivo"
+    nome_ascii = re.sub(r"[^A-Za-z0-9._-]", "_", nome_original) or "arquivo"
+    return Response(
+        content=anexo.content,
+        media_type=anexo.mime_type,
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{nome_ascii}"; '
+                f"filename*=UTF-8''{quote(nome_original)}"
+            ),
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+            "X-Price-Source-SHA256": anexo.sha256,
+        },
+    )
+
+
 @router.post("/prices/import", include_in_schema=False)
 async def importar_tabela_portal(
     request: Request,
@@ -2806,6 +2857,18 @@ async def importar_tabela_portal(
         resultado.price_list.created_by = current_user.user_id
         resultado.price_list.source_wamid = f"portal:{uuid.uuid4()}"
         resultado.price_list.source_kind = "PORTAL_CSV"
+        session.add(
+            PriceListSourceFile(
+                id=uuid.uuid4(),
+                tenant_id=current_user.tenant_id,
+                price_list_id=resultado.price_list.id,
+                filename=Path(arquivo.filename or "tabela.csv").name[:255],
+                mime_type="text/csv",
+                byte_size=len(conteudo),
+                sha256=hashlib.sha256(conteudo).hexdigest(),
+                content=conteudo,
+            )
+        )
         await session.commit()
     except (UnicodeDecodeError, ValueError, csv.Error):
         await session.rollback()

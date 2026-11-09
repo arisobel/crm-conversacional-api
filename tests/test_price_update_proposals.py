@@ -5,11 +5,58 @@ import pytest
 from conftest import build_portal_world
 from sqlalchemy import select
 
-from crm_api.models.pricing import AvailabilityStatus, PriceEntry, PriceList, PriceListStatus
+from crm_api.models.pricing import (
+    AvailabilityStatus,
+    PriceEntry,
+    PriceList,
+    PriceListSourceFile,
+    PriceListStatus,
+)
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.price_entries import PriceEntryRepository
 from crm_api.services.price_publication import PricePublicationService
-from crm_api.services.price_update import ProposedPriceRow, RepresentativePriceUpdateService
+from crm_api.services.price_update import (
+    ProposedPriceRow,
+    ProposedPriceSourceFile,
+    RepresentativePriceUpdateService,
+)
+
+
+@pytest.mark.asyncio
+async def test_proposta_guarda_pdf_original_vinculado_ao_lote_e_autor():
+    world = await build_portal_world()
+    content = b"%PDF-1.4 tabela de teste"
+    try:
+        async with world.app.state.session_factory() as session:
+            proposal = await RepresentativePriceUpdateService(session).propose(
+                tenant_id=world.tenant_id,
+                representative_user_id=world.representative_a_id,
+                source_wamid="wamid.with-file",
+                reference_month=date(2026, 11, 1),
+                source_kind="WHATSAPP_PDF",
+                source_file=ProposedPriceSourceFile(
+                    filename="tabela especial.pdf",
+                    mime_type="application/pdf",
+                    content=content,
+                ),
+                rows=[ProposedPriceRow("TEX-75-36-CRU", Decimal("12.50"))],
+            )
+            await session.commit()
+            batch = await session.get(PriceList, proposal.proposal_id)
+            attachment = await session.scalar(
+                select(PriceListSourceFile).where(
+                    PriceListSourceFile.price_list_id == proposal.proposal_id
+                )
+            )
+
+            assert batch.created_by == world.representative_a_id
+            assert batch.source_kind == "WHATSAPP_PDF"
+            assert attachment.filename == "tabela especial.pdf"
+            assert attachment.content == content
+            assert attachment.byte_size == len(content)
+            assert len(attachment.sha256) == 64
+    finally:
+        await world.app.state.engine.dispose()
 
 
 @pytest.mark.asyncio

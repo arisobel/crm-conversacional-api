@@ -27,6 +27,7 @@ from crm_api.models.pricing import (
     PriceEntry,
     PriceList,
     PriceListItem,
+    PriceListSourceFile,
     PriceListStatus,
 )
 from crm_api.models.tax import IcmsRule
@@ -374,6 +375,41 @@ async def test_publicar_lote_pela_tela_cria_a_competencia(world, admin):
         entrada = await session.scalar(select(PriceEntry))
     assert entrada.base_price == Decimal("12.0500")
     assert entrada.source_batch_id == lote_id
+
+
+@pytest.mark.asyncio
+async def test_historico_exibe_e_entrega_anexo_original_so_para_admin(world, admin):
+    lote_id = await _lote(world, nome="Tabela recebida")
+    content = b"%PDF-1.4 evidencia"
+    async with world.app.state.session_factory() as session:
+        lote = await session.get(PriceList, lote_id)
+        lote.created_by = world.admin_id
+        lote.source_kind = "WHATSAPP_PDF"
+        session.add(
+            PriceListSourceFile(
+                id=uuid4(),
+                tenant_id=world.tenant_id,
+                price_list_id=lote_id,
+                filename="tabela novembro.pdf",
+                mime_type="application/pdf",
+                byte_size=len(content),
+                sha256="a" * 64,
+                content=content,
+            )
+        )
+        await session.commit()
+
+    page = await admin.get("/portal/products?aba=tabelas")
+    assert "Tabela recebida" in page.text
+    assert "baixar arquivo" in page.text
+    assert "WhatsApp · PDF" in page.text
+
+    download = await admin.get(f"/portal/prices/batches/{lote_id}/source-file")
+    assert download.status_code == 200
+    assert download.content == content
+    assert download.headers["content-type"] == "application/pdf"
+    assert "tabela_novembro.pdf" in download.headers["content-disposition"]
+    assert download.headers["cache-control"] == "private, no-store"
 
 
 @pytest.mark.asyncio
