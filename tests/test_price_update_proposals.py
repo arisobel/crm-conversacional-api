@@ -5,6 +5,7 @@ import pytest
 from conftest import build_portal_world
 from sqlalchemy import select
 
+from crm_api.models.catalog import Product
 from crm_api.models.pricing import (
     AvailabilityStatus,
     PriceEntry,
@@ -106,6 +107,15 @@ async def test_proposta_valida_duplicidade_compara_e_so_publica_apos_confirmacao
             assert batch.status is PriceListStatus.DRAFT
 
         async with world.app.state.session_factory() as session:
+            service = RepresentativePriceUpdateService(session)
+            batch = await service.get_owned(
+                world.tenant_id, world.representative_a_id, proposal.proposal_id
+            )
+            await service.materialize_for_confirmation(
+                batch,
+                actor_user_id=world.representative_a_id,
+                request_id="wamid.confirm",
+            )
             result = await PricePublicationService(
                 session=session,
                 entries=PriceEntryRepository(session),
@@ -131,7 +141,7 @@ async def test_proposta_valida_duplicidade_compara_e_so_publica_apos_confirmacao
 
 
 @pytest.mark.asyncio
-async def test_proposta_rejeita_sku_desconhecido_sem_criar_rascunho():
+async def test_proposta_pede_dados_minimos_para_produto_novo_sem_criar_rascunho():
     world = await build_portal_world()
     try:
         async with world.app.state.session_factory() as session:
@@ -142,7 +152,10 @@ async def test_proposta_rejeita_sku_desconhecido_sem_criar_rascunho():
                 reference_month=date(2026, 11, 1),
                 rows=[ProposedPriceRow("NAO-EXISTE", Decimal("12.50"))],
             )
-            assert proposal.unknown_skus == ["NAO-EXISTE"]
+            assert proposal.incomplete_rows == [
+                "NAO-EXISTE: produto novo sem nome comercial, familia"
+            ]
+            assert proposal.changes[0].change == "NEW"
             assert proposal.proposal_id is None
     finally:
         await world.app.state.engine.dispose()
@@ -184,6 +197,12 @@ async def test_proposta_suspende_produto_sem_apagar_preco_anterior():
             assert proposal.changes[0].new_availability == "SUSPENDED"
 
             batch = await session.get(PriceList, proposal.proposal_id)
+            service = RepresentativePriceUpdateService(session)
+            await service.materialize_for_confirmation(
+                batch,
+                actor_user_id=world.representative_a_id,
+                request_id="wamid.suspended.confirm",
+            )
             await PricePublicationService(
                 session=session,
                 entries=PriceEntryRepository(session),
@@ -204,5 +223,119 @@ async def test_proposta_suspende_produto_sem_apagar_preco_anterior():
             )
             assert current.availability is AvailabilityStatus.SUSPENDED
             assert current.base_price == Decimal("10.0000")
+    finally:
+        await world.app.state.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_produto_novo_so_aparece_no_catalogo_depois_da_confirmacao():
+    world = await build_portal_world()
+    reference_month = date(2026, 11, 1)
+    try:
+        async with world.app.state.session_factory() as session:
+            service = RepresentativePriceUpdateService(session)
+            proposal = await service.propose(
+                tenant_id=world.tenant_id,
+                representative_user_id=world.representative_a_id,
+                source_wamid="wamid.new-product",
+                reference_month=reference_month,
+                rows=[
+                    ProposedPriceRow(
+                        sku="PEU-20",
+                        commercial_name="20/1 PUE",
+                        family_name="Elastano",
+                        unit="kg",
+                        base_price=Decimal("13.20"),
+                        availability=AvailabilityStatus.AVAILABLE,
+                    )
+                ],
+            )
+            await session.commit()
+            assert proposal.ready_for_confirmation is True
+            assert proposal.changes[0].change == "NEW"
+            assert (
+                await session.scalar(
+                    select(Product).where(
+                        Product.tenant_id == world.tenant_id, Product.sku == "PEU-20"
+                    )
+                )
+                is None
+            )
+
+        async with world.app.state.session_factory() as session:
+            service = RepresentativePriceUpdateService(session)
+            batch = await service.get_owned(
+                world.tenant_id, world.representative_a_id, proposal.proposal_id
+            )
+            await service.materialize_for_confirmation(
+                batch,
+                actor_user_id=world.representative_a_id,
+                request_id="wamid.new-product.confirm",
+            )
+            result = await PricePublicationService(
+                session=session,
+                entries=PriceEntryRepository(session),
+                audit=AuditRepository(session),
+            ).publish_batch(
+                tenant_id=world.tenant_id,
+                batch_id=batch.id,
+                actor_user_id=world.representative_a_id,
+                request_id="wamid.new-product.confirm",
+            )
+            await session.commit()
+            product = await session.scalar(
+                select(Product).where(Product.tenant_id == world.tenant_id, Product.sku == "PEU-20")
+            )
+            assert product is not None
+            assert product.unit == "KG"
+            assert result.criados == 1
+    finally:
+        await world.app.state.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_alteracao_cadastral_e_comparada_e_so_aplicada_apos_confirmar():
+    world = await build_portal_world()
+    try:
+        async with world.app.state.session_factory() as session:
+            product = await session.get(Product, world.product_id)
+            original_name = product.commercial_name
+            proposal = await RepresentativePriceUpdateService(session).propose(
+                tenant_id=world.tenant_id,
+                representative_user_id=world.representative_a_id,
+                source_wamid="wamid.catalog-change",
+                reference_month=date(2026, 11, 1),
+                rows=[
+                    ProposedPriceRow(
+                        sku=product.sku,
+                        commercial_name="75/36 trama revisado",
+                        unit="cone",
+                    )
+                ],
+            )
+            await session.commit()
+            assert proposal.changes[0].change == "CHANGED"
+            assert {change.field for change in proposal.changes[0].field_changes} == {
+                "nome comercial",
+                "unidade",
+            }
+            product = await session.get(Product, world.product_id)
+            assert product.commercial_name == original_name
+
+        async with world.app.state.session_factory() as session:
+            service = RepresentativePriceUpdateService(session)
+            batch = await service.get_owned(
+                world.tenant_id, world.representative_a_id, proposal.proposal_id
+            )
+            materialized = await service.materialize_for_confirmation(
+                batch,
+                actor_user_id=world.representative_a_id,
+                request_id="wamid.catalog-change.confirm",
+            )
+            await session.commit()
+            product = await session.get(Product, world.product_id)
+            assert product.commercial_name == "75/36 trama revisado"
+            assert product.unit == "CONE"
+            assert materialized.products_updated == 1
     finally:
         await world.app.state.engine.dispose()

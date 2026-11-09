@@ -76,8 +76,17 @@ class AssistantReminderResponse(BaseModel):
 
 class PriceUpdateRow(BaseModel):
     sku: str = Field(min_length=1, max_length=120)
+    commercial_name: str | None = Field(default=None, max_length=300)
+    family_name: str | None = Field(default=None, max_length=200)
+    specification: str | None = Field(default=None, max_length=500)
+    unit: str | None = Field(default=None, max_length=30)
+    catalog_active: bool | None = None
     base_price: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=4)
+    base_tax_rate: Decimal | None = Field(default=None, ge=0, le=100, decimal_places=3)
     availability: AvailabilityStatus | None = None
+    expected_arrival_date: date | None = None
+    arrival_note: str | None = Field(default=None, max_length=500)
+    notes: str | None = Field(default=None, max_length=1000)
 
 
 class PriceUpdateSourceFile(BaseModel):
@@ -95,6 +104,12 @@ class AssistantProposePriceUpdateRequest(BaseModel):
     rows: list[PriceUpdateRow] = Field(min_length=1, max_length=500)
 
 
+class PriceUpdateFieldChangeResponse(BaseModel):
+    field: str
+    previous: str | None = None
+    new: str | None = None
+
+
 class PriceUpdateChangeResponse(BaseModel):
     sku: str
     product_name: str
@@ -103,6 +118,8 @@ class PriceUpdateChangeResponse(BaseModel):
     previous_availability: str | None = None
     new_availability: str
     change: str
+    field_changes: list[PriceUpdateFieldChangeResponse] = Field(default_factory=list)
+    new_family: bool = False
 
 
 class AssistantPriceUpdateProposalResponse(BaseModel):
@@ -111,6 +128,7 @@ class AssistantPriceUpdateProposalResponse(BaseModel):
     ready_for_confirmation: bool
     duplicate_skus: list[str] = Field(default_factory=list)
     unknown_skus: list[str] = Field(default_factory=list)
+    incomplete_rows: list[str] = Field(default_factory=list)
     changes: list[PriceUpdateChangeResponse] = Field(default_factory=list)
 
 
@@ -125,6 +143,9 @@ class AssistantPriceUpdateConfirmationResponse(BaseModel):
     created: int = 0
     updated: int = 0
     unchanged: int = 0
+    products_created: int = 0
+    products_updated: int = 0
+    families_created: int = 0
 
 
 class PriceItemsResponse(BaseModel):

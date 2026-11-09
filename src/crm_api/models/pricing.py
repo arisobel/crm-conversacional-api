@@ -78,6 +78,7 @@ class PriceList(Base):
     )
     source_wamid: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    proposal_payload: Mapped[dict | None] = mapped_column(_JSON_COLUMN, nullable=True)
 
 
 class PriceListSourceFile(Base):

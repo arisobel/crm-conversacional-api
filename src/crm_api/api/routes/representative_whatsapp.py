@@ -538,11 +538,7 @@ async def assistant_list_portfolio_customers(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> PortfolioCustomersResponse:
     tenant, actor = await _resolve_assistant_execution(
-        request,
-        session,
-        tenant_slug,
-        phone,
-        payload.context,
+        request, session, tenant_slug, phone, payload.context,
         "CRM_REP_LIST_PORTFOLIO_CUSTOMERS",
     )
     result = await _service(request, session).list_portfolio_customers(
@@ -603,7 +599,11 @@ async def assistant_customer_conversation_summary(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> CustomerConversationSummaryResponse:
     tenant, actor = await _resolve_assistant_execution(
-        request, session, tenant_slug, phone, payload.context,
+        request,
+        session,
+        tenant_slug,
+        phone,
+        payload.context,
         "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
     )
     try:
@@ -771,7 +771,20 @@ async def assistant_propose_price_update(
             source_kind=payload.source_kind,
             source_file=source_file,
             rows=[
-                ProposedPriceRow(row.sku, row.base_price, row.availability)
+                ProposedPriceRow(
+                    sku=row.sku,
+                    base_price=row.base_price,
+                    availability=row.availability,
+                    commercial_name=row.commercial_name,
+                    family_name=row.family_name,
+                    specification=row.specification,
+                    unit=row.unit,
+                    catalog_active=row.catalog_active,
+                    base_tax_rate=row.base_tax_rate,
+                    expected_arrival_date=row.expected_arrival_date,
+                    arrival_note=row.arrival_note,
+                    notes=row.notes,
+                )
                 for row in payload.rows
             ],
         )
@@ -786,7 +799,16 @@ async def assistant_propose_price_update(
         ready_for_confirmation=proposal.ready_for_confirmation,
         duplicate_skus=proposal.duplicate_skus,
         unknown_skus=proposal.unknown_skus,
-        changes=[PriceUpdateChangeResponse(**change.__dict__) for change in proposal.changes],
+        incomplete_rows=proposal.incomplete_rows,
+        changes=[
+            PriceUpdateChangeResponse(
+                **{
+                    **change.__dict__,
+                    "field_changes": [item.__dict__ for item in change.field_changes],
+                }
+            )
+            for change in proposal.changes
+        ],
     )
 
 
@@ -819,6 +841,14 @@ async def assistant_confirm_price_update(
         )
     if batch.status != PriceListStatus.DRAFT:
         raise HTTPException(status_code=409, detail="price update proposal is not publishable")
+    try:
+        materialized = await updates.materialize_for_confirmation(
+            batch,
+            actor_user_id=actor.user_id,
+            request_id=payload.context.request_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     result = await PricePublicationService(
         session=session,
         entries=PriceEntryRepository(session),
@@ -836,6 +866,9 @@ async def assistant_confirm_price_update(
         created=result.criados,
         updated=result.atualizados,
         unchanged=result.inalterados,
+        products_created=materialized.products_created,
+        products_updated=materialized.products_updated,
+        families_created=materialized.families_created,
     )
 
 
