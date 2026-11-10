@@ -4,6 +4,14 @@ Registre aqui somente problemas observados no código, testes, contratos ou comp
 
 ## Abertos
 
+- Em 2026-11-10, uma proposta de atualização de preços preparada pelo WhatsApp
+  falhou ao ser confirmada. O Gateway mostrou apenas que nenhum preço foi
+  publicado: ele converte qualquer falha do endpoint de confirmação na mesma
+  resposta e preserva somente um código HTTP genérico. Assim, a interface não
+  permite distinguir timeout, conflito de dados ou restrição do banco. Antes de
+  repetir a publicação, registrar a etapa e a causa segura do erro e conferir se
+  o lote continuou `DRAFT`.
+
 - `ix_product_compositions_product(product_id)` é redundante com
   `ux_product_composition(product_id, fiber_id)`: um btree já atende consulta pelo
   prefixo da chave. Custa escrita e não paga leitura. Fica como está — a `0014` já

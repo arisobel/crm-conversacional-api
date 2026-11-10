@@ -1,5 +1,14 @@
 # Backlog priorizado
 
+## Próximo passo operacional — 2026-11-10
+
+- [ ] Melhorar o e-mail/mensagem de confirmação da atualização de preços.
+- [ ] Investigar por que a proposta lida pelo WhatsApp não foi materializada e publicada no CRM.
+- [ ] Exibir uma causa útil e segura quando a confirmação falhar, sem reduzir timeout,
+      conflito de dados e erro de banco à mesma mensagem genérica.
+- [ ] Validar novamente o mesmo lote até confirmar que catálogo, preços e histórico
+      foram gravados de forma atômica.
+
 Direção vigente: [CRM de representantes](../10_product/REPRESENTATIVE_DIRECTION.md).
 Plano de entrega: [F5](../40_delivery/F5_REPRESENTATIVE_PORTAL.md).
 
