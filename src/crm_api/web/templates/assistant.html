@@ -1,10 +1,91 @@
 {% extends "base.html" %}
 {% block title %}Central do assistente{% endblock %}
 {% block conteudo %}
-<div class="cabecalho"><h1>Central dos robôs</h1></div>
-<p class="dica">Prepare as orientações de conversa e os acessos dos seus robôs.</p>
-<p><a class="botao" href="/portal/assistant/unresolved">Ver mensagens não entendidas</a></p>
-<div class="painel">
+<div class="cabecalho central-cabecalho">
+  <div><h1>Central dos robôs</h1><p class="dica">Funcionamento, qualidade das conversas, agenda e acessos em um só lugar.</p></div>
+  <a class="botao botao-glass" href="/portal/assistant/unresolved">Mensagens não entendidas</a>
+</div>
+
+<section class="painel painel-glass central-operacao">
+  <div class="central-secao-titulo">
+    <div><p class="inicio-etiqueta">FUNCIONAMENTO</p><h2>Visão operacional</h2></div>
+    <span class="central-status status-{{ monitoring.status|lower }}">
+      {% if monitoring.status == 'OK' %}Operação normal{% else %}Requer atenção{% endif %}
+    </span>
+  </div>
+  <div class="central-metricas">
+    <article>
+      <span>Gateway WhatsApp</span>
+      <strong>{% if gateway_status %}Online{% else %}Indisponível{% endif %}</strong>
+      <small>{% if gateway_status %}{{ gateway_status.lines|length }} linha(s) · {{ gateway_status.active_conversations }} conversa(s) ativa(s){% else %}Não foi possível consultar agora{% endif %}</small>
+    </article>
+    <article>
+      <span>Mensagens recebidas · 24h</span>
+      <strong>{{ monitoring.customer_messages_24h + monitoring.representative_messages_24h }}</strong>
+      <small>{{ monitoring.customer_messages_24h }} de clientes · {{ monitoring.representative_messages_24h }} de representantes</small>
+    </article>
+    <article>
+      <span>Compreensão · 24h</span>
+      <strong>{% if monitoring.comprehension_percent is not none %}{{ monitoring.comprehension_percent }}%{% else %}—{% endif %}</strong>
+      <small>{{ monitoring.recoveries_24h }} recuperação(ões) em {{ monitoring.responses_24h }} resposta(s)</small>
+    </article>
+    <article>
+      <span>Agenda · próximas 24h</span>
+      <strong>{{ monitoring.upcoming_reminders_24h }}</strong>
+      <small>{% if monitoring.overdue_reminders %}{{ monitoring.overdue_reminders }} aviso(s) atrasado(s){% else %}Nenhum aviso atrasado{% endif %}</small>
+    </article>
+    <article>
+      <span>Transferências humanas · 7d</span>
+      <strong>{{ monitoring.handoffs_7d }}</strong>
+      <small>Pedidos encaminhados com contexto</small>
+    </article>
+    <article>
+      <span>Ações registradas · 7d</span>
+      <strong>{{ monitoring.confirmed_actions_7d }}</strong>
+      <small>Alterações importantes com trilha de auditoria</small>
+    </article>
+  </div>
+  {% if monitoring.alerts %}
+  <div class="central-alertas" role="status">
+    <strong>Pontos de atenção</strong>
+    <ul>{% for alert in monitoring.alerts %}<li>{{ alert }}</li>{% endfor %}</ul>
+  </div>
+  {% else %}
+  <p class="central-sem-alertas">Nenhum alerta operacional identificado.</p>
+  {% endif %}
+</section>
+
+<section class="central-controles">
+  <article class="painel painel-glass">
+    <h2>Atendimento ao cliente</h2>
+    <p><strong>{{ monitoring.customer_messages_24h }}</strong> mensagem(ns) nas últimas 24 horas.</p>
+    <ul>
+      <li>Contexto recente e conversa social habilitados.</li>
+      <li>{{ monitoring.out_of_scope_24h }} pedido(s) compreendido(s), mas fora das funções atuais.</li>
+      <li>Transferência humana disponível quando o robô não puder concluir.</li>
+    </ul>
+  </article>
+  <article class="painel painel-glass">
+    <h2>Assistente do representante</h2>
+    <p><strong>{{ enabled_representatives }}/{{ users|length }}</strong> representante(s) habilitado(s).</p>
+    <ul>
+      <li>Agenda, carteira e preços respeitam as permissões configuradas.</li>
+      <li>Ações sensíveis exigem confirmação antes da gravação.</li>
+      <li>{{ monitoring.notifications_sent_7d }} aviso(s) de agenda enviado(s) em 7 dias.</li>
+    </ul>
+  </article>
+</section>
+
+{% if gateway_status and gateway_status.lines %}
+<section class="painel painel-glass central-linhas">
+  <h2>Linhas e fluxos ativos</h2>
+  <div class="tabela-rolagem"><table><thead><tr><th>Linha</th><th>Fluxo</th><th>Situação</th></tr></thead><tbody>
+    {% for line in gateway_status.lines %}<tr><td>{{ line.label }}</td><td>{{ line.flow or '—' }}</td><td><span class="central-status status-ok">{{ line.status }}</span></td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endif %}
+
+<div class="painel painel-glass">
   <strong>Configuração ativa</strong>
   <p>As escolhas salvas aqui controlam as permissões do assistente no WhatsApp. Capacidades desmarcadas permanecem bloqueadas.</p>
 </div>

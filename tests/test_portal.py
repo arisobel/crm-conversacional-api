@@ -135,6 +135,76 @@ async def test_central_exibe_mensagem_que_o_robo_nao_entendeu(world, admin):
 
 
 @pytest.mark.asyncio
+async def test_central_exibe_funcionamento_conversa_agenda_e_handoff(world, admin):
+    now = datetime.now(UTC)
+    async with world.app.state.session_factory() as session:
+        session.add_all([
+            CustomerInteraction(
+                id=uuid4(), tenant_id=world.tenant_id,
+                customer_id=world.customer_a_id,
+                kind=InteractionKind.CUSTOMER_CHANNEL,
+                direction=InteractionDirection.INBOUND,
+                source=GATEWAY_SOURCE, channel="WHATSAPP",
+                external_ref="wamid.MONITOR.CUSTOMER", occurred_at=now,
+                summary="Mensagem do cliente",
+            ),
+            CustomerInteraction(
+                id=uuid4(), tenant_id=world.tenant_id,
+                customer_id=world.customer_a_id,
+                kind=InteractionKind.CUSTOMER_CHANNEL,
+                direction=InteractionDirection.OUTBOUND,
+                source=GATEWAY_SOURCE, channel="WHATSAPP",
+                external_ref="wamid.MONITOR.CUSTOMER:out:1", occurred_at=now,
+                summary="Pode explicar de outra forma?", payload={"outcome": "RECOVERY"},
+            ),
+            CustomerInteraction(
+                id=uuid4(), tenant_id=world.tenant_id,
+                customer_id=world.customer_a_id,
+                kind=InteractionKind.CUSTOMER_CHANNEL,
+                direction=InteractionDirection.OUTBOUND,
+                source=GATEWAY_SOURCE, channel="WHATSAPP",
+                external_ref="wamid.MONITOR.CUSTOMER:out:2", occurred_at=now,
+                summary="Vou encaminhar seu pedido.", payload={"outcome": "HUMAN_HANDOFF"},
+            ),
+            CustomerInteraction(
+                id=uuid4(), tenant_id=world.tenant_id,
+                actor_user_id=world.representative_a_id,
+                kind=InteractionKind.ACTOR_CHANNEL,
+                direction=InteractionDirection.INBOUND,
+                source=GATEWAY_SOURCE, channel="WHATSAPP",
+                external_ref="wamid.MONITOR.REP", occurred_at=now,
+                summary="Mensagem do representante",
+            ),
+            RepresentativeReminder(
+                id=uuid4(), tenant_id=world.tenant_id,
+                representative_user_id=world.representative_a_id,
+                customer_id=world.customer_a_id,
+                origin=ReminderOrigin.CUSTOMER.value,
+                kind="CALL", status=ReminderStatus.CONFIRMED.value,
+                note="Ligação atrasada", due_at=now - timedelta(minutes=5),
+                timezone="America/Sao_Paulo", source_wamid="wamid.MONITOR.REMINDER",
+            ),
+            AuditLog(
+                id=uuid4(), tenant_id=world.tenant_id,
+                actor_user_id=world.representative_a_id,
+                action="PRICE_BATCH_PUBLISHED", entity="price_lists",
+                entity_id=uuid4(), after={"criados": 1},
+            ),
+        ])
+        await session.commit()
+
+    page = await admin.get("/portal/assistant")
+
+    assert page.status_code == 200
+    assert "Visão operacional" in page.text
+    assert "Requer atenção" in page.text
+    assert "1 aviso(s) atrasado(s)" in page.text
+    assert "Transferências humanas" in page.text
+    assert "Gateway WhatsApp" in page.text
+    assert "Não foi possível consultar agora" in page.text
+
+
+@pytest.mark.asyncio
 async def test_carteira_unifica_calendario_e_cria_compromisso_manual(world, admin):
     page = await admin.get("/portal/customers")
     assert "Carteira &amp; Agenda" in page.text

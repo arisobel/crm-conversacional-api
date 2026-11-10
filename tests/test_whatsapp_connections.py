@@ -4,6 +4,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
+import crm_api.services.gateway_whatsapp_onboarding as gateway_module
 from crm_api.models.user import User
 from crm_api.models.whatsapp_connection import RepresentativeWhatsappConnection
 from crm_api.services.gateway_whatsapp_onboarding import (
@@ -64,6 +65,58 @@ def gateway(monkeypatch):
 async def _csrf(client):
     await client.get("/portal/customers")
     return client.cookies.get("crm_csrf")
+
+
+@pytest.mark.asyncio
+async def test_gateway_status_overview_is_sanitized(monkeypatch):
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "servico": "whatsapp-webhook-caprover",
+                "versao": "build-123",
+                "gerado_em": "2026-11-10T20:00:00Z",
+                "aplicativos": 2,
+                "fluxos": 3,
+                "linhas": [{
+                    "id": "1", "rotulo": "Atendimento", "status": "ACTIVE",
+                    "fluxo": "consulta_cliente", "numero_exibicao": "+5511000000000",
+                }],
+                "contatos_ativos_7d": 12,
+                "conversas_ativas": 4,
+            }
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def get(self, url, *, headers):
+            assert url.endswith("/internal/status/overview")
+            assert headers["Authorization"] == "Bearer gateway-secret"
+            return Response()
+
+    monkeypatch.setattr(gateway_module.httpx, "AsyncClient", lambda **_: Client())
+    world = await build_portal_world(
+        whatsapp_gateway_base_url="https://gateway.test",
+        whatsapp_gateway_internal_token="gateway-secret",
+    )
+    try:
+        result = await GatewayWhatsappOnboardingClient(
+            world.app.state.settings
+        ).status_overview()
+        assert result["version"] == "build-123"
+        assert result["active_conversations"] == 4
+        assert result["lines"] == [{
+            "label": "Atendimento", "status": "ACTIVE", "flow": "consulta_cliente"
+        }]
+        assert "+5511000000000" not in str(result)
+    finally:
+        await world.app.state.engine.dispose()
 
 
 @pytest.mark.asyncio

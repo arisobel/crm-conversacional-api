@@ -71,6 +71,7 @@ from crm_api.repositories.reminders import ReminderRepository
 from crm_api.repositories.users import SessionRepository, UserRepository
 from crm_api.repositories.whatsapp_campaigns import WhatsappCampaignRepository
 from crm_api.repositories.whatsapp_connections import WhatsappConnectionRepository
+from crm_api.services.assistant_monitoring import assistant_monitoring_snapshot
 from crm_api.services.assistant_policy import REPRESENTATIVE_CAPABILITIES
 from crm_api.services.auth import AuthenticationFailed, normalize_email
 from crm_api.services.catalog import (
@@ -115,7 +116,10 @@ from crm_api.services.customer_price_list import (
     PricesUnavailable,
 )
 from crm_api.services.customers import InvalidWhatsappNumber
-from crm_api.services.gateway_whatsapp_onboarding import GatewayWhatsappOnboardingClient
+from crm_api.services.gateway_whatsapp_onboarding import (
+    GatewayOnboardingError,
+    GatewayWhatsappOnboardingClient,
+)
 from crm_api.services.icms import (
     AmbiguousIcmsRule,
     ConversionMode,
@@ -1378,6 +1382,15 @@ async def pagina_assistente(
     behaviors = (await session.scalars(select(ConversationBehaviorSettings).where(
         ConversationBehaviorSettings.tenant_id == tenant_id
     ))).all()
+    monitoring = await assistant_monitoring_snapshot(session, tenant_id)
+    gateway_status = None
+    gateway_error = None
+    try:
+        gateway_status = await GatewayWhatsappOnboardingClient(
+            request.app.state.settings
+        ).status_overview()
+    except GatewayOnboardingError as error:
+        gateway_error = str(error)
     selected: dict[uuid.UUID, set[str]] = {user.id: set() for user in users}
     for capability in capabilities:
         if capability.user_id in selected:
@@ -1390,6 +1403,10 @@ async def pagina_assistente(
         "capabilities": _ASSISTANT_CAPABILITIES,
         "behaviors": {behavior.bot_kind: behavior for behavior in behaviors},
         "default_instructions": _BEHAVIOR_DEFAULT_INSTRUCTIONS,
+        "monitoring": monitoring,
+        "gateway_status": gateway_status,
+        "gateway_error": gateway_error,
+        "enabled_representatives": sum(setting.enabled for setting in settings),
     }, current_user=current_user, mensagem=m)
 
 

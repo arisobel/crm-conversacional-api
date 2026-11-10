@@ -735,5 +735,39 @@ html[data-theme="dark"] .acao-glass { color: #dffcff; border-color: #347590 !imp
 html[data-theme="dark"] .importacao-grade label { color: #bed2dc; }
 html[data-theme="dark"] .importacao-grade input { color: #eefbff; border-color: #32617b; background: #0d2e44; }
 
+/* ------------------------------------------------ central operacional dos robôs */
+.central-cabecalho { align-items: center; }
+.central-cabecalho .dica { margin: 5px 0 0; }
+.central-operacao { padding: 25px; }
+.central-secao-titulo { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.central-secao-titulo h2 { margin: 0; }
+.central-secao-titulo .inicio-etiqueta { margin-bottom: 4px; }
+.central-status { display: inline-flex; align-items: center; width: fit-content; padding: 5px 11px; border: 1px solid; border-radius: 999px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.central-status::before { width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: currentColor; content: ""; }
+.central-status.status-ok { color: #087858; border-color: #bde6da; background: #e7faf2; }
+.central-status.status-attention { color: #9b5c0c; border-color: #ecd69d; background: #fff8db; }
+.central-metricas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.central-metricas article { display: flex; min-height: 126px; flex-direction: column; justify-content: center; padding: 17px 19px; border: 1px solid rgb(255 255 255 / 90%); border-radius: 18px; background: linear-gradient(145deg, rgb(220 243 249 / 76%), rgb(196 229 239 / 58%)); box-shadow: inset 0 1px 1px white, 0 8px 22px rgb(38 104 131 / 10%); }
+.central-metricas span { color: #587492; font-size: 12px; font-weight: 700; }
+.central-metricas strong { margin: 4px 0; color: #0b3157; font-size: 28px; line-height: 1.1; }
+.central-metricas small { color: #617d98; line-height: 1.35; }
+.central-alertas, .central-sem-alertas { margin: 16px 0 0; padding: 13px 16px; border-radius: 13px; }
+.central-alertas { color: #80510d; border: 1px solid #ecd69d; background: #fff8db; }
+.central-alertas ul { margin: 7px 0 0; padding-left: 20px; }
+.central-sem-alertas { color: #087858; border: 1px solid #bde6da; background: #e7faf2; }
+.central-controles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.central-controles .painel { margin-top: 0; }
+.central-controles h2 { margin-top: 0; }
+.central-controles p strong { color: #0a3158; font-size: 25px; }
+.central-controles ul { margin-bottom: 0; padding-left: 20px; color: var(--tinta-fraca); }
+.central-linhas table { margin-bottom: 0; }
+
+html[data-theme="dark"] .central-metricas article { border-color: rgb(74 146 174 / 45%); background: linear-gradient(145deg, rgb(28 77 104 / 80%), rgb(11 48 72 / 82%)); box-shadow: inset 0 1px 1px rgb(255 255 255 / 7%), 0 10px 24px rgb(0 0 0 / 20%); }
+html[data-theme="dark"] .central-metricas span, html[data-theme="dark"] .central-metricas small, html[data-theme="dark"] .central-controles ul { color: #bdd2de; }
+html[data-theme="dark"] .central-metricas strong, html[data-theme="dark"] .central-controles p strong { color: #f2fcff; }
+html[data-theme="dark"] .central-status.status-ok, html[data-theme="dark"] .central-sem-alertas { color: #55ede7; border-color: #278f93; background: #123f50; }
+html[data-theme="dark"] .central-status.status-attention, html[data-theme="dark"] .central-alertas { color: #ffd879; border-color: #806a31; background: #413817; }
+
 @media (max-width: 1050px) { .importacao-grade { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 700px) { .abas-produtos { width: 100%; overflow-x: auto; } .abas-produtos a { flex: 0 0 auto; } .painel-titulo-acoes, .importacao-grade { grid-template-columns: 1fr; flex-direction: column; } }
+@media (max-width: 1050px) { .central-metricas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .abas-produtos { width: 100%; overflow-x: auto; } .abas-produtos a { flex: 0 0 auto; } .painel-titulo-acoes, .importacao-grade, .central-controles, .central-metricas { grid-template-columns: 1fr; flex-direction: column; } .central-secao-titulo { align-items: flex-start; flex-direction: column; } }

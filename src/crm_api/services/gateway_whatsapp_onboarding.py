@@ -193,3 +193,49 @@ class GatewayWhatsappOnboardingClient:
         if status not in {"HUMAN_HANDOFF", "ASSISTANT_ACTIVE"}:
             raise GatewayOnboardingError("gateway returned an invalid handoff response")
         return status
+
+    async def status_overview(self) -> dict:
+        """Lê somente o resumo operacional sanitizado do Gateway."""
+        self._ready()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(min(self._timeout, 3.0))) as client:
+                response = await client.get(
+                    f"{self._base_url}/internal/status/overview",
+                    headers={"Authorization": f"Bearer {self._token.get_secret_value()}"},
+                )
+        except httpx.TimeoutException as error:
+            raise GatewayOnboardingError("gateway status request timed out") from error
+        except httpx.HTTPError as error:
+            raise GatewayOnboardingError("gateway status is unavailable") from error
+        if response.status_code in {401, 403}:
+            raise GatewayOnboardingError("gateway authentication failed")
+        if response.status_code >= 400:
+            raise GatewayOnboardingError("gateway status is unavailable")
+        try:
+            payload = response.json()
+        except ValueError as error:
+            raise GatewayOnboardingError("gateway returned an invalid status response") from error
+        if (
+            not isinstance(payload, dict)
+            or payload.get("servico") != "whatsapp-webhook-caprover"
+            or not isinstance(payload.get("linhas"), list)
+        ):
+            raise GatewayOnboardingError("gateway returned an invalid status response")
+        return {
+            "service": payload["servico"],
+            "version": str(payload.get("versao") or "unknown")[:80],
+            "generated_at": payload.get("gerado_em"),
+            "applications": int(payload.get("aplicativos") or 0),
+            "flows": int(payload.get("fluxos") or 0),
+            "active_contacts_7d": int(payload.get("contatos_ativos_7d") or 0),
+            "active_conversations": int(payload.get("conversas_ativas") or 0),
+            "lines": [
+                {
+                    "label": str(item.get("rotulo") or "Linha WhatsApp")[:120],
+                    "status": str(item.get("status") or "UNKNOWN")[:32],
+                    "flow": str(item.get("fluxo") or "")[:160],
+                }
+                for item in payload["linhas"][:50]
+                if isinstance(item, dict)
+            ],
+        }
