@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 from conftest import build_portal_world
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from crm_api.models.catalog import Product, ProductFamily
 from crm_api.models.pricing import (
@@ -263,6 +263,9 @@ async def test_produto_novo_so_aparece_no_catalogo_depois_da_confirmacao():
             )
 
         async with world.app.state.session_factory() as session:
+            # Produção usa PostgreSQL com FKs ativas. Esta guarda faz o SQLite
+            # reproduzir a ordem de inserção exigida ao criar família + produto.
+            await session.execute(text("PRAGMA foreign_keys=ON"))
             service = RepresentativePriceUpdateService(session)
             batch = await service.get_owned(
                 world.tenant_id, world.representative_a_id, proposal.proposal_id

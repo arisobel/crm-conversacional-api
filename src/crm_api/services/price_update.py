@@ -361,6 +361,11 @@ class RepresentativePriceUpdateService:
                     next_family_order += 10
                     result.families_created += 1
                     self._session.add(family)
+                    # `Product.family_id` recebe o UUID diretamente, sem uma
+                    # relationship ORM que informe a ordem de dependência ao
+                    # SQLAlchemy. Persiste a família antes de qualquer query
+                    # disparar autoflush dos produtos novos.
+                    await self._session.flush()
                     families_by_name[family.name.casefold()] = family
                     audit.record(
                         action="PRODUCT_FAMILY_CREATED_FROM_WHATSAPP",
