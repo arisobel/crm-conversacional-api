@@ -344,9 +344,55 @@ class RepresentativePriceUpdateService:
         )
         families_by_name = {family.name.casefold(): family for family in families}
         next_family_order = max((family.display_order for family in families), default=0) + 10
+        staged_items: dict[uuid.UUID, PriceListItem] = {}
+        staged_explicit_values: dict[uuid.UUID, dict[str, object]] = {}
 
         for order, row in enumerate(rows):
             current_pair = products.get(row.sku) or _match_generated_product(row, product_rows)
+            if current_pair is not None and current_pair[0].id in staged_items:
+                # O mesmo produto pode aparecer duas vezes na leitura (por
+                # exemplo, uma vez pelo SKU e outra pelo nome aproximado). A
+                # primeira linha preserva os dados cadastrais; a segunda pode
+                # apenas complementar os campos comerciais sem divergir deles.
+                product = current_pair[0]
+                staged_item = staged_items[product.id]
+                explicit_values = {
+                    field: value
+                    for field, value in {
+                        "base_price": row.base_price,
+                        "base_tax_rate": row.base_tax_rate,
+                        "availability": row.availability,
+                        "expected_arrival_date": row.expected_arrival_date,
+                        "arrival_note": row.arrival_note,
+                        "notes": row.notes,
+                    }.items()
+                    if value is not None
+                }
+                previous_explicit = staged_explicit_values[product.id]
+                conflicting = sorted(
+                    field
+                    for field, value in explicit_values.items()
+                    if field in previous_explicit and previous_explicit[field] != value
+                )
+                if conflicting:
+                    raise ValueError(
+                        f"{product.sku}: linhas do arquivo correspondem ao mesmo produto "
+                        f"com dados diferentes em {', '.join(conflicting)}"
+                    )
+                previous_explicit.update(explicit_values)
+                if row.base_price is not None:
+                    staged_item.base_price = row.base_price
+                if row.availability is not None:
+                    staged_item.availability = row.availability
+                if row.expected_arrival_date is not None:
+                    staged_item.expected_arrival_date = row.expected_arrival_date
+                if row.arrival_note is not None:
+                    staged_item.arrival_note = row.arrival_note
+                if row.base_tax_rate is not None:
+                    staged_item.item_tax_rate = row.base_tax_rate
+                if row.notes is not None:
+                    staged_item.notes = row.notes
+                continue
             family = None
             if row.family_name:
                 family = families_by_name.get(row.family_name.casefold())
@@ -444,6 +490,34 @@ class RepresentativePriceUpdateService:
                         request_id=request_id,
                     )
 
+            explicit_values = {
+                field: value
+                for field, value in {
+                    "base_price": row.base_price,
+                    "base_tax_rate": row.base_tax_rate,
+                    "availability": row.availability,
+                    "expected_arrival_date": row.expected_arrival_date,
+                    "arrival_note": row.arrival_note,
+                    "notes": row.notes,
+                }.items()
+                if value is not None
+            }
+            previous_explicit = staged_explicit_values.get(product.id)
+            if previous_explicit is not None:
+                conflicting = sorted(
+                    field
+                    for field, value in explicit_values.items()
+                    if field in previous_explicit and previous_explicit[field] != value
+                )
+                if conflicting:
+                    raise ValueError(
+                        f"{product.sku}: linhas do arquivo correspondem ao mesmo produto "
+                        f"com dados diferentes em {', '.join(conflicting)}"
+                    )
+                previous_explicit.update(explicit_values)
+            else:
+                staged_explicit_values[product.id] = explicit_values
+
             current = await self._current_price(batch.tenant_id, batch.reference_month, product.id)
             if current is None and current_pair is not None and not self._has_price_fields(row):
                 # Uma alteracao apenas cadastral nao deve criar artificialmente
@@ -455,8 +529,25 @@ class RepresentativePriceUpdateService:
             price = row.base_price
             if price is None:
                 price = current.base_price if current is not None else Decimal("0")
-            self._session.add(
-                PriceListItem(
+            staged_item = staged_items.get(product.id)
+            if staged_item is not None:
+                # Duas leituras equivalentes do mesmo artigo formam uma única
+                # linha do lote. Campos explícitos complementares prevalecem;
+                # divergências já foram recusadas acima.
+                if row.base_price is not None:
+                    staged_item.base_price = row.base_price
+                if row.availability is not None:
+                    staged_item.availability = row.availability
+                if row.expected_arrival_date is not None:
+                    staged_item.expected_arrival_date = row.expected_arrival_date
+                if row.arrival_note is not None:
+                    staged_item.arrival_note = row.arrival_note
+                if row.base_tax_rate is not None:
+                    staged_item.item_tax_rate = row.base_tax_rate
+                if row.notes is not None:
+                    staged_item.notes = row.notes
+                continue
+            staged_item = PriceListItem(
                     id=uuid.uuid4(),
                     tenant_id=batch.tenant_id,
                     price_list_id=batch.id,
@@ -490,7 +581,8 @@ class RepresentativePriceUpdateService:
                     ),
                     display_order=current.display_order if current else order,
                 )
-            )
+            self._session.add(staged_item)
+            staged_items[product.id] = staged_item
         await self._session.flush()
         return result
 

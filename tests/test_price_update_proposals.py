@@ -10,6 +10,7 @@ from crm_api.models.pricing import (
     AvailabilityStatus,
     PriceEntry,
     PriceList,
+    PriceListItem,
     PriceListSourceFile,
     PriceListStatus,
 )
@@ -418,5 +419,57 @@ async def test_linha_sem_sku_usa_familia_para_desempatar_nome_repetido():
             assert proposal.changes[0].sku == original.sku
             assert proposal.changes[0].change != "NEW"
             assert proposal.changes[0].generated_sku is False
+    finally:
+        await world.app.state.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_confirmacao_consolida_duas_linhas_equivalentes_no_mesmo_produto():
+    world = await build_portal_world()
+    try:
+        async with world.app.state.session_factory() as session:
+            product = await session.get(Product, world.product_id)
+            family = await session.get(ProductFamily, product.family_id)
+            proposal = await RepresentativePriceUpdateService(session).propose(
+                tenant_id=world.tenant_id,
+                representative_user_id=world.representative_a_id,
+                source_wamid="wamid.duplicate-product-match",
+                reference_month=date(2026, 11, 1),
+                rows=[
+                    ProposedPriceRow(
+                        sku="AUTO-DUPLICATE-1",
+                        generated_sku=True,
+                        commercial_name=product.commercial_name,
+                        family_name=family.name,
+                        availability=AvailabilityStatus.SUSPENDED,
+                    ),
+                    ProposedPriceRow(
+                        sku="AUTO-DUPLICATE-2",
+                        generated_sku=True,
+                        commercial_name=product.commercial_name.upper(),
+                        family_name=family.name.upper(),
+                        availability=AvailabilityStatus.SUSPENDED,
+                    ),
+                ],
+            )
+            await session.commit()
+
+        async with world.app.state.session_factory() as session:
+            service = RepresentativePriceUpdateService(session)
+            batch = await service.get_owned(
+                world.tenant_id, world.representative_a_id, proposal.proposal_id
+            )
+            await service.materialize_for_confirmation(
+                batch,
+                actor_user_id=world.representative_a_id,
+                request_id="wamid.duplicate-product-match.confirm",
+            )
+            items = list(
+                await session.scalars(
+                    select(PriceListItem).where(PriceListItem.price_list_id == batch.id)
+                )
+            )
+            assert len(items) == 1
+            assert items[0].availability is AvailabilityStatus.SUSPENDED
     finally:
         await world.app.state.engine.dispose()
