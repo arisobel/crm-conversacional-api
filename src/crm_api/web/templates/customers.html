@@ -3,31 +3,7 @@
 
 {% block conteudo %}
 {% if secao == 'pre-cadastros' %}
-<div class="cabecalho carteira-titulo">
-  <div><a class="link-voltar" href="/portal/customers">← Carteira &amp; Agenda</a><h1>Pré-cadastros pendentes</h1><p class="dica">{{ total_intakes }} aguardando conferência.</p></div>
-</div>
-{% if intakes %}
-  {% for intake, autor in intakes %}
-  <section class="painel">
-    <div class="cabecalho"><div><h2>{{ intake.legal_name }}</h2><p class="dica">{{ 'Pessoa física' if intake.customer_type == 'INDIVIDUAL' else 'Pessoa jurídica' }} · Aberto por {{ autor.full_name }} em {{ intake.created_at.strftime('%d/%m/%Y %H:%M') }} via {{ intake.source }}.</p></div></div>
-    <form method="post" action="/portal/intakes/{{ intake.id }}/accept" class="formulario">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label for="legal_name_{{ intake.id }}">{{ 'Nome completo' if intake.customer_type == 'INDIVIDUAL' else 'Razão social' }}</label><input id="legal_name_{{ intake.id }}" name="legal_name" value="{{ intake.legal_name }}" required>
-      {% if intake.customer_type == 'COMPANY' %}<label for="trade_name_{{ intake.id }}">Nome fantasia</label><input id="trade_name_{{ intake.id }}" name="trade_name" value="{{ intake.trade_name or '' }}">{% endif %}
-      <label for="document_number_{{ intake.id }}">{{ 'CPF' if intake.customer_type == 'INDIVIDUAL' else 'CNPJ' }} (opcional)</label><input id="document_number_{{ intake.id }}" name="document_number" value="{{ intake.document_number or '' }}">
-      <label for="state_code_{{ intake.id }}">UF</label><input id="state_code_{{ intake.id }}" name="state_code" maxlength="2" size="2" value="{{ intake.state_code }}" required>
-      {% if intake.whatsapp_e164 %}<label for="contact_name_{{ intake.id }}">Nome do contato</label><input id="contact_name_{{ intake.id }}" name="contact_name" value="{{ intake.legal_name }}"><p class="dica">WhatsApp informado: {{ intake.whatsapp_e164 }}.</p>{% endif %}
-      {% if intake.preferred_products_text %}<p class="dica">Preferências relatadas: {{ intake.preferred_products_text }}</p>{% endif %}
-      <button type="submit">Aceitar e criar cliente</button>
-    </form>
-    <form method="post" action="/portal/intakes/{{ intake.id }}/reject" class="formulario">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label for="reason_{{ intake.id }}">Motivo da rejeição</label><input id="reason_{{ intake.id }}" name="reason" maxlength="500" required>
-      <button type="submit" class="link">Rejeitar pré-cadastro</button>
-    </form>
-  </section>
-  {% endfor %}
-{% else %}<p class="vazio">Não há pré-cadastros pendentes no seu escopo.</p>{% endif %}
+{% include "intake_review.html" %}
 {% else %}
 
 <div class="cabecalho carteira-titulo"><div><h1>Carteira &amp; Agenda</h1><p class="dica">Clientes, pré-cadastros e compromissos em um só lugar.</p></div></div>
@@ -39,7 +15,7 @@
         <span class="workspace-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="11" cy="9" r="4"/><circle cx="22" cy="10" r="3"/><path d="M3 26c0-6 3-9 8-9s8 3 8 9M19 18c5-1 9 2 9 8"/></svg></span>
         <div><h2>Carteira de Clientes</h2><p>Escolha um representante para abrir sua carteira.</p></div>
       </div>
-      <div class="workspace-actions"><a class="botao botao-secundario" href="/portal/customers?secao=pre-cadastros">Pré-cadastros</a><a class="botao" href="/portal/customers/novo">+ Novo cliente</a></div>
+      <div class="workspace-actions"><a class="botao botao-secundario pre-intake-button" href="/portal/customers?secao=pre-cadastros">Pré-cadastros <strong>{{ total_intakes }}</strong></a><a class="botao" href="/portal/customers/novo">+ Novo cliente</a></div>
     </header>
 
     <div class="carteira-metricas">
@@ -56,8 +32,8 @@
     </form>
 
     {% if representantes_resumo %}
-    <div class="tabela-rolagem"><table class="tabela-carteira representative-table"><thead><tr><th>Representante</th><th>UF</th><th>Clientes</th><th>Contatos</th><th></th></tr></thead><tbody>
-      {% for representante in representantes_resumo %}<tr><td><span class="representative-avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2c0-6 3-9 8-9s8 3 8 9v2"/></svg></span><strong>{{ representante.name }}</strong></td><td><span class="uf-pill">{{ representante.state_code }}</span></td><td><span class="number-pill">{{ representante.customers }}</span></td><td><span class="number-pill">{{ representante.contacts }}</span></td><td><a class="botao botao-secundario compact" href="/portal/customers/representantes/{{ representante.id }}">Ver carteira ›</a></td></tr>{% endfor %}
+    <div class="tabela-rolagem"><table class="tabela-carteira representative-table"><thead><tr><th>Representante</th><th>UF</th><th>Clientes</th><th>Contatos</th><th>Pré-cadastros</th><th></th></tr></thead><tbody>
+      {% for representante in representantes_resumo %}<tr><td><span class="representative-avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2c0-6 3-9 8-9s8 3 8 9v2"/></svg></span><strong>{{ representante.name }}</strong></td><td><span class="uf-pill">{{ representante.state_code }}</span></td><td><span class="number-pill">{{ representante.customers }}</span></td><td><span class="number-pill">{{ representante.contacts }}</span></td><td>{% if representante.pending_intakes %}<a class="pending-table-pill" href="/portal/customers?secao=pre-cadastros">{{ representante.pending_intakes }} para conferir</a>{% else %}<span class="muted-pill">0</span>{% endif %}</td><td><a class="botao botao-secundario compact" href="/portal/customers/representantes/{{ representante.id }}">Ver carteira ›</a></td></tr>{% endfor %}
     </tbody></table></div>
     <p class="rodape-tabela">{{ representantes_resumo|length }} representante(s) exibido(s)</p>
     <span hidden>Última interação · nunca</span>

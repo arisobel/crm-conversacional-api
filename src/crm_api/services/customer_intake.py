@@ -37,6 +37,17 @@ from crm_api.services.whatsapp_actor import ActorRole, WhatsappActor
 MAX_PREFERENCIA = 500
 MAX_RAZAO_SOCIAL = 200
 MAX_MOTIVO = 500
+INTAKE_CONFIRMABLE_FIELDS = frozenset(
+    {
+        "legal_name",
+        "trade_name",
+        "document_number",
+        "state_code",
+        "whatsapp_e164",
+        "contact_name",
+        "preferred_products_text",
+    }
+)
 
 
 class NotARepresentative(Exception):
@@ -125,11 +136,12 @@ class CustomerIntakeService:
         *,
         idempotency_key: str,
         legal_name: str,
-        state_code: str,
+        state_code: str | None = None,
         customer_type: str = CustomerType.COMPANY.value,
         trade_name: str | None = None,
         document_number: str | None = None,
         whatsapp_e164: str | None = None,
+        contact_name: str | None = None,
         preferred_products_text: str | None = None,
         request_id: str | None = None,
     ) -> OpenedIntake:
@@ -157,6 +169,7 @@ class CustomerIntakeService:
             whatsapp_e164=await self._telefone_livre(tenant_id, whatsapp_e164)
             if whatsapp_e164
             else None,
+            contact_name=contact_name,
             preferred_products_text=preferred_products_text,
         )
 
@@ -201,11 +214,12 @@ class CustomerIntakeService:
         *,
         idempotency_key: str,
         legal_name: str,
-        state_code: str,
+        state_code: str | None,
         customer_type: str,
         trade_name: str | None,
         document_number: str | None,
         whatsapp_e164: str | None,
+        contact_name: str | None,
         preferred_products_text: str | None,
     ) -> CustomerIntake:
         return CustomerIntake(
@@ -226,8 +240,13 @@ class CustomerIntakeService:
                 if document_number and document_number.strip()
                 else None
             ),
-            state_code=normalize_state_code(state_code),
+            state_code=normalize_state_code(state_code) if state_code else None,
             whatsapp_e164=whatsapp_e164,
+            contact_name=(
+                contact_name.strip()[:MAX_RAZAO_SOCIAL]
+                if contact_name and contact_name.strip()
+                else None
+            ),
             preferred_products_text=(
                 preferred_products_text.strip()[:MAX_PREFERENCIA]
                 if preferred_products_text and preferred_products_text.strip()
@@ -235,6 +254,106 @@ class CustomerIntakeService:
             ),
             status=IntakeStatus.PENDING,
         )
+
+    async def update_pending(
+        self,
+        tenant_id: uuid.UUID,
+        intake_id: uuid.UUID,
+        *,
+        actor_user_id: uuid.UUID,
+        actor_role: UserRole,
+        legal_name: str | None,
+        trade_name: str | None,
+        document_number: str | None,
+        state_code: str | None,
+        whatsapp_e164: str | None,
+        contact_name: str | None,
+        preferred_products_text: str | None,
+        confirmed_field: str | None = None,
+        request_id: str | None = None,
+    ) -> CustomerIntake:
+        """Salva a conferÃªncia sem transformar o rascunho em cliente."""
+        intake = await self._alcancavel(
+            tenant_id, intake_id, actor_user_id=actor_user_id, actor_role=actor_role
+        )
+        before = {
+            "legal_name": intake.legal_name,
+            "trade_name": intake.trade_name,
+            "document_number": intake.document_number,
+            "state_code": intake.state_code,
+            "whatsapp_e164": intake.whatsapp_e164,
+            "contact_name": intake.contact_name,
+            "preferred_products_text": intake.preferred_products_text,
+            "confirmed_fields": list(intake.confirmed_fields or []),
+        }
+        if legal_name is not None:
+            intake.legal_name = self._texto(
+                legal_name, campo="nome do cliente", maximo=MAX_RAZAO_SOCIAL
+            )
+        if trade_name is not None:
+            intake.trade_name = (
+                trade_name.strip()[:MAX_RAZAO_SOCIAL] if trade_name.strip() else None
+            )
+        if document_number is not None:
+            intake.document_number = (
+                document_number.strip()[:32] if document_number.strip() else None
+            )
+        if state_code is not None:
+            intake.state_code = (
+                normalize_state_code(state_code) if state_code.strip() else None
+            )
+        if whatsapp_e164 is not None:
+            if whatsapp_e164.strip():
+                normalized_phone = normalize_whatsapp_e164(whatsapp_e164)
+                if normalized_phone != intake.whatsapp_e164:
+                    normalized_phone = await self._telefone_livre(tenant_id, normalized_phone)
+                intake.whatsapp_e164 = normalized_phone
+            else:
+                intake.whatsapp_e164 = None
+        if contact_name is not None:
+            intake.contact_name = (
+                contact_name.strip()[:MAX_RAZAO_SOCIAL] if contact_name.strip() else None
+            )
+        if preferred_products_text is not None:
+            intake.preferred_products_text = (
+                preferred_products_text.strip()[:MAX_PREFERENCIA]
+                if preferred_products_text.strip()
+                else None
+            )
+        confirmed = {
+            field
+            for field in (intake.confirmed_fields or [])
+            if field in INTAKE_CONFIRMABLE_FIELDS and before.get(field) == getattr(intake, field)
+        }
+        if confirmed_field:
+            if confirmed_field not in INTAKE_CONFIRMABLE_FIELDS:
+                raise ValueError("campo de confirmaÃ§Ã£o invÃ¡lido")
+            value = getattr(intake, confirmed_field)
+            if value is None or (isinstance(value, str) and not value.strip()):
+                raise BlankField("informaÃ§Ã£o nÃ£o pode ficar em branco")
+            confirmed.add(confirmed_field)
+        intake.confirmed_fields = sorted(confirmed)
+        self._audit.record(
+            action="CUSTOMER_INTAKE_UPDATED",
+            entity="customer_intakes",
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=intake.id,
+            before=before,
+            after={
+                "legal_name": intake.legal_name,
+                "trade_name": intake.trade_name,
+                "document_number": intake.document_number,
+                "state_code": intake.state_code,
+                "whatsapp_e164": intake.whatsapp_e164,
+                "contact_name": intake.contact_name,
+                "preferred_products_text": intake.preferred_products_text,
+                "confirmed_fields": intake.confirmed_fields,
+            },
+            request_id=request_id,
+        )
+        await self._intakes.flush()
+        return intake
 
     # ------------------------------------------------------------- resolução
 
@@ -300,7 +419,7 @@ class CustomerIntakeService:
             actor_role=actor_role,
             legal_name=legal_name.strip() if legal_name else intake.legal_name,
             customer_type=intake.customer_type,
-            state_code=state_code or intake.state_code,
+            state_code=state_code or intake.state_code or "",
             trade_name=trade_name if trade_name is not None else intake.trade_name,
             document_number=(
                 document_number if document_number is not None else intake.document_number
@@ -326,7 +445,9 @@ class CustomerIntakeService:
                 id=uuid.uuid4(),
                 tenant_id=tenant_id,
                 customer_id=cliente.id,
-                name=(contact_name or intake.legal_name).strip()[:MAX_RAZAO_SOCIAL],
+                name=(contact_name or intake.contact_name or intake.legal_name).strip()[
+                    :MAX_RAZAO_SOCIAL
+                ],
                 whatsapp_e164=telefone,
                 is_primary=True,
             )

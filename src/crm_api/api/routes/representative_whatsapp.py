@@ -418,6 +418,7 @@ async def open_customer_intake(
             trade_name=payload.trade_name,
             document_number=payload.document_number,
             whatsapp_e164=payload.whatsapp_e164,
+            contact_name=payload.contact_name,
             preferred_products_text=payload.preferred_products_text,
             request_id=request.headers.get("x-request-id"),
         )
@@ -667,6 +668,7 @@ async def assistant_open_customer_intake(
             trade_name=intake.trade_name,
             document_number=intake.document_number,
             whatsapp_e164=intake.whatsapp_e164,
+            contact_name=intake.contact_name,
             preferred_products_text=intake.preferred_products_text,
             request_id=payload.context.request_id,
         )

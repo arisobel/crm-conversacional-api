@@ -1,0 +1,97 @@
+<section class="intake-review-shell">
+  <header class="intake-page-header">
+    <div>
+      <a class="intake-back" href="/portal/customers">← Voltar para Carteira &amp; Agenda</a>
+      <h1>Pré-cadastros pendentes</h1>
+      <p>Cadastros recebidos via WhatsApp para conferência rápida.</p>
+    </div>
+    <a class="pending-counter" href="#intake-list" aria-label="{{ total_intakes }} pré-cadastros pendentes">
+      <span aria-hidden="true">◉</span> {{ total_intakes }} pendente{% if total_intakes != 1 %}s{% endif %}
+    </a>
+  </header>
+
+  {% if intakes %}
+  <div class="intake-review-grid">
+    <aside class="intake-list-panel" id="intake-list">
+      <h2><span aria-hidden="true">◉</span> Recebidos via WhatsApp</h2>
+      <div class="intake-list">
+        {% for intake, autor in intakes %}
+        <a class="intake-list-item{% if selected_intake and selected_intake[0].id == intake.id %} selected{% endif %}"
+           href="/portal/customers?secao=pre-cadastros&amp;intake={{ intake.id }}">
+          <span class="whatsapp-mark" aria-hidden="true">◉</span>
+          <span><strong>{{ intake.trade_name or intake.legal_name }}</strong><small>Recebido em {{ intake.created_at.strftime('%d/%m/%Y às %H:%M') }}</small></span>
+          <em>Aguardando conferência</em>
+        </a>
+        {% endfor %}
+      </div>
+    </aside>
+
+    {% set intake = selected_intake[0] %}
+    {% set autor = selected_intake[1] %}
+    {% set confirmed = intake.confirmed_fields or [] %}
+    <section class="intake-form-panel">
+      <div class="intake-form-heading">
+        <div><h2>Conferir pré-cadastro</h2><p>O assistente preencheu o que encontrou na conversa. Complete apenas o que estiver disponível.</p></div>
+        <span class="person-chip">{{ 'Pessoa física' if intake.customer_type == 'INDIVIDUAL' else 'Pessoa jurídica' }}</span>
+      </div>
+
+      <form method="post" action="/portal/intakes/{{ intake.id }}/save" class="intake-review-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="intake-fields-grid">
+          <div class="intake-field">
+            <div class="intake-field-label"><label for="legal_name">{{ 'Nome completo' if intake.customer_type == 'INDIVIDUAL' else 'Razão social' }}</label>{% if intake.legal_name %}<span class="source-chip">◉ Via WhatsApp</span><button class="confirm-field{% if 'legal_name' in confirmed %} confirmed{% endif %}" type="submit" formaction="/portal/intakes/{{ intake.id }}/confirm-field" name="confirmed_field" value="legal_name">{% if 'legal_name' in confirmed %}✓ Confirmado{% else %}✓ Confirmar informação{% endif %}</button>{% endif %}</div>
+            <input id="legal_name" name="legal_name" value="{{ intake.legal_name or '' }}" placeholder="Informe o nome do cliente">
+          </div>
+          {% if intake.customer_type == 'COMPANY' %}
+          <div class="intake-field">
+            <div class="intake-field-label"><label for="trade_name">Nome fantasia</label>{% if intake.trade_name %}<span class="source-chip">◉ Via WhatsApp</span><button class="confirm-field{% if 'trade_name' in confirmed %} confirmed{% endif %}" type="submit" formaction="/portal/intakes/{{ intake.id }}/confirm-field" name="confirmed_field" value="trade_name">{% if 'trade_name' in confirmed %}✓ Confirmado{% else %}✓ Confirmar informação{% endif %}</button>{% endif %}</div>
+            <input id="trade_name" name="trade_name" value="{{ intake.trade_name or '' }}" placeholder="Informe o nome fantasia">
+          </div>
+          {% endif %}
+          <div class="intake-field">
+            <div class="intake-field-label"><label for="document_number">{{ 'CPF' if intake.customer_type == 'INDIVIDUAL' else 'CNPJ' }}</label>{% if intake.document_number %}<span class="source-chip">◉ Via WhatsApp</span><button class="confirm-field{% if 'document_number' in confirmed %} confirmed{% endif %}" type="submit" formaction="/portal/intakes/{{ intake.id }}/confirm-field" name="confirmed_field" value="document_number">{% if 'document_number' in confirmed %}✓ Confirmado{% else %}✓ Confirmar informação{% endif %}</button>{% endif %}</div>
+            <input id="document_number" name="document_number" value="{{ intake.document_number or '' }}" placeholder="Informe o {{ 'CPF' if intake.customer_type == 'INDIVIDUAL' else 'CNPJ' }}">
+          </div>
+          <div class="intake-field">
+            <div class="intake-field-label"><label for="state_code">UF</label>{% if intake.state_code %}<span class="source-chip">◉ Via WhatsApp</span><button class="confirm-field{% if 'state_code' in confirmed %} confirmed{% endif %}" type="submit" formaction="/portal/intakes/{{ intake.id }}/confirm-field" name="confirmed_field" value="state_code">{% if 'state_code' in confirmed %}✓ Confirmado{% else %}✓ Confirmar informação{% endif %}</button>{% endif %}</div>
+            <select id="state_code" name="state_code"><option value="">Selecione a UF</option>{% for state in ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'] %}<option value="{{ state }}"{% if intake.state_code == state %} selected{% endif %}>{{ state }}</option>{% endfor %}</select>
+          </div>
+          <div class="intake-field">
+            <div class="intake-field-label"><label for="representative">Representante titular</label><span class="source-chip">◉ Via WhatsApp</span></div>
+            <input id="representative" value="{{ autor.full_name }}" readonly>
+          </div>
+          <div class="intake-field">
+            <div class="intake-field-label"><label for="whatsapp_e164">WhatsApp principal</label>{% if intake.whatsapp_e164 %}<span class="source-chip">◉ Via WhatsApp</span><button class="confirm-field{% if 'whatsapp_e164' in confirmed %} confirmed{% endif %}" type="submit" formaction="/portal/intakes/{{ intake.id }}/confirm-field" name="confirmed_field" value="whatsapp_e164">{% if 'whatsapp_e164' in confirmed %}✓ Confirmado{% else %}✓ Confirmar informação{% endif %}</button>{% endif %}</div>
+            <input id="whatsapp_e164" name="whatsapp_e164" value="{{ intake.whatsapp_e164 or '' }}" placeholder="+55 11 99999-9999">
+          </div>
+          <div class="intake-field">
+            <div class="intake-field-label"><label for="contact_name">Contato principal</label>{% if intake.contact_name %}<span class="source-chip">◉ Via WhatsApp</span><button class="confirm-field{% if 'contact_name' in confirmed %} confirmed{% endif %}" type="submit" formaction="/portal/intakes/{{ intake.id }}/confirm-field" name="confirmed_field" value="contact_name">{% if 'contact_name' in confirmed %}✓ Confirmado{% else %}✓ Confirmar informação{% endif %}</button>{% endif %}</div>
+            <input id="contact_name" name="contact_name" value="{{ intake.contact_name or '' }}" placeholder="Nome da pessoa de contato">
+          </div>
+          <div class="intake-field full">
+            <div class="intake-field-label"><label for="preferred_products_text">Observações e produtos de interesse</label>{% if intake.preferred_products_text %}<span class="source-chip">◉ Via WhatsApp</span><button class="confirm-field{% if 'preferred_products_text' in confirmed %} confirmed{% endif %}" type="submit" formaction="/portal/intakes/{{ intake.id }}/confirm-field" name="confirmed_field" value="preferred_products_text">{% if 'preferred_products_text' in confirmed %}✓ Confirmado{% else %}✓ Confirmar informação{% endif %}</button>{% endif %}</div>
+            <textarea id="preferred_products_text" name="preferred_products_text" rows="3" placeholder="Informações obtidas na conversa">{{ intake.preferred_products_text or '' }}</textarea>
+          </div>
+        </div>
+        <p class="intake-helper">ⓘ Campos vazios podem ser completados depois. Nome e UF são necessários somente para converter em cliente.</p>
+        <div class="intake-actions">
+          {% if intake.whatsapp_e164 %}<a class="botao botao-secundario" href="https://wa.me/{{ intake.whatsapp_e164|replace('+', '') }}" target="_blank" rel="noopener">Solicitar mais dados</a>{% endif %}
+          <button class="botao botao-secundario" type="submit">Salvar pré-cadastro</button>
+          <button type="submit" formaction="/portal/intakes/{{ intake.id }}/accept">Converter em cliente</button>
+          <button class="reject-trigger" type="button" data-abre="reject-intake">Descartar</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  <dialog class="modal" id="reject-intake">
+    <h2>Descartar pré-cadastro</h2><p class="dica">Informe o motivo para manter o histórico da decisão.</p>
+    <form method="post" action="/portal/intakes/{{ selected_intake[0].id }}/reject" class="formulario">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="reject_reason">Motivo</label><input id="reject_reason" name="reason" maxlength="500" required>
+      <div class="acoes-modal"><button type="submit">Descartar</button><button type="button" class="link" data-fecha="reject-intake">Cancelar</button></div>
+    </form>
+  </dialog>
+  {% else %}
+  <div class="intake-empty"><span>✓</span><h2>Nenhum pré-cadastro pendente</h2><p>Quando o representante solicitar um cadastro pelo WhatsApp, ele aparecerá aqui.</p><a class="botao botao-secundario" href="/portal/customers">Voltar para a carteira</a></div>
+  {% endif %}
+</section>

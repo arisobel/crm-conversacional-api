@@ -275,6 +275,26 @@ async def test_pre_cadastro_sem_telefone_e_sem_preferencia(world):
 
 
 @pytest.mark.asyncio
+async def test_pre_cadastro_parcial_pode_ser_aberto_sem_uf(world):
+    resposta = await _abrir(
+        world,
+        TELEFONE_A,
+        _corpo(
+            state_code=None,
+            whatsapp_e164=None,
+            preferred_products_text=None,
+            contact_name="Juliana",
+        ),
+    )
+
+    assert resposta.status_code == 201
+    assert resposta.json()["state_code"] is None
+    async with world.app.state.session_factory() as session:
+        intake = await session.scalar(select(CustomerIntake))
+    assert intake.contact_name == "Juliana"
+
+
+@pytest.mark.asyncio
 async def test_telefone_sem_nono_digito_e_canonizado(world):
     await _abrir(world, TELEFONE_A, _corpo(whatsapp_e164="+551177776666"))
 

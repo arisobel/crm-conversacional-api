@@ -54,14 +54,21 @@ async def _entrar(client, email: str):
     )
 
 
-async def _intake(world, *, author_id, name: str, phone: str | None = None) -> CustomerIntake:
+async def _intake(
+    world,
+    *,
+    author_id,
+    name: str,
+    phone: str | None = None,
+    state_code: str | None = "SP",
+) -> CustomerIntake:
     intake = CustomerIntake(
         id=uuid4(),
         tenant_id=world.tenant_id,
         created_by_user_id=author_id,
         idempotency_key=f"wamid.{uuid4()}",
         legal_name=name,
-        state_code="SP",
+        state_code=state_code,
         whatsapp_e164=phone,
     )
     async with world.app.state.session_factory() as session:
@@ -171,3 +178,53 @@ async def test_rejeicao_exige_motivo_e_grava_o_estado_final(world):
         persisted = await session.get(CustomerIntake, intake.id)
     assert persisted.status is IntakeStatus.REJECTED
     assert persisted.rejected_reason == "Documento precisa ser confirmado"
+
+
+@pytest.mark.asyncio
+async def test_ficha_parcial_pode_ser_salva_e_confirmada_sem_virar_cliente(world):
+    intake = await _intake(
+        world,
+        author_id=world.representative_a_id,
+        name="Confecções Aurora",
+        phone="+5511988877665",
+        state_code=None,
+    )
+
+    async with _browser(world) as representative:
+        await _entrar(representative, REPRESENTATIVE_A_EMAIL)
+        page = await representative.get(
+            f"/portal/customers?secao=pre-cadastros&intake={intake.id}"
+        )
+        assert "Conferir pré-cadastro" in page.text
+        assert "1 pendente" in page.text
+        portfolio = await representative.get(
+            f"/portal/customers/representantes/{world.representative_a_id}"
+        )
+        assert "Confecções Aurora" in portfolio.text
+        assert "pré-cadastro" in portfolio.text
+        response = await representative.post(
+            f"/portal/intakes/{intake.id}/confirm-field",
+            data={
+                "legal_name": "Confecções Aurora",
+                "trade_name": "Aurora",
+                "document_number": "",
+                "state_code": "",
+                "whatsapp_e164": "+5511988877665",
+                "contact_name": "Juliana",
+                "preferred_products_text": "Cliente pediu contato comercial.",
+                "confirmed_field": "contact_name",
+                "csrf_token": _token(page.text),
+            },
+        )
+
+    assert "Informação confirmada no pré-cadastro." in response.text
+    async with world.app.state.session_factory() as session:
+        persisted = await session.get(CustomerIntake, intake.id)
+        customers = list((await session.scalars(select(Customer))).all())
+
+    assert persisted.status is IntakeStatus.PENDING
+    assert persisted.state_code is None
+    assert persisted.trade_name == "Aurora"
+    assert persisted.contact_name == "Juliana"
+    assert persisted.confirmed_fields == ["contact_name"]
+    assert all(customer.legal_name != "Confecções Aurora" for customer in customers)

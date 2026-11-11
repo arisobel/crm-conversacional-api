@@ -39,6 +39,7 @@ from crm_api.models.assistant_settings import (
 )
 from crm_api.models.customer import Customer, Tenant
 from crm_api.models.customer_contact import CustomerContact
+from crm_api.models.customer_intake import IntakeStatus
 from crm_api.models.interaction import (
     GATEWAY_SOURCE,
     NOTE_CHANNELS,
@@ -465,6 +466,7 @@ async def pagina_carteira(
     mes: Annotated[str | None, Query()] = None,
     dia: Annotated[str | None, Query()] = None,
     agenda_view: Annotated[str | None, Query()] = None,
+    intake_id: Annotated[uuid.UUID | None, Query(alias="intake")] = None,
     m: Annotated[str | None, Query()] = None,
 ) -> Response:
     pode_gerir = current_user.role in _MANAGEMENT_ROLES
@@ -485,6 +487,15 @@ async def pagina_carteira(
     intakes, total_intakes = await _intake_service(request, session).queue(
         scope_for(current_user), actor_role=current_user.role
     )
+    selected_intake = next(
+        (row for row in intakes if intake_id is not None and row[0].id == intake_id),
+        intakes[0] if intakes else None,
+    )
+    pending_by_owner: dict[uuid.UUID, int] = {}
+    for pending_intake, _ in intakes:
+        pending_by_owner[pending_intake.created_by_user_id] = (
+            pending_by_owner.get(pending_intake.created_by_user_id, 0) + 1
+        )
     sao_paulo = ZoneInfo("America/Sao_Paulo")
     agora_local = datetime.now(UTC).astimezone(sao_paulo)
     hoje = agora_local.date()
@@ -619,6 +630,7 @@ async def pagina_carteira(
             "state_code": uf_rep or "—",
             "customers": clientes_rep,
             "contacts": contatos_rep,
+            "pending_intakes": pending_by_owner.get(representante.id, 0),
         })
     if pode_gerir:
         sem_titular = int(await session.scalar(
@@ -639,6 +651,7 @@ async def pagina_carteira(
         representantes_resumo.append({
             "id": "sem-titular", "name": "Sem titular", "state_code": "—",
             "customers": sem_titular, "contacts": sem_titular_contatos,
+            "pending_intakes": 0,
         })
     if busca and busca.strip():
         termo_representante = busca.strip().casefold()
@@ -670,6 +683,7 @@ async def pagina_carteira(
             ],
             "total": total,
             "intakes": intakes,
+            "selected_intake": selected_intake,
             "total_intakes": total_intakes,
             "agenda": agenda,
             "agenda_do_dia": agenda_do_dia,
@@ -754,6 +768,20 @@ async def pagina_carteira_do_representante(
         )
     ) or 0)
     ativos = sum(1 for customer, _ in linhas if customer.active)
+    pending_intakes = []
+    if owner is not None:
+        pending_rows = await CustomerIntakeRepository(session).list(
+            current_user.tenant_id,
+            author_user_id=owner.id,
+            status=IntakeStatus.PENDING,
+            limit=100,
+            offset=0,
+        )
+        pending_intakes = [
+            row
+            for row in pending_rows
+            if not busca or busca.casefold() in row[0].legal_name.casefold()
+        ]
     return _render(
         request,
         "representative_portfolio.html",
@@ -768,6 +796,7 @@ async def pagina_carteira_do_representante(
             "total": total,
             "contatos": contatos,
             "ativos": ativos,
+            "pending_intakes": pending_intakes,
             "busca": busca,
             "situacao": situacao,
         },
@@ -953,6 +982,118 @@ async def criar_cliente(
 # ---------------------------------------------------------- pré-cadastros
 
 
+async def _salvar_pre_cadastro(
+    request: Request,
+    session: AsyncSession,
+    current_user: CurrentUser,
+    intake_id: uuid.UUID,
+    *,
+    legal_name: str | None,
+    trade_name: str | None,
+    document_number: str | None,
+    state_code: str | None,
+    whatsapp_e164: str | None,
+    contact_name: str | None,
+    preferred_products_text: str | None,
+    confirmed_field: str | None = None,
+) -> None:
+    await _intake_service(request, session).update_pending(
+        current_user.tenant_id,
+        intake_id,
+        actor_user_id=current_user.user_id,
+        actor_role=current_user.role,
+        legal_name=legal_name,
+        trade_name=trade_name,
+        document_number=document_number,
+        state_code=state_code,
+        whatsapp_e164=whatsapp_e164,
+        contact_name=contact_name,
+        preferred_products_text=preferred_products_text,
+        confirmed_field=confirmed_field,
+        request_id=request.headers.get("x-request-id"),
+    )
+
+
+@router.post("/intakes/{intake_id}/save", include_in_schema=False)
+async def salvar_pre_cadastro(
+    request: Request,
+    intake_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    legal_name: _CustomerForm = None,
+    trade_name: _CustomerForm = None,
+    document_number: _CustomerForm = None,
+    state_code: _CustomerForm = None,
+    whatsapp_e164: _CustomerForm = None,
+    contact_name: _CustomerForm = None,
+    preferred_products_text: _CustomerForm = None,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    destino = f"/portal/customers?secao=pre-cadastros&intake={intake_id}"
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+    try:
+        await _salvar_pre_cadastro(
+            request,
+            session,
+            current_user,
+            intake_id,
+            legal_name=legal_name,
+            trade_name=trade_name,
+            document_number=document_number,
+            state_code=state_code,
+            whatsapp_e164=whatsapp_e164,
+            contact_name=contact_name,
+            preferred_products_text=preferred_products_text,
+        )
+    except Exception as error:  # noqa: BLE001
+        await session.rollback()
+        return _redirect(destino, _codigo_do_erro(error))
+    await session.commit()
+    return _redirect(destino, "intake-salvo")
+
+
+@router.post("/intakes/{intake_id}/confirm-field", include_in_schema=False)
+async def confirmar_campo_pre_cadastro(
+    request: Request,
+    intake_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    confirmed_field: Annotated[str, Form()],
+    legal_name: _CustomerForm = None,
+    trade_name: _CustomerForm = None,
+    document_number: _CustomerForm = None,
+    state_code: _CustomerForm = None,
+    whatsapp_e164: _CustomerForm = None,
+    contact_name: _CustomerForm = None,
+    preferred_products_text: _CustomerForm = None,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    destino = f"/portal/customers?secao=pre-cadastros&intake={intake_id}"
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+    try:
+        await _salvar_pre_cadastro(
+            request,
+            session,
+            current_user,
+            intake_id,
+            legal_name=legal_name,
+            trade_name=trade_name,
+            document_number=document_number,
+            state_code=state_code,
+            whatsapp_e164=whatsapp_e164,
+            contact_name=contact_name,
+            preferred_products_text=preferred_products_text,
+            confirmed_field=confirmed_field,
+        )
+    except Exception as error:  # noqa: BLE001
+        await session.rollback()
+        return _redirect(destino, _codigo_do_erro(error))
+    await session.commit()
+    return _redirect(destino, "intake-campo-confirmado")
+
+
 @router.get("/intakes", include_in_schema=False)
 async def pagina_pre_cadastros(
     request: Request,
@@ -977,13 +1118,28 @@ async def aceitar_pre_cadastro(
     state_code: _CustomerForm = None,
     trade_name: _CustomerForm = None,
     document_number: _CustomerForm = None,
+    whatsapp_e164: _CustomerForm = None,
     contact_name: _CustomerForm = None,
+    preferred_products_text: _CustomerForm = None,
     csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
 ) -> Response:
     if not csrf_is_valid(request, csrf_token):
         return _redirect("/portal/customers?secao=pre-cadastros", "csrf")
 
     try:
+        await _salvar_pre_cadastro(
+            request,
+            session,
+            current_user,
+            intake_id,
+            legal_name=legal_name,
+            trade_name=trade_name,
+            document_number=document_number,
+            state_code=state_code,
+            whatsapp_e164=whatsapp_e164,
+            contact_name=contact_name,
+            preferred_products_text=preferred_products_text,
+        )
         intake = await _intake_service(request, session).accept(
             current_user.tenant_id,
             intake_id,

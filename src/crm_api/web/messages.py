@@ -235,6 +235,8 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
     "intake-ja-resolvido": ("erro", "Este pré-cadastro já foi resolvido."),
     "campo-obrigatorio": ("erro", "Preencha o campo obrigatório."),
     "intake-aceito": ("ok", "Pré-cadastro aceito e cliente criado."),
+    "intake-salvo": ("ok", "Pré-cadastro salvo e aguardando conferência."),
+    "intake-campo-confirmado": ("ok", "Informação confirmada no pré-cadastro."),
     "intake-rejeitado": ("ok", "Pré-cadastro rejeitado."),
     "credenciais": ("erro", "E-mail ou senha inválidos."),
     "muitas-tentativas": ("erro", "Tentativas demais. Aguarde alguns minutos."),

@@ -25,8 +25,9 @@ class OpenCustomerIntakeRequest(BaseModel):
     document_number: str | None = Field(default=None, max_length=32)
     # Obrigatória: sem UF não há regra de ICMS, e o motor do R4 falha de propósito
     # em vez de estimar. Validada contra as 27 unidades federativas no serviço.
-    state_code: str = Field(min_length=2, max_length=2)
+    state_code: str | None = Field(default=None, min_length=2, max_length=2)
     whatsapp_e164: str | None = Field(default=None, min_length=8, max_length=20)
+    contact_name: str | None = Field(default=None, max_length=200)
     # Texto do representante, **não** SKU. A resolução para artigo do catálogo é
     # decisão comercial e acontece no portal (ADR-021).
     preferred_products_text: str | None = Field(default=None, max_length=500)
@@ -39,7 +40,7 @@ class CustomerIntakeResponse(BaseModel):
     status: IntakeStatus
     legal_name: str
     customer_type: str
-    state_code: str
+    state_code: str | None
     has_whatsapp: bool
     preferred_products_text: str | None
     created_at: datetime
