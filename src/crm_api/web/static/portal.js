@@ -358,4 +358,28 @@
     if (estado.textContent.indexOf("andamento") !== -1) setTimeout(atualizar, 3000);
   }
   ligarWhatsappBusiness();
+
+  function ligarTipoPessoa() {
+    document.querySelectorAll("[data-person-form]").forEach(function (formulario) {
+      var radios = formulario.querySelectorAll('input[name="customer_type"]');
+      if (!radios.length) return;
+      function atualizar() {
+        var selecionado = formulario.querySelector('input[name="customer_type"]:checked');
+        var pessoaFisica = selecionado && selecionado.value === "INDIVIDUAL";
+        formulario.querySelectorAll("[data-company-label]").forEach(function (rotulo) {
+          rotulo.textContent = pessoaFisica ? rotulo.dataset.personLabel : rotulo.dataset.companyLabel;
+        });
+        formulario.querySelectorAll("[data-company-placeholder]").forEach(function (campo) {
+          campo.placeholder = pessoaFisica ? campo.dataset.personPlaceholder : campo.dataset.companyPlaceholder;
+        });
+        formulario.querySelectorAll(".company-only").forEach(function (campo) {
+          campo.hidden = pessoaFisica;
+          campo.querySelectorAll("input, select").forEach(function (controle) { controle.disabled = pessoaFisica; });
+        });
+      }
+      radios.forEach(function (radio) { radio.addEventListener("change", atualizar); });
+      atualizar();
+    });
+  }
+  ligarTipoPessoa();
 })();

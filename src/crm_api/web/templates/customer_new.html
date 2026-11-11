@@ -2,40 +2,40 @@
 {% block title %}Novo cliente{% endblock %}
 
 {% block conteudo %}
-<div class="cabecalho">
-  <h1>Novo cliente</h1>
-  <a class="link-voltar" href="/portal/customers">Voltar</a>
-</div>
+<section class="customer-new-shell glass-panel" data-person-form>
+  <header class="customer-new-header">
+    <div class="customer-new-title">
+      <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="14" cy="10" r="5"/><path d="M5 28v-3c0-6 3-9 9-9s9 3 9 9v3M25 10v10M20 15h10"/></svg></span>
+      <div><h1>Novo cliente</h1><p>Cadastre um novo cliente para sua carteira comercial.</p></div>
+    </div>
+    <a class="botao botao-secundario" href="/portal/customers">← Voltar</a>
+  </header>
 
-<form method="post" action="/portal/customers/novo" class="formulario">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <form method="post" action="/portal/customers/novo" class="customer-new-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <section class="glass-section">
+      <div class="section-heading-row">
+        <div class="section-heading"><span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6Z"/><path d="M15 3v5h4M9 12h7M9 16h7"/></svg></span><h2>Dados do cliente</h2></div>
+        <div class="person-type-toggle" role="group" aria-label="Tipo de cliente">
+          <label><input type="radio" name="customer_type" value="INDIVIDUAL"><span>Pessoa física</span></label>
+          <label><input type="radio" name="customer_type" value="COMPANY" checked><span>Pessoa jurídica</span></label>
+        </div>
+      </div>
 
-  <label for="legal_name">Razão social</label>
-  <input id="legal_name" name="legal_name" value="{{ dados.legal_name or '' }}" required>
+      <div class="customer-form-grid">
+        <label class="field-shell"><span data-company-label="Razão social" data-person-label="Nome completo">Razão social</span><span class="input-with-icon"><svg viewBox="0 0 24 24"><path d="M4 21h16M6 21V7h8v14M14 11h4v10M9 10h2M9 14h2M9 18h2"/></svg><input id="legal_name" name="legal_name" value="{{ dados.legal_name or '' }}" placeholder="Informe a razão social" required data-company-placeholder="Informe a razão social" data-person-placeholder="Informe o nome completo"></span></label>
+        <label class="field-shell company-only"><span>Nome fantasia</span><span class="input-with-icon"><svg viewBox="0 0 24 24"><path d="M3 12 12 3h7l2 2v7l-9 9Z"/><circle cx="17" cy="7" r="1"/></svg><input id="trade_name" name="trade_name" value="{{ dados.trade_name or '' }}" placeholder="Informe o nome fantasia"></span></label>
+        <label class="field-shell"><span data-company-label="CNPJ (opcional)" data-person-label="CPF (opcional)">CNPJ (opcional)</span><span class="input-with-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8" cy="11" r="2"/><path d="M5 16c1-2 5-2 6 0M14 10h4M14 14h4"/></svg><input id="document_number" name="document_number" value="{{ dados.document_number or '' }}" placeholder="Informe o CNPJ" data-company-placeholder="Informe o CNPJ" data-person-placeholder="Informe o CPF"></span></label>
+        <label class="field-shell"><span>UF</span><span class="input-with-icon"><svg viewBox="0 0 24 24"><path d="M12 21s7-6 7-12a7 7 0 1 0-14 0c0 6 7 12 7 12Z"/><circle cx="12" cy="9" r="2"/></svg><select id="state_code" name="state_code" required><option value="">Selecione a UF</option>{% for uf in ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'] %}<option value="{{ uf }}" {% if dados.state_code == uf %}selected{% endif %}>{{ uf }}</option>{% endfor %}</select></span><small>A localidade padrão do cliente é criada com esta UF.</small></label>
+      </div>
+    </section>
 
-  <label for="trade_name">Nome fantasia</label>
-  <input id="trade_name" name="trade_name" value="{{ dados.trade_name or '' }}">
+    <section class="glass-section">
+      <div class="section-heading"><span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3 20c0-5 2-8 6-8s6 3 6 8M15 14c4 0 6 2 6 6"/></svg></span><h2>Responsável comercial</h2></div>
+      {% if pode_gerir %}<label class="field-shell owner-field"><span>Representante titular</span><span class="input-with-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M4 22v-2c0-6 3-9 8-9s8 3 8 9v2"/></svg><select id="owner_user_id" name="owner_user_id"><option value="">Sem titular</option>{% for usuario in representantes %}<option value="{{ usuario.id }}">{{ usuario.full_name }}</option>{% endfor %}</select></span></label>{% else %}<p class="dica">Você será o titular deste cliente.</p>{% endif %}
+    </section>
 
-  <label for="document_number">Documento</label>
-  <input id="document_number" name="document_number" value="{{ dados.document_number or '' }}">
-
-  <label for="state_code">UF</label>
-  <input id="state_code" name="state_code" maxlength="2" size="2"
-         value="{{ dados.state_code or '' }}" required>
-  <p class="dica">A localidade padrão do cliente é criada com esta UF.</p>
-
-  {% if pode_gerir %}
-  <label for="owner_user_id">Representante titular</label>
-  <select id="owner_user_id" name="owner_user_id">
-    <option value="">Sem titular</option>
-    {% for usuario in representantes %}
-    <option value="{{ usuario.id }}">{{ usuario.full_name }} ({{ usuario.role.value }})</option>
-    {% endfor %}
-  </select>
-  {% else %}
-  <p class="dica">Você será o titular deste cliente.</p>
-  {% endif %}
-
-  <button type="submit">Cadastrar</button>
-</form>
+    <footer class="customer-form-actions"><a class="botao botao-secundario" href="/portal/customers">Cancelar</a><button type="submit">✓ Cadastrar</button></footer>
+  </form>
+</section>
 {% endblock %}

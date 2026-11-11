@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Carteira de {{ owner_name }}{% endblock %}
+{% block conteudo %}
+<section class="representative-portfolio glass-panel">
+  <header class="portfolio-page-header">
+    <div><p class="eyebrow">CARTEIRA &amp; AGENDA › REPRESENTANTES</p><h1>Carteira do representante</h1><p>Visão dos clientes e contatos sob responsabilidade deste representante.</p></div>
+    <a class="botao botao-secundario" href="/portal/customers">← Voltar</a>
+  </header>
+  <div class="representative-summary">
+    <article class="summary-card representative-card"><span class="feature-icon"><svg viewBox="0 0 32 32"><circle cx="16" cy="10" r="6"/><path d="M5 29v-3c0-7 4-11 11-11s11 4 11 11v3"/></svg></span><div><small>Representante</small><strong>{{ owner_name }}</strong></div></article>
+    <article class="summary-card"><span class="mini-icon"><svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 21c0-5 2-8 6-8s6 3 6 8M14 15c5-1 8 2 8 6"/></svg></span><div><small>Clientes</small><strong>{{ total }}</strong></div></article>
+    <article class="summary-card"><span class="mini-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2c0-6 3-9 8-9s8 3 8 9v2"/></svg></span><div><small>Contatos</small><strong>{{ contatos }}</strong></div></article>
+    <article class="summary-card"><span class="mini-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 6-7"/></svg></span><div><small>Ativos</small><strong>{{ ativos }}</strong></div></article>
+  </div>
+  <section class="glass-section portfolio-list-panel">
+    <form method="get" class="portfolio-filter-row">
+      <label class="search-field"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg><input type="search" name="busca" value="{{ busca or '' }}" placeholder="Buscar cliente por razão social ou nome..."></label>
+      <select name="situacao"><option value="">Todos</option><option value="ativos" {% if situacao == 'ativos' %}selected{% endif %}>Ativos</option><option value="inativos" {% if situacao == 'inativos' %}selected{% endif %}>Inativos</option></select>
+      <button type="submit">Filtrar</button>
+    </form>
+    {% if clientes %}<div class="tabela-rolagem"><table class="glass-table"><thead><tr><th>Cliente</th><th>UF</th><th>Contato / titular</th><th>Situação</th><th></th></tr></thead><tbody>{% for item in clientes %}<tr><td><a href="/portal/customers/{{ item.customer.id }}">{{ item.customer.legal_name }}</a>{% if item.customer.trade_name %}<small>{{ item.customer.trade_name }}</small>{% endif %}</td><td>{{ item.customer.state_code }}</td><td>{{ item.owner.full_name if item.owner else 'Sem titular' }}</td><td>{% if item.customer.active %}<span class="situacao-ativa">ativo</span>{% else %}<span class="situacao-inativa">inativo</span>{% endif %}</td><td><a class="botao botao-secundario compact" href="/portal/customers/{{ item.customer.id }}">Abrir cliente ↗</a></td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="vazio">Nenhum cliente encontrado nesta carteira.</p>{% endif %}
+    <p class="rodape-tabela">{{ total }} cliente(s) na carteira</p>
+  </section>
+</section>
+{% endblock %}

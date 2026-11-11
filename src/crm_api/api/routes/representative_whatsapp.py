@@ -15,12 +15,14 @@ from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.api.security import verify_internal_request
 from crm_api.core.database import get_session
 from crm_api.core.phone import InvalidWhatsappNumber, normalize_whatsapp_e164
 from crm_api.core.states import InvalidStateCode
+from crm_api.models.customer import Customer
 from crm_api.models.pricing import PriceListStatus
 from crm_api.models.reminder import ReminderOrigin, ReminderStatus, RepresentativeReminder
 from crm_api.repositories.assistant_settings import get_assistant_policy
@@ -55,9 +57,14 @@ from crm_api.schemas.representative_whatsapp import (
     AssistantExecutionContext,
     AssistantListPortfolioCustomersRequest,
     AssistantLookupCustomersRequest,
+    AssistantManageReminderRequest,
+    AssistantManageReminderResponse,
     AssistantPriceUpdateConfirmationResponse,
     AssistantPriceUpdateProposalResponse,
     AssistantProposePriceUpdateRequest,
+    AssistantReminderItem,
+    AssistantReminderListRequest,
+    AssistantReminderListResponse,
     AssistantReminderResponse,
     AssistantSearchPriceItemsRequest,
     CustomerConversationEntryResponse,
@@ -407,6 +414,9 @@ async def open_customer_intake(
             idempotency_key=payload.idempotency_key,
             legal_name=payload.legal_name,
             state_code=payload.state_code,
+            customer_type=payload.customer_type,
+            trade_name=payload.trade_name,
+            document_number=payload.document_number,
             whatsapp_e164=payload.whatsapp_e164,
             preferred_products_text=payload.preferred_products_text,
             request_id=request.headers.get("x-request-id"),
@@ -435,6 +445,7 @@ async def open_customer_intake(
         intake_id=intake.id,
         status=intake.status,
         legal_name=intake.legal_name,
+        customer_type=intake.customer_type,
         state_code=intake.state_code,
         has_whatsapp=intake.whatsapp_e164 is not None,
         preferred_products_text=intake.preferred_products_text,
@@ -652,6 +663,9 @@ async def assistant_open_customer_intake(
             idempotency_key=intake.idempotency_key,
             legal_name=intake.legal_name,
             state_code=intake.state_code,
+            customer_type=intake.customer_type,
+            trade_name=intake.trade_name,
+            document_number=intake.document_number,
             whatsapp_e164=intake.whatsapp_e164,
             preferred_products_text=intake.preferred_products_text,
             request_id=payload.context.request_id,
@@ -668,6 +682,7 @@ async def assistant_open_customer_intake(
         intake_id=result.id,
         status=result.status,
         legal_name=result.legal_name,
+        customer_type=result.customer_type,
         state_code=result.state_code,
         has_whatsapp=result.whatsapp_e164 is not None,
         preferred_products_text=result.preferred_products_text,
@@ -733,6 +748,110 @@ async def assistant_create_reminder(
         status=reminder.status,
         due_at=reminder.due_at,
         kind=reminder.kind,
+    )
+
+
+@router.post(
+    "/{phone}/assistant-v2/reminders/upcoming",
+    response_model=AssistantReminderListResponse,
+    responses=_RESPONSES,
+)
+async def assistant_list_upcoming_reminders(
+    phone: str,
+    payload: AssistantReminderListRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> AssistantReminderListResponse:
+    tenant, actor = await _resolve_assistant_execution(
+        request, session, tenant_slug, phone, payload.context, "CRM_REP_CREATE_REMINDER"
+    )
+    reminders = await ReminderRepository(session).list_upcoming(
+        tenant.id, actor.user_id, datetime.now(UTC), limit=20
+    )
+    customer_ids = {item.customer_id for item in reminders if item.customer_id is not None}
+    names = {}
+    if customer_ids:
+        rows = await session.execute(
+            select(Customer.id, Customer.legal_name).where(Customer.id.in_(customer_ids))
+        )
+        names = dict(rows.all())
+    return AssistantReminderListResponse(reminders=[
+        AssistantReminderItem(
+            reminder_id=item.id,
+            customer_name=names.get(item.customer_id),
+            kind=item.kind,
+            due_at=item.due_at,
+            note=item.note,
+            status=item.status,
+        )
+        for item in reminders
+    ])
+
+
+@router.post(
+    "/{phone}/assistant-v2/reminders/{reminder_id}/manage",
+    response_model=AssistantManageReminderResponse,
+    responses=_RESPONSES,
+)
+async def assistant_manage_reminder(
+    phone: str,
+    reminder_id: uuid.UUID,
+    payload: AssistantManageReminderRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> AssistantManageReminderResponse:
+    tenant, actor = await _resolve_assistant_execution(
+        request, session, tenant_slug, phone, payload.context, "CRM_REP_CREATE_REMINDER"
+    )
+    repository = ReminderRepository(session)
+    reminder = await repository.get_for_representative(tenant.id, actor.user_id, reminder_id)
+    if reminder is None or reminder.status not in {
+        ReminderStatus.PENDING_CONFIRMATION.value, ReminderStatus.CONFIRMED.value
+    }:
+        raise HTTPException(status_code=404, detail="active reminder not found")
+    before = {"status": reminder.status, "due_at": reminder.due_at.isoformat()}
+    changed = False
+    if payload.action == "CANCEL":
+        reminder.status = ReminderStatus.CANCELLED.value
+        changed = True
+    else:
+        if payload.due_at is None or payload.due_at.tzinfo is None:
+            raise HTTPException(status_code=422, detail="reschedule requires due_at with timezone")
+        due_at = payload.due_at.astimezone(UTC)
+        now = datetime.now(UTC)
+        if due_at <= now or due_at > now + timedelta(days=366):
+            raise HTTPException(status_code=422, detail="reminder due_at outside supported range")
+        local = due_at.astimezone(ZoneInfo("America/Sao_Paulo"))
+        slot_start = local.replace(minute=0, second=0, microsecond=0).astimezone(UTC)
+        if await repository.find_slot_conflict(
+            tenant.id, actor.user_id, slot_start, slot_start + timedelta(hours=1),
+            excluding=reminder.id,
+        ):
+            raise HTTPException(status_code=409, detail="representative reminder slot conflict")
+        changed = due_at != reminder.due_at
+        reminder.due_at = due_at
+        reminder.notified_at = None
+        reminder.notification_claimed_at = None
+        reminder.notification_claim_token = None
+    reminder.updated_at = datetime.now(UTC)
+    AuditRepository(session).record(
+        action="reminder.cancelled" if payload.action == "CANCEL" else "reminder.rescheduled",
+        entity="representative_reminder",
+        tenant_id=tenant.id,
+        actor_user_id=actor.user_id,
+        entity_id=reminder.id,
+        before=before,
+        after={"status": reminder.status, "due_at": reminder.due_at.isoformat()},
+        request_id=payload.context.request_id,
+    )
+    await session.commit()
+    return AssistantManageReminderResponse(
+        reminder_id=reminder.id,
+        status=reminder.status,
+        due_at=reminder.due_at,
+        changed=changed,
     )
 
 

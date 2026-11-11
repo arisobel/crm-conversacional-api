@@ -9,6 +9,7 @@ class CreateCustomerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     legal_name: str = Field(min_length=1, max_length=300)
+    customer_type: str = Field(default="COMPANY", pattern=r"^(INDIVIDUAL|COMPANY)$")
     state_code: str = Field(min_length=2, max_length=2)
     trade_name: str | None = Field(default=None, max_length=300)
     document_number: str | None = Field(default=None, max_length=32)
@@ -22,6 +23,7 @@ class UpdateCustomerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     legal_name: str | None = Field(default=None, min_length=1, max_length=300)
+    customer_type: str | None = Field(default=None, pattern=r"^(INDIVIDUAL|COMPANY)$")
     trade_name: str | None = Field(default=None, max_length=300)
     document_number: str | None = Field(default=None, max_length=32)
     state_code: str | None = Field(default=None, min_length=2, max_length=2)

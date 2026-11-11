@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 
 from crm_api.core.phone import normalize_whatsapp_e164
 from crm_api.core.states import normalize_state_code
+from crm_api.models.customer import CustomerType
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.customer_intake import CustomerIntake, IntakeSource, IntakeStatus
 from crm_api.models.user import UserRole
@@ -125,6 +126,9 @@ class CustomerIntakeService:
         idempotency_key: str,
         legal_name: str,
         state_code: str,
+        customer_type: str = CustomerType.COMPANY.value,
+        trade_name: str | None = None,
+        document_number: str | None = None,
         whatsapp_e164: str | None = None,
         preferred_products_text: str | None = None,
         request_id: str | None = None,
@@ -147,6 +151,9 @@ class CustomerIntakeService:
             idempotency_key=idempotency_key,
             legal_name=legal_name,
             state_code=state_code,
+            customer_type=customer_type,
+            trade_name=trade_name,
+            document_number=document_number,
             whatsapp_e164=await self._telefone_livre(tenant_id, whatsapp_e164)
             if whatsapp_e164
             else None,
@@ -195,6 +202,9 @@ class CustomerIntakeService:
         idempotency_key: str,
         legal_name: str,
         state_code: str,
+        customer_type: str,
+        trade_name: str | None,
+        document_number: str | None,
         whatsapp_e164: str | None,
         preferred_products_text: str | None,
     ) -> CustomerIntake:
@@ -205,6 +215,17 @@ class CustomerIntakeService:
             source=IntakeSource.WHATSAPP.value,
             idempotency_key=idempotency_key,
             legal_name=self._texto(legal_name, campo="razão social", maximo=MAX_RAZAO_SOCIAL),
+            customer_type=CustomerType(customer_type).value,
+            trade_name=(
+                trade_name.strip()[:MAX_RAZAO_SOCIAL]
+                if trade_name and trade_name.strip()
+                else None
+            ),
+            document_number=(
+                document_number.strip()[:32]
+                if document_number and document_number.strip()
+                else None
+            ),
             state_code=normalize_state_code(state_code),
             whatsapp_e164=whatsapp_e164,
             preferred_products_text=(
@@ -278,9 +299,12 @@ class CustomerIntakeService:
             actor_user_id=actor_user_id,
             actor_role=actor_role,
             legal_name=legal_name.strip() if legal_name else intake.legal_name,
+            customer_type=intake.customer_type,
             state_code=state_code or intake.state_code,
-            trade_name=trade_name,
-            document_number=document_number,
+            trade_name=trade_name if trade_name is not None else intake.trade_name,
+            document_number=(
+                document_number if document_number is not None else intake.document_number
+            ),
             # O titular é quem abriu, não quem aceitou. `create_customer` força o
             # próprio ator quando ele é `REPRESENTATIVE` — que é o caso de o
             # representante aceitar o seu — e respeita este valor para

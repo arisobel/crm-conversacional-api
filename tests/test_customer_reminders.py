@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import json
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
@@ -12,7 +12,6 @@ from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 
 from crm_api.api.routes.whatsapp_handoffs import _reminder_notification_claim_statement
-
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.reminder import ReminderOrigin, ReminderStatus, RepresentativeReminder
 from crm_api.models.user import User
@@ -238,3 +237,68 @@ async def test_lembrete_pessoal_so_e_reservado_no_horario(world):
         [notification] = on_time.json()["reminders"]
         assert notification["origin"] == ReminderOrigin.REPRESENTATIVE
         assert notification["customer_name"] is None
+
+
+@pytest.mark.asyncio
+async def test_cliente_lista_e_cancela_o_proprio_compromisso(world):
+    created = await create(world, wamid="wamid.MANAGE.CANCEL")
+    reminder_id = created.json()["reminder_id"]
+    lookup_path = "/internal/whatsapp/customer-reminders/upcoming"
+    lookup_body = json.dumps(
+        {"gateway_line_reference": LINE, "customer_phone_e164": PHONE}
+    ).encode()
+    async with AsyncClient(
+        transport=ASGITransport(app=world.app), base_url="http://test"
+    ) as client:
+        lookup = await client.post(
+            lookup_path, content=lookup_body, headers=signed_for(lookup_path, lookup_body)
+        )
+        assert lookup.status_code == 200
+        assert lookup.json()["reminders"][0]["reminder_id"] == reminder_id
+
+        manage_path = "/internal/whatsapp/customer-reminders/manage"
+        manage_body = json.dumps(
+            {
+                "gateway_line_reference": LINE,
+                "customer_phone_e164": PHONE,
+                "reminder_id": reminder_id,
+                "action": "CANCEL",
+            }
+        ).encode()
+        managed = await client.post(
+            manage_path, content=manage_body, headers=signed_for(manage_path, manage_body)
+        )
+        assert managed.status_code == 200
+        assert managed.json()["status"] == ReminderStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_cliente_remarca_e_rearma_o_aviso(world):
+    created = await create(world, wamid="wamid.MANAGE.RESCHEDULE")
+    reminder_id = created.json()["reminder_id"]
+    new_due_at = datetime.now(UTC) + timedelta(days=3)
+    async with world.app.state.session_factory() as session:
+        reminder = await session.get(RepresentativeReminder, UUID(reminder_id))
+        reminder.notified_at = datetime.now(UTC)
+        await session.commit()
+
+    path = "/internal/whatsapp/customer-reminders/manage"
+    body = json.dumps(
+        {
+            "gateway_line_reference": LINE,
+            "customer_phone_e164": PHONE,
+            "reminder_id": reminder_id,
+            "action": "RESCHEDULE",
+            "due_at": new_due_at.isoformat(),
+        }
+    ).encode()
+    async with AsyncClient(
+        transport=ASGITransport(app=world.app), base_url="http://test"
+    ) as client:
+        response = await client.post(path, content=body, headers=signed_for(path, body))
+    assert response.status_code == 200
+    assert response.json()["changed"] is True
+    async with world.app.state.session_factory() as session:
+        reminder = await session.get(RepresentativeReminder, UUID(reminder_id))
+        assert reminder.status == ReminderStatus.CONFIRMED
+        assert reminder.notified_at is None

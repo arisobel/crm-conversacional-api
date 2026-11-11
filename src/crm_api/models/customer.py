@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from enum import StrEnum
 
 from sqlalchemy import (
     CHAR,
@@ -8,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    String,
     Text,
     Uuid,
     func,
@@ -16,6 +18,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from crm_api.models.base import Base
+
+
+class CustomerType(StrEnum):
+    INDIVIDUAL = "INDIVIDUAL"
+    COMPANY = "COMPANY"
 
 
 class Tenant(Base):
@@ -50,11 +57,18 @@ class Customer(Base):
         CheckConstraint(
             "state_code GLOB '[A-Z][A-Z]'", name="ck_customers_state_sqlite"
         ).ddl_if(dialect="sqlite"),
+        CheckConstraint(
+            "customer_type IN ('INDIVIDUAL', 'COMPANY')",
+            name="ck_customers_customer_type",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
     legal_name: Mapped[str] = mapped_column(Text)
+    customer_type: Mapped[str] = mapped_column(
+        String(16), default=CustomerType.COMPANY.value, server_default=CustomerType.COMPANY.value
+    )
     trade_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     document_number: Mapped[str | None] = mapped_column(Text, nullable=True)
     state_code: Mapped[str] = mapped_column(CHAR(2))

@@ -20,8 +20,14 @@ from crm_api.models.whatsapp_connection import (
     RepresentativeWhatsappConnection,
     WhatsappConnectionStatus,
 )
+from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.reminders import ReminderRepository
 from crm_api.schemas.reminders import (
+    CustomerReminderItem,
+    CustomerReminderListResponse,
+    CustomerReminderLookupRequest,
+    CustomerReminderManageRequest,
+    CustomerReminderManageResponse,
     CustomerReminderRequest,
     CustomerReminderResponse,
     ReminderNotificationAckRequest,
@@ -176,6 +182,136 @@ async def create_customer_reminder(
 
 
 @router.post(
+    "/internal/whatsapp/customer-reminders/upcoming",
+    response_model=CustomerReminderListResponse,
+)
+async def list_customer_reminders(
+    payload: CustomerReminderLookupRequest,
+    _: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CustomerReminderListResponse:
+    """Lista somente os compromissos futuros do cliente nessa linha comercial."""
+    try:
+        phone = normalize_whatsapp_e164(payload.customer_phone_e164)
+    except InvalidWhatsappNumber as error:
+        raise HTTPException(status_code=422, detail="invalid customer phone") from error
+    row = await _customer_owner_for_line(
+        session, tenant_slug, payload.gateway_line_reference, phone
+    )
+    if row is None:
+        raise HTTPException(status_code=403, detail="customer reminder context denied")
+    representative, customer, _, tenant = row
+    reminders = await ReminderRepository(session).list_upcoming(
+        tenant.id,
+        representative.id,
+        datetime.now(UTC),
+        customer_id=customer.id,
+        limit=20,
+    )
+    return CustomerReminderListResponse(
+        reminders=[
+            CustomerReminderItem(
+                reminder_id=item.id,
+                kind=item.kind,
+                due_at=item.due_at,
+                note=item.note,
+                status=item.status,
+            )
+            for item in reminders
+        ]
+    )
+
+
+@router.post(
+    "/internal/whatsapp/customer-reminders/manage",
+    response_model=CustomerReminderManageResponse,
+)
+async def manage_customer_reminder(
+    payload: CustomerReminderManageRequest,
+    _: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CustomerReminderManageResponse:
+    """Cancela ou remarca um compromisso que pertence ao próprio cliente."""
+    try:
+        phone = normalize_whatsapp_e164(payload.customer_phone_e164)
+    except InvalidWhatsappNumber as error:
+        raise HTTPException(status_code=422, detail="invalid customer phone") from error
+    row = await _customer_owner_for_line(
+        session, tenant_slug, payload.gateway_line_reference, phone
+    )
+    if row is None:
+        raise HTTPException(status_code=403, detail="customer reminder context denied")
+    representative, customer, _, tenant = row
+    repository = ReminderRepository(session)
+    reminder = await repository.get_for_representative(
+        tenant.id, representative.id, payload.reminder_id
+    )
+    if (
+        reminder is None
+        or reminder.customer_id != customer.id
+        or reminder.status
+        not in {ReminderStatus.PENDING_CONFIRMATION.value, ReminderStatus.CONFIRMED.value}
+    ):
+        raise HTTPException(status_code=404, detail="active reminder not found")
+
+    before = {"status": reminder.status, "due_at": reminder.due_at.isoformat()}
+    changed = False
+    if payload.action == "CANCEL":
+        reminder.status = ReminderStatus.CANCELLED.value
+        changed = True
+    else:
+        if (
+            payload.due_at is None
+            or payload.due_at.tzinfo is None
+            or payload.due_at.utcoffset() is None
+        ):
+            raise HTTPException(status_code=422, detail="reschedule requires due_at with timezone")
+        due_at = payload.due_at.astimezone(UTC)
+        now = datetime.now(UTC)
+        if due_at <= now or due_at > now + timedelta(days=366):
+            raise HTTPException(status_code=422, detail="reminder due_at outside supported range")
+        local = due_at.astimezone(ZoneInfo("America/Sao_Paulo"))
+        slot_start = local.replace(minute=0, second=0, microsecond=0).astimezone(UTC)
+        conflict = await repository.find_slot_conflict(
+            tenant.id,
+            representative.id,
+            slot_start,
+            slot_start + timedelta(hours=1),
+            excluding=reminder.id,
+        )
+        if conflict is not None:
+            raise HTTPException(status_code=409, detail="representative reminder slot conflict")
+        changed = due_at != reminder.due_at
+        reminder.due_at = due_at
+        reminder.notified_at = None
+        reminder.notification_claimed_at = None
+        reminder.notification_claim_token = None
+
+    reminder.updated_at = datetime.now(UTC)
+    AuditRepository(session).record(
+        action="reminder.cancelled" if payload.action == "CANCEL" else "reminder.rescheduled",
+        entity="representative_reminder",
+        tenant_id=tenant.id,
+        entity_id=reminder.id,
+        before=before,
+        after={
+            "status": reminder.status,
+            "due_at": reminder.due_at.isoformat(),
+            "initiated_by": "CUSTOMER",
+        },
+    )
+    await session.commit()
+    return CustomerReminderManageResponse(
+        reminder_id=reminder.id,
+        status=reminder.status,
+        due_at=reminder.due_at,
+        changed=changed,
+    )
+
+
+@router.post(
     "/internal/whatsapp/reminder-notifications/claim",
     response_model=ReminderNotificationClaimResponse,
 )
@@ -187,9 +323,8 @@ async def claim_reminder_notifications(
 ) -> ReminderNotificationClaimResponse:
     """Reserva avisos no momento correto; uma reserva abandonada expira em 5 minutos."""
     now = datetime.now(UTC)
-    rows = (
-        await session.execute(_reminder_notification_claim_statement(tenant_slug, payload.limit, now))
-    ).all()
+    statement = _reminder_notification_claim_statement(tenant_slug, payload.limit, now)
+    rows = (await session.execute(statement)).all()
     claimed: list[ReminderNotificationItem] = []
     for reminder, representative, customer in rows:
         token = uuid.uuid4()

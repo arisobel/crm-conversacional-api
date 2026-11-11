@@ -74,6 +74,36 @@ class AssistantReminderResponse(BaseModel):
     kind: str
 
 
+class AssistantReminderListRequest(BaseModel):
+    context: AssistantExecutionContext
+
+
+class AssistantReminderItem(BaseModel):
+    reminder_id: UUID
+    customer_name: str | None = None
+    kind: str
+    due_at: datetime
+    note: str
+    status: str
+
+
+class AssistantReminderListResponse(BaseModel):
+    reminders: list[AssistantReminderItem]
+
+
+class AssistantManageReminderRequest(BaseModel):
+    context: AssistantExecutionContext
+    action: str = Field(pattern=r"^(CANCEL|RESCHEDULE)$")
+    due_at: datetime | None = None
+
+
+class AssistantManageReminderResponse(BaseModel):
+    reminder_id: UUID
+    status: str
+    due_at: datetime
+    changed: bool
+
+
 class PriceUpdateRow(BaseModel):
     sku: str = Field(min_length=1, max_length=120)
     generated_sku: bool = False

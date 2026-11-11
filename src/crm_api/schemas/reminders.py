@@ -53,3 +53,33 @@ class ReminderNotificationAckRequest(BaseModel):
     claim_token: UUID
     delivered: bool
 
+
+class CustomerReminderLookupRequest(BaseModel):
+    gateway_line_reference: str = Field(min_length=1, max_length=200)
+    customer_phone_e164: str = Field(min_length=8, max_length=20)
+
+
+class CustomerReminderItem(BaseModel):
+    reminder_id: UUID
+    kind: ReminderKindValue
+    due_at: datetime
+    note: str
+    status: str
+
+
+class CustomerReminderListResponse(BaseModel):
+    reminders: list[CustomerReminderItem]
+
+
+class CustomerReminderManageRequest(CustomerReminderLookupRequest):
+    reminder_id: UUID
+    action: Literal["CANCEL", "RESCHEDULE"]
+    due_at: datetime | None = None
+
+
+class CustomerReminderManageResponse(BaseModel):
+    reminder_id: UUID
+    status: str
+    due_at: datetime
+    changed: bool
+

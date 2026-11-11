@@ -38,7 +38,7 @@ from crm_api.models.base import Base
 # referenciadas no `MetaData`, o tipo das colunas `tenant_id`, `created_by_user_id`
 # e `customer_id` não resolve e o DDL falha. Hoje funciona por ordem de import de
 # outro módulo, o que é acidente — este `import` o torna garantia.
-from crm_api.models.customer import Customer, Tenant  # noqa: F401
+from crm_api.models.customer import Customer, CustomerType, Tenant  # noqa: F401
 from crm_api.models.user import User  # noqa: F401
 
 
@@ -96,6 +96,11 @@ class CustomerIntake(Base):
     idempotency_key: Mapped[str] = mapped_column(String(128))
 
     legal_name: Mapped[str] = mapped_column(Text)
+    customer_type: Mapped[str] = mapped_column(
+        String(16), default=CustomerType.COMPANY.value, server_default=CustomerType.COMPANY.value
+    )
+    trade_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    document_number: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Obrigatória: sem UF não há regra de ICMS, e o R4 falha de propósito em vez
     # de estimar. Pedir na conversa custa menos que descobrir a falta na hora de
     # gerar a lista.

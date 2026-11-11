@@ -5,7 +5,12 @@ from datetime import UTC, datetime
 
 from crm_api.core.states import normalize_state_code
 from crm_api.models.catalog import CustomerPreferredProduct
-from crm_api.models.customer import Customer, CustomerAssignmentHistory, CustomerLocation
+from crm_api.models.customer import (
+    Customer,
+    CustomerAssignmentHistory,
+    CustomerLocation,
+    CustomerType,
+)
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.user import UserRole
 from crm_api.repositories.audit import AuditRepository
@@ -79,6 +84,7 @@ class CustomerAdminService:
         actor_role: UserRole,
         legal_name: str,
         state_code: str,
+        customer_type: str = CustomerType.COMPANY.value,
         trade_name: str | None = None,
         document_number: str | None = None,
         owner_user_id: uuid.UUID | None = None,
@@ -104,6 +110,7 @@ class CustomerAdminService:
             id=uuid.uuid4(),
             tenant_id=tenant_id,
             legal_name=legal_name.strip(),
+            customer_type=CustomerType(customer_type).value,
             trade_name=trade_name.strip() if trade_name else None,
             document_number=document,
             state_code=normalized_state,
@@ -139,6 +146,7 @@ class CustomerAdminService:
             entity_id=customer.id,
             after={
                 "legal_name": customer.legal_name,
+                "customer_type": customer.customer_type,
                 "state_code": normalized_state,
                 "owner_user_id": str(owner) if owner else None,
             },
@@ -153,6 +161,7 @@ class CustomerAdminService:
         *,
         actor_user_id: uuid.UUID,
         legal_name: str | None = None,
+        customer_type: str | None = None,
         trade_name: str | None = None,
         document_number: str | None = None,
         state_code: str | None = None,
@@ -162,6 +171,7 @@ class CustomerAdminService:
         customer = await self._customer_in_scope(scope, customer_id)
         before = {
             "legal_name": customer.legal_name,
+            "customer_type": customer.customer_type,
             "trade_name": customer.trade_name,
             "document_number": customer.document_number,
             "state_code": customer.state_code,
@@ -179,6 +189,8 @@ class CustomerAdminService:
             customer.state_code = normalize_state_code(state_code)
         if legal_name is not None:
             customer.legal_name = legal_name.strip()
+        if customer_type is not None:
+            customer.customer_type = CustomerType(customer_type).value
         if trade_name is not None:
             customer.trade_name = trade_name.strip() or None
         if active is not None:
@@ -194,6 +206,7 @@ class CustomerAdminService:
             before=before,
             after={
                 "legal_name": customer.legal_name,
+                "customer_type": customer.customer_type,
                 "trade_name": customer.trade_name,
                 "document_number": customer.document_number,
                 "state_code": customer.state_code,

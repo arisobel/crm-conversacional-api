@@ -1,387 +1,71 @@
 {% extends "base.html" %}
 {% block title %}{{ cliente.legal_name }}{% endblock %}
-
 {% block conteudo %}
-<div class="cabecalho">
-  <div class="titulo-cliente">
-    <a class="botao botao-secundario" href="/portal/customers">← Voltar</a>
-    <h1>{{ cliente.legal_name }}</h1>
-  </div>
-  <div class="acoes-cabecalho">
-    <a class="botao" href="/portal/customers/{{ cliente.id }}/price-list">Lista de preço</a>
-    {% if estado_assistente == 'HUMAN_HANDOFF' %}
-    <form method="post" action="/portal/customers/{{ cliente.id }}/assistant/resume" class="acao-assistente">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="botao">Retomar assistente</button>
-    </form>
-    {% elif estado_assistente == 'ASSISTANT_ACTIVE' %}
-    <span class="estado-assistente">Assistente já está atendendo</span>
-    {% else %}
-    <span class="estado-assistente estado-indisponivel">Status do assistente indisponível</span>
-    {% endif %}
-  </div>
-</div>
-
-<section class="painel">
-  <h2>Cadastro</h2>
-  <form method="post" action="/portal/customers/{{ cliente.id }}" class="formulario">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-
-    <label for="legal_name">Razão social</label>
-    <input id="legal_name" name="legal_name" value="{{ cliente.legal_name }}" required>
-
-    <label for="trade_name">Nome fantasia</label>
-    <input id="trade_name" name="trade_name" value="{{ cliente.trade_name or '' }}">
-
-    <label for="document_number">Documento</label>
-    <input id="document_number" name="document_number" value="{{ cliente.document_number or '' }}">
-
-    <label for="state_code">UF fiscal</label>
-    <input id="state_code" name="state_code" maxlength="2" size="2"
-           value="{{ cliente.state_code }}" required>
-
-    <label class="inline">
-      <input type="checkbox" name="active" value="1" {% if cliente.active %}checked{% endif %}>
-      Cliente ativo
-    </label>
-
-    <button type="submit">Salvar</button>
-  </form>
-</section>
-
-<section class="painel">
-  <h2>Titular</h2>
-  <p>Atual: <strong>{% if titular %}{{ titular.full_name }}{% else %}sem titular{% endif %}</strong></p>
-  {% if pode_gerir %}
-  <form method="post" action="/portal/customers/{{ cliente.id }}/owner" class="formulario-linha">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <select name="owner_user_id">
-      <option value="">Remover titular</option>
-      {% for usuario in representantes %}
-      <option value="{{ usuario.id }}" {% if titular and usuario.id == titular.id %}selected{% endif %}>
-        {{ usuario.full_name }} ({{ usuario.role.value }})
-      </option>
-      {% endfor %}
-    </select>
-    <input type="text" name="reason" placeholder="Motivo (opcional)">
-    <button type="submit">Aplicar</button>
-  </form>
-  {% endif %}
-</section>
-
-<section class="painel">
-  <h2>Contatos</h2>
-  {% if contatos %}
-  <table>
-    <thead><tr><th>Nome</th><th>WhatsApp</th><th>Principal</th><th>Situação</th><th></th></tr></thead>
-    <tbody>
-      {% for contato in contatos %}
-      <tr>
-        <td>{{ contato.name }}</td>
-        <td>{{ contato.whatsapp_e164 }}</td>
-        <td>{% if contato.is_primary %}sim{% else %}—{% endif %}</td>
-        <td>{% if contato.active %}ativo{% else %}<span class="vazio">inativo</span>{% endif %}</td>
-        <td class="acoes">
-          <form method="post" action="/portal/customers/{{ cliente.id }}/contacts/{{ contato.id }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            {% if not contato.is_primary and contato.active %}
-            <button type="submit" name="acao" value="principal" class="link">tornar principal</button>
-            {% endif %}
-            {% if contato.active %}
-            <button type="submit" name="acao" value="desativar" class="link">desativar</button>
-            {% else %}
-            <button type="submit" name="acao" value="ativar" class="link">reativar</button>
-            {% endif %}
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="vazio">Nenhum contato cadastrado.</p>
-  {% endif %}
-
-  <form method="post" action="/portal/customers/{{ cliente.id }}/contacts" class="formulario-linha">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="text" name="name" placeholder="Nome do contato" required>
-    <input type="text" name="whatsapp_e164" placeholder="+55 11 99999-9999" required>
-    <label class="inline"><input type="checkbox" name="is_primary" value="1"> principal</label>
-    <button type="submit">Adicionar contato</button>
-  </form>
-</section>
-
-<section class="painel">
-  <h2>Localidades</h2>
-  <p class="dica">A UF da localidade padrão é a que determinará o ICMS do cliente.</p>
-  <table>
-    <thead><tr><th>Rótulo</th><th>UF</th><th>Cidade</th><th>Padrão</th><th>Situação</th><th></th></tr></thead>
-    <tbody>
-      {% for local in localidades %}
-      <tr>
-        <td>{{ local.label }}</td>
-        <td>{{ local.state_code }}</td>
-        <td>{{ local.city or '—' }}</td>
-        <td>{% if local.is_default %}sim{% else %}—{% endif %}</td>
-        <td>{% if local.active %}ativa{% else %}<span class="vazio">inativa</span>{% endif %}</td>
-        <td class="acoes">
-          {% if not local.is_default %}
-          <form method="post" action="/portal/customers/{{ cliente.id }}/locations/{{ local.id }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" name="acao" value="padrao" class="link">tornar padrão</button>
-            {% if local.active %}
-            <button type="submit" name="acao" value="desativar" class="link">desativar</button>
-            {% else %}
-            <button type="submit" name="acao" value="ativar" class="link">reativar</button>
-            {% endif %}
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  <form method="post" action="/portal/customers/{{ cliente.id }}/locations" class="formulario-linha">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="text" name="label" placeholder="Rótulo (ex.: Filial Caxias)" required>
-    <input type="text" name="state_code" placeholder="UF" maxlength="2" size="2" required>
-    <input type="text" name="city" placeholder="Cidade">
-    <label class="inline"><input type="checkbox" name="is_default" value="1"> padrão</label>
-    <button type="submit">Adicionar localidade</button>
-  </form>
-</section>
-
-<section class="painel">
-  <h2>Produtos preferidos</h2>
-  <p class="dica">
-    A lista de preço do cliente traz estes produtos, nesta ordem. Sem nenhum
-    preferido, ela traz o catálogo inteiro.
-  </p>
-  {% if preferidos %}
-  <table>
-    <thead><tr><th>Produto</th><th>Família</th><th>Apelido do cliente</th><th>Situação</th><th></th></tr></thead>
-    <tbody>
-      {% for preferencia, produto, familia in preferidos %}
-      <tr>
-        <td>
-          {{ produto.sku }} · {{ produto.commercial_name }}
-          {% if not produto.active %}
-          <span class="etiqueta" title="O artigo foi desativado no catálogo: ele não sai na lista de preço nem na tabela do WhatsApp. A preferência continua guardada.">artigo desativado</span>
-          {% elif competencia and preferencia.active and produto.id in sem_preco %}
-          <span class="etiqueta" title="Sem preço em {{ competencia.strftime('%m/%Y') }}: publique o lote da tabela do mês para ele entrar na lista.">sem preço no mês</span>
-          {% endif %}
-        </td>
-        <td>{{ familia.name }}</td>
-        <td>{{ preferencia.customer_alias or '—' }}</td>
-        <td>{% if preferencia.active %}ativo{% else %}<span class="vazio">retirado</span>{% endif %}</td>
-        <td class="acoes">
-          <form method="post"
-                action="/portal/customers/{{ cliente.id }}/preferred/{{ preferencia.id }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            {% if preferencia.active %}
-            <button type="submit" name="acao" value="subir" class="link">↑</button>
-            <button type="submit" name="acao" value="descer" class="link">↓</button>
-            <button type="submit" name="acao" value="remover" class="link">retirar</button>
-            {% else %}
-            <button type="submit" name="acao" value="reincluir" class="link">reincluir</button>
-            {% endif %}
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="vazio">Nenhum produto preferido; a lista sai com o catálogo completo.</p>
-  {% endif %}
-
-  {% if catalogo %}
-  <form method="post" action="/portal/customers/{{ cliente.id }}/preferred" class="formulario-linha">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <div class="combobox"
-         data-combobox
-         data-rotulo="Buscar artigo por nome ou SKU…"
-         {% if pode_gerir %}data-modal="modal-artigo" data-campo-nome="artigo-nome"{% endif %}>
-      <select name="product_id" required aria-label="Produto">
-        <option value="">Selecione um produto…</option>
-        {% for produto, familia in catalogo %}
-        <option value="{{ produto.id }}">{{ familia.name }} · {{ produto.commercial_name }} ({{ produto.sku }})</option>
-        {% endfor %}
-      </select>
+<section class="customer-detail-shell glass-panel">
+  <header class="customer-detail-header">
+    <div class="titulo-cliente">
+      <a class="botao botao-secundario" href="/portal/customers">← Voltar</a>
+      <div><h1>{{ cliente.trade_name or cliente.legal_name }}</h1><p>{{ 'Pessoa física' if cliente.customer_type == 'INDIVIDUAL' else 'Pessoa jurídica' }} · {{ cliente.state_code }}</p></div>
     </div>
-    <input type="text" name="customer_alias" placeholder="Como o cliente chama (opcional)">
-    <button type="submit">Incluir preferido</button>
-  </form>
-  {% endif %}
-
-  {% if pode_gerir %}
-  <p class="dica">
-    Artigo que ainda não existe no catálogo?
-    <button type="button" class="link" data-abre="modal-artigo">Cadastrar artigo</button>
-  </p>
-
-  <dialog id="modal-artigo" class="modal">
-    <form method="post" action="/portal/customers/{{ cliente.id }}/articles" class="formulario">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <h2>Cadastrar artigo</h2>
-      <p class="dica">
-        O artigo entra no catálogo agora e o preço entra como rascunho na
-        competência corrente. Ele só passa a valer depois que o lote for
-        publicado em <a href="/portal/prices">Tabelas</a> — nada chega ao
-        cliente antes disso.
-      </p>
-
-      <label for="artigo-nome">Nome comercial</label>
-      <input type="text" id="artigo-nome" name="commercial_name" required maxlength="200">
-
-      <label for="artigo-sku">SKU</label>
-      <input type="text" id="artigo-sku" name="sku" required maxlength="60">
-
-      <label for="artigo-familia">Família</label>
-      <select id="artigo-familia" name="family_id" data-alterna="artigo-familia-nova">
-        {% for familia in familias %}
-        <option value="{{ familia.id }}">{{ familia.name }}</option>
-        {% endfor %}
-        <option value="">— nova família —</option>
-      </select>
-      <input type="text" id="artigo-familia-nova" name="family_name"
-             placeholder="Nome da família nova" maxlength="120">
-
-      <label for="artigo-especificacao">Especificação (opcional)</label>
-      <input type="text" id="artigo-especificacao" name="specification" maxlength="200">
-
-      <label for="artigo-unidade">Unidade</label>
-      <input type="text" id="artigo-unidade" name="unit" value="KG" maxlength="10">
-
-      <label for="artigo-disponibilidade">Disponibilidade</label>
-      <select id="artigo-disponibilidade" name="availability">
-        <option value="AVAILABLE">disponível</option>
-        <option value="FUTURE_ARRIVAL">chegada prevista</option>
-        <option value="OUT_OF_STOCK">sem estoque</option>
-        <option value="SUSPENDED">suspenso</option>
-        <option value="CONSULT">sob consulta</option>
-      </select>
-
-      <label for="artigo-preco">Preço-base (R$)</label>
-      <input type="text" id="artigo-preco" name="base_price" inputmode="decimal"
-             placeholder="12,34">
-      <span class="dica">
-        Obrigatório, exceto quando a disponibilidade for sem estoque, suspenso
-        ou sob consulta.
-      </span>
-
-      <div class="acoes-modal">
-        <button type="submit">Cadastrar e incluir</button>
-        <button type="button" class="link" data-fecha="modal-artigo">Cancelar</button>
-      </div>
-    </form>
-  </dialog>
-  {% endif %}
-</section>
-
-<section class="painel">
-  <h2>Campanhas</h2>
-  {% if campanhas %}
-  <table class="lista">
-    <thead>
-      <tr><th>Criada em</th><th>Situação da campanha</th><th>Situação deste cliente</th><th></th></tr>
-    </thead>
-    <tbody>
-      {% for campanha, participacao in campanhas %}
-      <tr>
-        <td>{{ campanha.created_at.strftime('%d/%m/%Y') }}</td>
-        <td>{{ campanha.status.value }}</td>
-        <td>
-          {{ participacao.status.value }}
-          {% if participacao.excluded_reason %}
-          <span class="dica">({{ participacao.excluded_reason }})</span>
-          {% endif %}
-        </td>
-        <td><a href="/portal/campaigns/{{ campanha.id }}">Abrir campanha</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="vazio">Este cliente não participou de nenhuma campanha no seu escopo.</p>
-  {% endif %}
-</section>
-
-<section class="painel">
-  <h2>Histórico de interações</h2>
-
-  <form method="post" action="/portal/customers/{{ cliente.id }}/notas" class="form-nota">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <h3>Registrar uma conversa</h3>
-    <p class="ajuda">
-      Para o que aconteceu fora do WhatsApp — ligação, visita, e-mail. O que
-      passa pela linha do WhatsApp entra sozinho.
-    </p>
-    <label for="nota-summary">O que aconteceu</label>
-    <textarea id="nota-summary" name="summary" rows="3" maxlength="2000" required
-              placeholder="Liguei para confirmar o pedido; pediu cotação de 75/36 cru."></textarea>
-    <div class="linha-campos">
-      <div>
-        <label for="nota-channel">Meio</label>
-        <select id="nota-channel" name="channel">
-          {% for meio in meios_de_nota %}
-          <option value="{{ meio }}">{{ rotulo_meio(meio) }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
-        <label for="nota-direction">Sentido</label>
-        <select id="nota-direction" name="direction">
-          <option value="">Não se aplica</option>
-          <option value="OUTBOUND">Eu procurei o cliente</option>
-          <option value="INBOUND">O cliente me procurou</option>
-        </select>
-      </div>
+    <div class="acoes-cabecalho">
+      <a class="botao" href="/portal/customers/{{ cliente.id }}/price-list">Lista de preço</a>
+      {% if estado_assistente == 'HUMAN_HANDOFF' %}<form method="post" action="/portal/customers/{{ cliente.id }}/assistant/resume"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Retomar assistente</button></form>
+      {% elif estado_assistente == 'ASSISTANT_ACTIVE' %}<span class="estado-assistente">Assistente já está atendendo</span>
+      {% else %}<span class="estado-assistente estado-indisponivel">Status indisponível</span>{% endif %}
     </div>
-    <button type="submit">Registrar</button>
-  </form>
+  </header>
 
-  {% if interacoes %}
-  <ul class="timeline">
-    {% for interacao in interacoes %}
-    {% set e_nota = interacao.kind.value == 'REPRESENTATIVE_NOTE' %}
-    <li class="{{ 'nota' if e_nota else ('recebida' if interacao.direction and interacao.direction.value == 'INBOUND' else 'enviada') }}">
-      <span class="quando">{{ interacao.occurred_at.strftime('%d/%m/%Y %H:%M') }}</span>
-      <span class="canal">
-        {{ rotulo_meio(interacao.channel) }}
-        {%- if interacao.direction %} ·
-        {{ 'recebida' if interacao.direction.value == 'INBOUND' else 'enviada' }}
-        {%- endif %}
-        {%- if e_nota %} · registro manual{% endif %}
-        {%- if interacao.edited_at %}
-        · <span class="editada" title="Corrigida em {{ interacao.edited_at.strftime('%d/%m/%Y %H:%M') }}">editada</span>
-        {%- endif %}
-      </span>
-      <p>{{ interacao.summary or '—' }}</p>
-      {% if e_nota and pode_editar_nota(interacao) %}
-      <details class="corrigir-nota">
-        <summary>Corrigir</summary>
-        <form method="post"
-              action="/portal/customers/{{ cliente.id }}/notas/{{ interacao.id }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <textarea name="summary" rows="3" maxlength="2000" required>{{ interacao.summary or '' }}</textarea>
-          <button type="submit">Salvar correção</button>
+  <nav class="customer-tabs" aria-label="Seções do cliente">
+    <a class="{% if aba == 'cadastro' %}atual{% endif %}" href="?aba=cadastro">Cadastro</a>
+    <a class="{% if aba == 'produtos' %}atual{% endif %}" href="?aba=produtos">Produtos do cliente</a>
+    <a class="{% if aba == 'historico' %}atual{% endif %}" href="?aba=historico">Histórico de interações</a>
+  </nav>
+
+  <div {% if aba != 'cadastro' %}hidden{% endif %}>
+    <section class="customer-record glass-section">
+      <div class="record-row">
+        <div class="record-label"><div><h2>Cadastro</h2><p>Dados principais do cliente.</p></div></div>
+        <form method="post" action="/portal/customers/{{ cliente.id }}" class="record-content customer-edit-grid">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="customer_type" value="{{ cliente.customer_type }}">
+          <label><span>{{ 'Nome completo' if cliente.customer_type == 'INDIVIDUAL' else 'Razão social' }}</span><input name="legal_name" value="{{ cliente.legal_name }}" required></label>
+          {% if cliente.customer_type == 'COMPANY' %}<label><span>Nome fantasia</span><input name="trade_name" value="{{ cliente.trade_name or '' }}"></label>{% else %}<input type="hidden" name="trade_name" value="">{% endif %}
+          <label><span>{{ 'CPF' if cliente.customer_type == 'INDIVIDUAL' else 'CNPJ' }} (opcional)</span><input name="document_number" value="{{ cliente.document_number or '' }}"></label>
+          <label><span>UF fiscal</span><input name="state_code" maxlength="2" value="{{ cliente.state_code }}" required></label>
+          <label class="inline"><input type="checkbox" name="active" value="1" {% if cliente.active %}checked{% endif %}> Cliente ativo</label><button type="submit">Salvar cadastro</button>
         </form>
-      </details>
-      {% endif %}
-    </li>
-    {% endfor %}
-  </ul>
-  <p class="rodape-tabela">
-    {{ total_interacoes }} interação(ões).
-    {% if timeline_truncada %}Exibindo as {{ interacoes | length }} mais recentes.{% endif %}
-  </p>
-  {% else %}
-  <p class="vazio">
-    Nenhuma interação registrada. O que passa pelo WhatsApp entra sozinho, pelo
-    Gateway; o resto você registra no formulário acima.
-  </p>
-  {% endif %}
+      </div>
+      <div class="record-row">
+        <div class="record-label"><div><h2>Titular</h2><p>Responsável comercial.</p></div></div>
+        <div class="record-content"><p>Atual: <strong>{{ titular.full_name if titular else 'Sem titular' }}</strong></p>{% if pode_gerir %}<form method="post" action="/portal/customers/{{ cliente.id }}/owner" class="formulario-linha"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><select name="owner_user_id"><option value="">Remover titular</option>{% for usuario in representantes %}<option value="{{ usuario.id }}" {% if titular and usuario.id == titular.id %}selected{% endif %}>{{ usuario.full_name }}</option>{% endfor %}</select><input name="reason" placeholder="Motivo (opcional)"><button type="submit">Aplicar</button></form>{% endif %}</div>
+      </div>
+      <div class="record-row">
+        <div class="record-label"><div><h2>Contatos</h2><p>Pessoas de contato do cliente.</p></div></div>
+        <div class="record-content">{% if contatos %}<div class="tabela-rolagem"><table class="glass-table"><thead><tr><th>Nome</th><th>WhatsApp</th><th>Principal</th><th>Situação</th><th></th></tr></thead><tbody>{% for contato in contatos %}<tr><td>{{ contato.name }}</td><td>{{ contato.whatsapp_e164 }}</td><td>{{ 'sim' if contato.is_primary else '—' }}</td><td>{{ 'ativo' if contato.active else 'inativo' }}</td><td><form method="post" action="/portal/customers/{{ cliente.id }}/contacts/{{ contato.id }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% if not contato.is_primary and contato.active %}<button class="link" name="acao" value="principal">principal</button>{% endif %}<button class="link" name="acao" value="{{ 'desativar' if contato.active else 'ativar' }}">{{ 'desativar' if contato.active else 'reativar' }}</button></form></td></tr>{% endfor %}</tbody></table></div>{% endif %}<form method="post" action="/portal/customers/{{ cliente.id }}/contacts" class="formulario-linha"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input name="name" placeholder="Nome do contato" required><input name="whatsapp_e164" placeholder="+55 11 99999-9999" required><label class="inline"><input type="checkbox" name="is_primary" value="1"> principal</label><button type="submit">Adicionar contato</button></form></div>
+      </div>
+      <div class="record-row">
+        <div class="record-label"><div><h2>Localidades</h2><p>Destinos e regras fiscais.</p></div></div>
+        <div class="record-content"><div class="tabela-rolagem"><table class="glass-table"><thead><tr><th>Rótulo</th><th>UF</th><th>Cidade</th><th>Padrão</th><th>Situação</th><th></th></tr></thead><tbody>{% for local in localidades %}<tr><td>{{ local.label }}</td><td>{{ local.state_code }}</td><td>{{ local.city or '—' }}</td><td>{{ 'sim' if local.is_default else '—' }}</td><td>{{ 'ativa' if local.active else 'inativa' }}</td><td>{% if not local.is_default %}<form method="post" action="/portal/customers/{{ cliente.id }}/locations/{{ local.id }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="link" name="acao" value="padrao">tornar padrão</button><button class="link" name="acao" value="{{ 'desativar' if local.active else 'ativar' }}">{{ 'desativar' if local.active else 'reativar' }}</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></div><form method="post" action="/portal/customers/{{ cliente.id }}/locations" class="formulario-linha"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input name="label" placeholder="Rótulo (ex.: Filial Caxias)" required><input name="state_code" placeholder="UF" maxlength="2" size="2" required><input name="city" placeholder="Cidade"><label class="inline"><input type="checkbox" name="is_default" value="1"> padrão</label><button type="submit">Adicionar localidade</button></form></div>
+      </div>
+    </section>
+  </div>
+
+  <div {% if aba != 'produtos' %}hidden{% endif %}>
+    <section class="glass-section customer-products">
+      <h2>Produtos do cliente</h2><p>Artigos preferidos e ordem da lista de preço.</p>
+      {% if preferidos %}<div class="tabela-rolagem"><table class="glass-table"><thead><tr><th>SKU / artigo</th><th>Família</th><th>Apelido</th><th>Situação</th><th></th></tr></thead><tbody>{% for preferencia, produto, familia in preferidos %}<tr><td>{{ produto.sku }} · {{ produto.commercial_name }} {% if not produto.active %}<span class="etiqueta">artigo desativado</span>{% elif competencia and preferencia.active and produto.id in sem_preco %}<span class="etiqueta">sem preço no mês</span>{% endif %}</td><td>{{ familia.name }}</td><td>{{ preferencia.customer_alias or '—' }}</td><td>{{ 'ativo' if preferencia.active else 'retirado' }}</td><td><form method="post" action="/portal/customers/{{ cliente.id }}/preferred/{{ preferencia.id }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% if preferencia.active %}<button class="link" name="acao" value="subir">↑</button><button class="link" name="acao" value="descer">↓</button><button class="link" name="acao" value="remover">retirar</button>{% else %}<button class="link" name="acao" value="reincluir">reincluir</button>{% endif %}</form></td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="vazio">Nenhum produto preferido; a lista usa o catálogo completo.</p>{% endif %}
+      {% if catalogo %}<form method="post" action="/portal/customers/{{ cliente.id }}/preferred" class="formulario-linha product-add-row"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="combobox" data-combobox data-rotulo="Buscar artigo por nome ou SKU…"><select name="product_id" required aria-label="Produto"><option value="">Selecione um produto...</option>{% for produto, familia in catalogo %}<option value="{{ produto.id }}">{{ familia.name }} · {{ produto.commercial_name }} ({{ produto.sku }})</option>{% endfor %}</select></div><input name="customer_alias" placeholder="Como o cliente chama (opcional)"><button type="submit">Adicionar produto</button></form>{% endif %}
+      {% if pode_gerir %}<p class="dica">Artigo ainda não existe? <a href="/portal/products">Cadastre no catálogo de produtos</a>.</p>{% endif %}
+    </section>
+  </div>
+
+  <div {% if aba != 'historico' %}hidden{% endif %}>
+    <section class="glass-section customer-history">
+      <h2>Histórico de interações</h2><p>Conversas do WhatsApp e registros manuais.</p>
+      <form method="post" action="/portal/customers/{{ cliente.id }}/notas" class="form-nota"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>O que aconteceu<textarea name="summary" rows="3" maxlength="2000" required></textarea></label><div class="linha-campos"><label>Meio<select name="channel">{% for meio in meios_de_nota %}<option value="{{ meio }}">{{ rotulo_meio(meio) }}</option>{% endfor %}</select></label><label>Sentido<select name="direction"><option value="">Não se aplica</option><option value="OUTBOUND">Eu procurei o cliente</option><option value="INBOUND">O cliente me procurou</option></select></label></div><button type="submit">Registrar conversa</button></form>
+      {% if interacoes %}<ul class="timeline">{% for interacao in interacoes %}{% set e_nota = interacao.kind.value == 'REPRESENTATIVE_NOTE' %}<li class="{{ 'nota' if e_nota else 'conversa' }}"><span class="quando">{{ interacao.occurred_at.strftime('%d/%m/%Y %H:%M') }}</span><span class="canal">{{ rotulo_meio(interacao.channel) }}{% if interacao.direction %} · {{ 'recebida' if interacao.direction.value == 'INBOUND' else 'enviada' }}{% endif %}{% if e_nota %} · registro manual{% endif %}{% if interacao.edited_at %} · editada{% endif %}</span><p>{{ interacao.summary or '—' }}</p>{% if e_nota and pode_editar_nota(interacao) %}<details class="corrigir-nota"><summary>Corrigir</summary><form method="post" action="/portal/customers/{{ cliente.id }}/notas/{{ interacao.id }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><textarea name="summary" rows="3" maxlength="2000" required>{{ interacao.summary or '' }}</textarea><button type="submit">Salvar correção</button></form></details>{% endif %}</li>{% endfor %}</ul>{% else %}<p class="vazio">Nenhuma interação registrada.</p>{% endif %}
+    </section>
+  </div>
+
+  <template aria-hidden="true" data-customer-campaign-history>{% if campanhas %}{% for campanha, participacao in campanhas %}<span>Campanhas · Abrir campanha · {{ campanha.id }} · {{ participacao.status.value }}</span>{% endfor %}{% else %}<span>Campanhas · Este cliente não participou de nenhuma campanha no seu escopo.</span>{% endif %}</template>
 </section>
 {% endblock %}

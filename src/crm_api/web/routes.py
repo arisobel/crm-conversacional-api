@@ -64,6 +64,7 @@ from crm_api.repositories.interactions import InteractionRepository
 from crm_api.repositories.portfolio import (
     CustomerFilters,
     CustomerPortfolioRepository,
+    PortfolioScope,
 )
 from crm_api.repositories.price_entries import PriceEntryRepository
 from crm_api.repositories.price_lists import PriceListRepository
@@ -577,6 +578,80 @@ async def pagina_carteira(
         "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
     )
     sete_dias = hoje + timedelta(days=7)
+    representantes = await UserRepository(session).list_users(
+        current_user.tenant_id,
+        role=UserRole.REPRESENTATIVE,
+        active=True,
+        limit=200,
+        offset=0,
+    )
+    if not pode_gerir:
+        representantes = [item for item in representantes if item.id == current_user.user_id]
+    representantes_resumo = []
+    for representante in representantes:
+        clientes_rep = int(await session.scalar(
+            select(func.count(Customer.id)).where(
+                Customer.tenant_id == current_user.tenant_id,
+                Customer.owner_user_id == representante.id,
+            )
+        ) or 0)
+        contatos_rep = int(await session.scalar(
+            select(func.count(CustomerContact.id))
+            .join(Customer, Customer.id == CustomerContact.customer_id)
+            .where(
+                Customer.tenant_id == current_user.tenant_id,
+                Customer.owner_user_id == representante.id,
+                CustomerContact.active.is_(True),
+            )
+        ) or 0)
+        uf_rep = await session.scalar(
+            select(Customer.state_code)
+            .where(
+                Customer.tenant_id == current_user.tenant_id,
+                Customer.owner_user_id == representante.id,
+            )
+            .order_by(Customer.state_code)
+            .limit(1)
+        )
+        representantes_resumo.append({
+            "id": str(representante.id),
+            "name": representante.full_name,
+            "state_code": uf_rep or "—",
+            "customers": clientes_rep,
+            "contacts": contatos_rep,
+        })
+    if pode_gerir:
+        sem_titular = int(await session.scalar(
+            select(func.count(Customer.id)).where(
+                Customer.tenant_id == current_user.tenant_id,
+                Customer.owner_user_id.is_(None),
+            )
+        ) or 0)
+        sem_titular_contatos = int(await session.scalar(
+            select(func.count(CustomerContact.id))
+            .join(Customer, Customer.id == CustomerContact.customer_id)
+            .where(
+                Customer.tenant_id == current_user.tenant_id,
+                Customer.owner_user_id.is_(None),
+                CustomerContact.active.is_(True),
+            )
+        ) or 0)
+        representantes_resumo.append({
+            "id": "sem-titular", "name": "Sem titular", "state_code": "—",
+            "customers": sem_titular, "contacts": sem_titular_contatos,
+        })
+    if busca and busca.strip():
+        termo_representante = busca.strip().casefold()
+        representantes_resumo = [
+            item for item in representantes_resumo
+            if termo_representante in item["name"].casefold()
+        ]
+    if uf and uf.strip():
+        uf_representante = uf.strip().upper()
+        representantes_resumo = [
+            item for item in representantes_resumo
+            if item["state_code"] == uf_representante
+        ]
     return _render(
         request,
         "customers.html",
@@ -623,6 +698,78 @@ async def pagina_carteira(
             },
             "pode_gerir": pode_gerir,
             "somente_minha": not pode_gerir,
+            "representantes_resumo": representantes_resumo,
+        },
+        current_user=current_user,
+        mensagem=m,
+    )
+
+
+@router.get("/customers/representantes/{owner_key}", include_in_schema=False)
+async def pagina_carteira_do_representante(
+    owner_key: str,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    busca: Annotated[str | None, Query()] = None,
+    situacao: Annotated[str | None, Query()] = None,
+    m: Annotated[str | None, Query()] = None,
+) -> Response:
+    pode_gerir = current_user.role in _MANAGEMENT_ROLES
+    owner = None
+    if owner_key == "sem-titular":
+        if not pode_gerir:
+            return _redirect("/portal/customers", "sem-permissao")
+        scope = PortfolioScope(tenant_id=current_user.tenant_id, owner_user_id=None)
+        assigned = False
+        owner_name = "Sem titular"
+    else:
+        try:
+            owner_id = uuid.UUID(owner_key)
+        except ValueError:
+            return _redirect("/portal/customers", "nao-encontrado")
+        if not pode_gerir and owner_id != current_user.user_id:
+            return _redirect("/portal/customers", "sem-permissao")
+        owner = await UserRepository(session).get_in_tenant(current_user.tenant_id, owner_id)
+        if owner is None or owner.role is not UserRole.REPRESENTATIVE:
+            return _redirect("/portal/customers", "nao-encontrado")
+        scope = PortfolioScope(tenant_id=current_user.tenant_id, owner_user_id=owner_id)
+        assigned = None
+        owner_name = owner.full_name
+
+    filtros = CustomerFilters(
+        active={"ativos": True, "inativos": False}.get(situacao or ""),
+        assigned=assigned,
+        search=busca.strip() if busca and busca.strip() else None,
+    )
+    linhas, total = await _portfolio_service(session).list_customers(
+        scope, filtros, limit=300, offset=0
+    )
+    ids = [customer.id for customer, _ in linhas]
+    contatos = int(await session.scalar(
+        select(func.count(CustomerContact.id)).where(
+            CustomerContact.tenant_id == current_user.tenant_id,
+            CustomerContact.customer_id.in_(ids) if ids else CustomerContact.id.is_(None),
+            CustomerContact.active.is_(True),
+        )
+    ) or 0)
+    ativos = sum(1 for customer, _ in linhas if customer.active)
+    return _render(
+        request,
+        "representative_portfolio.html",
+        {
+            "owner": owner,
+            "owner_name": owner_name,
+            "owner_key": owner_key,
+            "clientes": [
+                {"customer": customer, "owner": customer_owner}
+                for customer, customer_owner in linhas
+            ],
+            "total": total,
+            "contatos": contatos,
+            "ativos": ativos,
+            "busca": busca,
+            "situacao": situacao,
         },
         current_user=current_user,
         mensagem=m,
@@ -774,6 +921,7 @@ async def criar_cliente(
     session: Annotated[AsyncSession, Depends(get_session)],
     legal_name: Annotated[str, Form()],
     state_code: Annotated[str, Form()],
+    customer_type: Annotated[str, Form()] = "COMPANY",
     trade_name: _CustomerForm = None,
     document_number: _CustomerForm = None,
     owner_user_id: _CustomerForm = None,
@@ -788,6 +936,7 @@ async def criar_cliente(
             actor_user_id=current_user.user_id,
             actor_role=current_user.role,
             legal_name=legal_name,
+            customer_type=customer_type,
             state_code=state_code,
             trade_name=trade_name,
             document_number=document_number,
@@ -894,6 +1043,7 @@ async def pagina_cliente(
     customer_id: uuid.UUID,
     current_user: Annotated[CurrentUser, Depends(portal_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    aba: Annotated[str | None, Query()] = None,
     m: Annotated[str | None, Query()] = None,
 ) -> Response:
     escopo = scope_for(current_user)
@@ -968,6 +1118,7 @@ async def pagina_cliente(
         "customer_detail.html",
         {
             "cliente": cliente,
+            "aba": aba if aba in {"cadastro", "produtos", "historico"} else "cadastro",
             "titular": dono,
             "campanhas": campanhas_do_cliente,
             "contatos": contatos,
@@ -1066,7 +1217,7 @@ async def registrar_nota(
     direction: _CustomerForm = None,
     csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
 ) -> Response:
-    destino = f"/portal/customers/{customer_id}"
+    destino = f"/portal/customers/{customer_id}?aba=historico"
     if not csrf_is_valid(request, csrf_token):
         return _redirect(destino, "csrf")
 
@@ -1100,7 +1251,7 @@ async def editar_nota(
     summary: Annotated[str, Form()],
     csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
 ) -> Response:
-    destino = f"/portal/customers/{customer_id}"
+    destino = f"/portal/customers/{customer_id}?aba=historico"
     if not csrf_is_valid(request, csrf_token):
         return _redirect(destino, "csrf")
 
@@ -1128,6 +1279,7 @@ async def salvar_cliente(
     session: Annotated[AsyncSession, Depends(get_session)],
     legal_name: Annotated[str, Form()],
     state_code: Annotated[str, Form()],
+    customer_type: Annotated[str, Form()] = "COMPANY",
     trade_name: _CustomerForm = None,
     document_number: _CustomerForm = None,
     active: _CustomerForm = None,
@@ -1143,6 +1295,7 @@ async def salvar_cliente(
             customer_id,
             actor_user_id=current_user.user_id,
             legal_name=legal_name,
+            customer_type=customer_type,
             trade_name=trade_name or "",
             document_number=document_number or "",
             state_code=state_code,
@@ -1900,7 +2053,7 @@ async def incluir_preferido(
     customer_alias: _CustomerForm = None,
     csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
 ) -> Response:
-    destino = f"/portal/customers/{customer_id}"
+    destino = f"/portal/customers/{customer_id}?aba=produtos"
     if not csrf_is_valid(request, csrf_token):
         return _redirect(destino, "csrf")
 
@@ -1930,7 +2083,7 @@ async def salvar_preferido(
     acao: Annotated[str, Form()],
     csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
 ) -> Response:
-    destino = f"/portal/customers/{customer_id}"
+    destino = f"/portal/customers/{customer_id}?aba=produtos"
     if not csrf_is_valid(request, csrf_token):
         return _redirect(destino, "csrf")
 
@@ -1983,7 +2136,7 @@ async def cadastrar_artigo(
     cliente. Cadastrar sem incluir deixaria o usuário repetindo o passo que ele
     já tinha começado.
     """
-    destino = f"/portal/customers/{customer_id}"
+    destino = f"/portal/customers/{customer_id}?aba=produtos"
     if not csrf_is_valid(request, csrf_token):
         return _redirect(destino, "csrf")
     if current_user.role not in _MANAGEMENT_ROLES:

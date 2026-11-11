@@ -20,6 +20,9 @@ class OpenCustomerIntakeRequest(BaseModel):
     # não o interpreta, apenas exige que seja estável para a mesma mensagem.
     idempotency_key: str = Field(min_length=8, max_length=128)
     legal_name: str = Field(min_length=2, max_length=200)
+    customer_type: str = Field(default="COMPANY", pattern=r"^(INDIVIDUAL|COMPANY)$")
+    trade_name: str | None = Field(default=None, max_length=200)
+    document_number: str | None = Field(default=None, max_length=32)
     # Obrigatória: sem UF não há regra de ICMS, e o motor do R4 falha de propósito
     # em vez de estimar. Validada contra as 27 unidades federativas no serviço.
     state_code: str = Field(min_length=2, max_length=2)
@@ -35,6 +38,7 @@ class CustomerIntakeResponse(BaseModel):
     intake_id: uuid.UUID
     status: IntakeStatus
     legal_name: str
+    customer_type: str
     state_code: str
     has_whatsapp: bool
     preferred_products_text: str | None
