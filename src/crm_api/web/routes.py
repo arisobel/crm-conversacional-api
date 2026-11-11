@@ -1654,6 +1654,7 @@ _ASSISTANT_CAPABILITIES = {
     "CRM_REP_LIST_PORTFOLIO_CUSTOMERS": "Listar e filtrar minha carteira",
     "CRM_REP_GET_CUSTOMER_PRICE_LIST": "Consultar tabela de preços do cliente",
     "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY": "Resumir conversa do cliente",
+    "CRM_REP_CREATE_CUSTOMER_INTAKE": "Criar pré-cadastros de clientes",
     "CRM_REP_CREATE_REMINDER": "Criar compromissos e lembretes pessoais",
     "CRM_REP_UPDATE_PRICES": "Propor e confirmar atualizações de preços",
 }

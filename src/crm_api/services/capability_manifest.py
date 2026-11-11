@@ -57,7 +57,8 @@ _AJUDA_CLIENTE = (
 _AJUDA_REPRESENTANTE = (
     "Oi, tudo bem? Como posso te ajudar hoje? Posso verificar o pre\u00e7o-base de "
     "um artigo, localizar um cliente da sua carteira, consultar a tabela de um "
-    "cliente ou resumir as \u00faltimas intera\u00e7\u00f5es registradas."
+    "cliente, resumir as \u00faltimas intera\u00e7\u00f5es registradas ou abrir um "
+    "pr\u00e9-cadastro de cliente."
 )
 
 
@@ -292,6 +293,43 @@ _CAPACIDADES_REPRESENTANTE = [
             ],
         ),
         slots=[Slot(id="customer_query", required=True)],
+    ),
+    Capability(
+        id="CRM_REP_CREATE_CUSTOMER_INTAKE",
+        action="CRM_REP_CREATE_CUSTOMER_INTAKE",
+        mode=CapabilityMode.WRITE,
+        requires_confirmation=True,
+        idempotency=Idempotency.REQUIRED,
+        title="Pr\u00e9-cadastrar cliente",
+        description=(
+            "Coleta os dados dispon\u00edveis e abre um pr\u00e9-cadastro para confer\u00eancia "
+            "no CRM. N\u00e3o ativa o cliente nem autoriza seu telefone automaticamente."
+        ),
+        vocabulary=Vocabulary(
+            aliases=[
+                "cadastrar cliente",
+                "cadastrar um cliente",
+                "cadastro de cliente",
+                "novo cliente",
+                "pr\u00e9-cadastrar cliente",
+                "pr\u00e9-cadastro de cliente",
+            ],
+            examples=[
+                "quero cadastrar um cliente",
+                "cadastre um novo cliente",
+                "abrir pr\u00e9-cadastro da Confec\u00e7\u00f5es Aurora",
+            ],
+        ),
+        slots=[
+            Slot(id="customer_type", required=False),
+            Slot(id="customer_legal_name", required=True),
+            Slot(id="customer_trade_name", required=False),
+            Slot(id="customer_document_number", required=False),
+            Slot(id="customer_state_code", required=False),
+            Slot(id="customer_whatsapp", required=False),
+            Slot(id="customer_contact_name", required=False),
+            Slot(id="preferred_products_text", required=False),
+        ],
     ),
 ]
 
