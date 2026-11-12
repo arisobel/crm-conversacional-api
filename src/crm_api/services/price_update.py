@@ -300,6 +300,83 @@ class RepresentativePriceUpdateService:
             raise PriceUpdateProposalForbidden
         return batch
 
+    async def latest_pending_owned(
+        self, tenant_id: uuid.UUID, representative_user_id: uuid.UUID
+    ) -> PriceList | None:
+        """Recupera a proposta confirmável mais recente do representante.
+
+        O lote vive no CRM, portanto a confirmação continua disponível mesmo
+        quando o processo do Gateway é reiniciado. Lotes que guardam somente um
+        anexo não entram nesta fila de confirmação.
+        """
+
+        batches = list(
+            await self._session.scalars(
+                select(PriceList)
+                .where(
+                    PriceList.tenant_id == tenant_id,
+                    PriceList.created_by == representative_user_id,
+                    PriceList.status == PriceListStatus.DRAFT,
+                    PriceList.source_wamid.is_not(None),
+                )
+                .order_by(PriceList.created_at.desc())
+            )
+        )
+        for batch in batches:
+            payload = batch.proposal_payload or {}
+            if payload.get("attachment_only") is not True and payload.get("rows"):
+                return batch
+        return None
+
+    async def cancel_owned(
+        self, tenant_id: uuid.UUID, representative_user_id: uuid.UUID, proposal_id: uuid.UUID
+    ) -> PriceList:
+        batch = await self.get_owned(tenant_id, representative_user_id, proposal_id)
+        if batch.status == PriceListStatus.DRAFT:
+            batch.status = PriceListStatus.CANCELLED
+        return batch
+
+    async def attach_source_file(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        representative_user_id: uuid.UUID,
+        source_wamid: str,
+        reference_month: date,
+        source_kind: str,
+        source_file: ProposedPriceSourceFile,
+    ) -> tuple[PriceList, bool]:
+        """Guarda um documento no histórico sem interpretar nem publicar preços."""
+
+        existing = await self._session.scalar(
+            select(PriceList).where(
+                PriceList.tenant_id == tenant_id,
+                PriceList.source_wamid == source_wamid,
+            )
+        )
+        if existing is not None:
+            if existing.created_by != representative_user_id:
+                raise PriceUpdateProposalForbidden
+            return existing, False
+        digest = hashlib.sha256(source_wamid.encode("utf-8")).hexdigest()[:16]
+        batch = PriceList(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            name=f"Arquivo WhatsApp {digest}",
+            reference_month=reference_month,
+            valid_from=datetime(reference_month.year, reference_month.month, 1, tzinfo=UTC),
+            currency="BRL",
+            status=PriceListStatus.DRAFT,
+            created_by=representative_user_id,
+            source_wamid=source_wamid,
+            source_kind=source_kind[:32],
+            proposal_payload={"version": 1, "rows": [], "attachment_only": True},
+        )
+        self._session.add(batch)
+        self._store_source_file(tenant_id, batch.id, source_file)
+        await self._session.flush()
+        return batch, True
+
     async def materialize_for_confirmation(
         self,
         batch: PriceList,

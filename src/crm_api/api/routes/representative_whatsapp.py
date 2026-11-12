@@ -49,6 +49,8 @@ from crm_api.schemas.customer_intake import (
 )
 from crm_api.schemas.price_lists import CurrentPriceListItemResponse
 from crm_api.schemas.representative_whatsapp import (
+    AssistantAttachPriceDocumentRequest,
+    AssistantAttachPriceDocumentResponse,
     AssistantConfirmPriceUpdateRequest,
     AssistantCreateReminderRequest,
     AssistantCustomerConversationSummaryRequest,
@@ -60,6 +62,7 @@ from crm_api.schemas.representative_whatsapp import (
     AssistantManageReminderRequest,
     AssistantManageReminderResponse,
     AssistantPriceUpdateConfirmationResponse,
+    AssistantPendingPriceUpdateResponse,
     AssistantPriceUpdateProposalResponse,
     AssistantProposePriceUpdateRequest,
     AssistantReminderItem,
@@ -932,6 +935,101 @@ async def assistant_propose_price_update(
             for change in proposal.changes
         ],
     )
+
+
+@router.post(
+    "/{phone}/assistant-v2/price-updates/pending",
+    response_model=AssistantPendingPriceUpdateResponse,
+    responses=_RESPONSES,
+)
+async def assistant_pending_price_update(
+    phone: str,
+    payload: AssistantConfirmPriceUpdateRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> AssistantPendingPriceUpdateResponse:
+    tenant, actor = await _resolve_assistant_execution(
+        request, session, tenant_slug, phone, payload.context, "CRM_REP_UPDATE_PRICES"
+    )
+    batch = await RepresentativePriceUpdateService(session).latest_pending_owned(
+        tenant.id, actor.user_id
+    )
+    return AssistantPendingPriceUpdateResponse(
+        pending=batch is not None,
+        proposal_id=batch.id if batch is not None else None,
+        created_at=batch.created_at if batch is not None else None,
+    )
+
+
+@router.post(
+    "/{phone}/assistant-v2/price-updates/attach",
+    response_model=AssistantAttachPriceDocumentResponse,
+    responses=_RESPONSES,
+)
+async def assistant_attach_price_document(
+    phone: str,
+    payload: AssistantAttachPriceDocumentRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> AssistantAttachPriceDocumentResponse:
+    tenant, actor = await _resolve_assistant_execution(
+        request, session, tenant_slug, phone, payload.context, "CRM_REP_UPDATE_PRICES"
+    )
+    try:
+        content = base64.b64decode(payload.source_file.content_base64, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise HTTPException(status_code=422, detail="invalid source file encoding") from error
+    try:
+        batch, created = await RepresentativePriceUpdateService(session).attach_source_file(
+            tenant_id=tenant.id,
+            representative_user_id=actor.user_id,
+            source_wamid=payload.source_wamid,
+            reference_month=payload.reference_month,
+            source_kind=payload.source_kind,
+            source_file=ProposedPriceSourceFile(
+                filename=payload.source_file.filename,
+                mime_type=payload.source_file.mime_type,
+                content=content,
+            ),
+        )
+    except PriceUpdateProposalForbidden as error:
+        raise HTTPException(status_code=403, detail="price document attachment denied") from error
+    await session.commit()
+    return AssistantAttachPriceDocumentResponse(
+        batch_id=batch.id,
+        attached=True,
+        already_attached=not created,
+    )
+
+
+@router.post(
+    "/{phone}/assistant-v2/price-updates/{proposal_id}/cancel",
+    response_model=AssistantPendingPriceUpdateResponse,
+    responses=_RESPONSES,
+)
+async def assistant_cancel_price_update(
+    phone: str,
+    proposal_id: uuid.UUID,
+    payload: AssistantConfirmPriceUpdateRequest,
+    request: Request,
+    tenant_slug: Annotated[str, Depends(verify_internal_request)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> AssistantPendingPriceUpdateResponse:
+    tenant, actor = await _resolve_assistant_execution(
+        request, session, tenant_slug, phone, payload.context, "CRM_REP_UPDATE_PRICES"
+    )
+    try:
+        await RepresentativePriceUpdateService(session).cancel_owned(
+            tenant.id, actor.user_id, proposal_id
+        )
+    except PriceUpdateProposalNotFound as error:
+        raise HTTPException(status_code=404, detail="price update proposal not found") from error
+    except PriceUpdateProposalForbidden as error:
+        raise HTTPException(status_code=403, detail="price update proposal denied") from error
+    await session.commit()
+    return AssistantPendingPriceUpdateResponse(pending=False)
 
 
 @router.post(

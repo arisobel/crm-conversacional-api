@@ -17,7 +17,7 @@ from crm_api.models.interaction import (
 from crm_api.models.reminder import ReminderStatus, RepresentativeReminder
 from crm_api.models.user import AuditLog
 
-_RECOVERY_OUTCOMES = frozenset({"FALLBACK", "RECOVERY"})
+_RECOVERY_OUTCOMES = frozenset({"FALLBACK", "RECOVERY", "UNCLEAR"})
 _CONFIRMED_ACTIONS = frozenset(
     {
         "PRICE_BATCH_PUBLISHED",
@@ -36,6 +36,8 @@ class AssistantMonitoringSnapshot:
     responses_24h: int
     recoveries_24h: int
     out_of_scope_24h: int
+    operation_conflicts_24h: int
+    interpretation_failures_24h: int
     comprehension_percent: int | None
     handoffs_7d: int
     upcoming_reminders_24h: int
@@ -156,6 +158,12 @@ async def assistant_monitoring_snapshot(
         responses_24h=len(outbound),
         recoveries_24h=recoveries,
         out_of_scope_24h=sum(outcome == "OUT_OF_SCOPE" for outcome in outcomes),
+        operation_conflicts_24h=sum(
+            outcome == "ACTIVE_OPERATION_CONFLICT" for outcome in outcomes
+        ),
+        interpretation_failures_24h=sum(
+            outcome in _RECOVERY_OUTCOMES for outcome in outcomes
+        ),
         comprehension_percent=comprehension,
         handoffs_7d=sum(
             item.direction is InteractionDirection.OUTBOUND

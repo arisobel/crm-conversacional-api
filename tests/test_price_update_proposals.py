@@ -62,6 +62,54 @@ async def test_proposta_guarda_pdf_original_vinculado_ao_lote_e_autor():
 
 
 @pytest.mark.asyncio
+async def test_proposta_pendente_e_anexo_isolado_sobrevivem_fora_do_gateway():
+    world = await build_portal_world()
+    try:
+        async with world.app.state.session_factory() as session:
+            service = RepresentativePriceUpdateService(session)
+            attached, created = await service.attach_source_file(
+                tenant_id=world.tenant_id,
+                representative_user_id=world.representative_a_id,
+                source_wamid="wamid.attachment-only",
+                reference_month=date(2026, 11, 1),
+                source_kind="WHATSAPP_PDF",
+                source_file=ProposedPriceSourceFile(
+                    filename="consulta.pdf",
+                    mime_type="application/pdf",
+                    content=b"%PDF arquivo",
+                ),
+            )
+            proposal = await service.propose(
+                tenant_id=world.tenant_id,
+                representative_user_id=world.representative_a_id,
+                source_wamid="wamid.persisted-proposal",
+                reference_month=date(2026, 11, 1),
+                rows=[ProposedPriceRow("TEX-75-36-CRU", Decimal("15.00"))],
+            )
+            await session.commit()
+
+            assert created is True
+            assert attached.proposal_payload["attachment_only"] is True
+            pending = await service.latest_pending_owned(
+                world.tenant_id, world.representative_a_id
+            )
+            assert pending.id == proposal.proposal_id
+
+            await service.cancel_owned(
+                world.tenant_id, world.representative_a_id, proposal.proposal_id
+            )
+            await session.commit()
+            assert (
+                await service.latest_pending_owned(
+                    world.tenant_id, world.representative_a_id
+                )
+                is None
+            )
+    finally:
+        await world.app.state.engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_proposta_valida_duplicidade_compara_e_so_publica_apos_confirmacao():
     world = await build_portal_world()
     reference_month = date(2026, 11, 1)

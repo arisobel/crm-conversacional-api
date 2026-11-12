@@ -168,6 +168,26 @@ class AssistantConfirmPriceUpdateRequest(BaseModel):
     context: AssistantExecutionContext
 
 
+class AssistantPendingPriceUpdateResponse(BaseModel):
+    pending: bool
+    proposal_id: UUID | None = None
+    created_at: datetime | None = None
+
+
+class AssistantAttachPriceDocumentRequest(BaseModel):
+    context: AssistantExecutionContext
+    source_wamid: str = Field(min_length=1, max_length=255)
+    reference_month: date
+    source_kind: str = Field(default="WHATSAPP_DOCUMENT", max_length=32)
+    source_file: PriceUpdateSourceFile
+
+
+class AssistantAttachPriceDocumentResponse(BaseModel):
+    batch_id: UUID
+    attached: bool = True
+    already_attached: bool = False
+
+
 class AssistantPriceUpdateConfirmationResponse(BaseModel):
     proposal_id: UUID
     published: bool
