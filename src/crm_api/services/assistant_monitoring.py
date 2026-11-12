@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from crm_api.models.customer_intake import CustomerIntake, IntakeStatus
 from crm_api.models.interaction import (
     GATEWAY_SOURCE,
     CustomerInteraction,
@@ -41,6 +42,8 @@ class AssistantMonitoringSnapshot:
     overdue_reminders: int
     notifications_sent_7d: int
     confirmed_actions_7d: int
+    pending_intakes: int
+    stale_pending_intakes: int
     latest_activity_at: datetime | None
     alerts: tuple[str, ...]
 
@@ -103,6 +106,18 @@ async def assistant_monitoring_snapshot(
             )
         )
     )
+    pending_intake_dates = list(
+        await session.scalars(
+            select(CustomerIntake.created_at).where(
+                CustomerIntake.tenant_id == tenant_id,
+                CustomerIntake.status == IntakeStatus.PENDING,
+            )
+        )
+    )
+    stale_pending_intakes = sum(
+        _aware(created_at) <= now - timedelta(hours=24)
+        for created_at in pending_intake_dates
+    )
 
     alerts: list[str] = []
     if overdue:
@@ -115,11 +130,17 @@ async def assistant_monitoring_snapshot(
         )
     if not recent:
         alerts.append("Nenhuma atividade dos robôs foi registrada nas últimas 24 horas.")
+    if stale_pending_intakes:
+        alerts.append(
+            f"{stale_pending_intakes} pré-cadastro(s) aguarda(m) conferência há mais de 24 horas."
+        )
 
     return AssistantMonitoringSnapshot(
         status=(
             "ATTENTION"
-            if overdue or (comprehension is not None and comprehension < 85)
+            if overdue
+            or stale_pending_intakes
+            or (comprehension is not None and comprehension < 85)
             else "OK"
         ),
         customer_messages_24h=sum(
@@ -145,6 +166,8 @@ async def assistant_monitoring_snapshot(
         overdue_reminders=overdue,
         notifications_sent_7d=notified,
         confirmed_actions_7d=len(actions),
+        pending_intakes=len(pending_intake_dates),
+        stale_pending_intakes=stale_pending_intakes,
         latest_activity_at=max(
             (_aware(item.occurred_at) for item in interactions), default=None
         ),

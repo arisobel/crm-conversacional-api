@@ -19,7 +19,7 @@
     </header>
 
     <div class="carteira-metricas">
-      <div class="metrica destaque"><span>Clientes</span><strong>{{ total }}</strong></div>
+      <div class="metrica destaque"><span>Na carteira</span><strong>{{ portfolio_total }}</strong></div>
       <a class="metrica" href="/portal/customers?secao=pre-cadastros"><span>Pré-cadastros</span><strong>{{ total_intakes }}</strong></a>
       <div class="metrica"><span>Contatos ativos</span><strong>{{ contatos_ativos }}</strong></div>
     </div>
@@ -32,7 +32,7 @@
     </form>
 
     {% if representantes_resumo %}
-    <div class="tabela-rolagem"><table class="tabela-carteira representative-table"><thead><tr><th>Representante</th><th>UF</th><th>Clientes</th><th>Contatos</th><th>Pré-cadastros</th><th></th></tr></thead><tbody>
+    <div class="tabela-rolagem"><table class="tabela-carteira representative-table"><thead><tr><th>Representante</th><th>UF</th><th>Na carteira</th><th>Contatos</th><th>Aguardando conferência</th><th></th></tr></thead><tbody>
       {% for representante in representantes_resumo %}<tr><td><span class="representative-avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2c0-6 3-9 8-9s8 3 8 9v2"/></svg></span><strong>{{ representante.name }}</strong></td><td><span class="uf-pill">{{ representante.state_code }}</span></td><td><span class="number-pill">{{ representante.customers }}</span></td><td><span class="number-pill">{{ representante.contacts }}</span></td><td>{% if representante.pending_intakes %}<a class="pending-table-pill" href="/portal/customers?secao=pre-cadastros">{{ representante.pending_intakes }} para conferir</a>{% else %}<span class="muted-pill">0</span>{% endif %}</td><td><a class="botao botao-secundario compact" href="/portal/customers/representantes/{{ representante.id }}">Ver carteira ›</a></td></tr>{% endfor %}
     </tbody></table></div>
     <p class="rodape-tabela">{{ representantes_resumo|length }} representante(s) exibido(s)</p>

@@ -44,6 +44,11 @@
       <strong>{{ monitoring.confirmed_actions_7d }}</strong>
       <small>Alterações importantes com trilha de auditoria</small>
     </article>
+    <article>
+      <span>Cadastros aguardando conferência</span>
+      <strong>{{ monitoring.pending_intakes }}</strong>
+      <small>{% if monitoring.stale_pending_intakes %}{{ monitoring.stale_pending_intakes }} há mais de 24h{% else %}Nenhum parado há mais de 24h{% endif %}</small>
+    </article>
   </div>
   {% if monitoring.alerts %}
   <div class="central-alertas" role="status">

@@ -202,6 +202,20 @@ async def test_ficha_parcial_pode_ser_salva_e_confirmada_sem_virar_cliente(world
         )
         assert "Confecções Aurora" in portfolio.text
         assert "pré-cadastro" in portfolio.text
+        assert "cadastro pendente" in portfolio.text
+        assert "2 item(ns) na carteira" in portfolio.text
+        pending_only = await representative.get(
+            f"/portal/customers/representantes/{world.representative_a_id}",
+            params={"situacao": "pendentes"},
+        )
+        assert "Confecções Aurora" in pending_only.text
+        assert "Alfa Tecelagem Ltda." not in pending_only.text
+        active_only = await representative.get(
+            f"/portal/customers/representantes/{world.representative_a_id}",
+            params={"situacao": "ativos"},
+        )
+        assert "Confecções Aurora" not in active_only.text
+        assert "Alfa Tecelagem Ltda." in active_only.text
         response = await representative.post(
             f"/portal/intakes/{intake.id}/confirm-field",
             data={

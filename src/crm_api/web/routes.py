@@ -39,7 +39,7 @@ from crm_api.models.assistant_settings import (
 )
 from crm_api.models.customer import Customer, Tenant
 from crm_api.models.customer_contact import CustomerContact
-from crm_api.models.customer_intake import IntakeStatus
+from crm_api.models.customer_intake import CustomerIntake, IntakeStatus
 from crm_api.models.interaction import (
     GATEWAY_SOURCE,
     NOTE_CHANNELS,
@@ -491,11 +491,25 @@ async def pagina_carteira(
         (row for row in intakes if intake_id is not None and row[0].id == intake_id),
         intakes[0] if intakes else None,
     )
-    pending_by_owner: dict[uuid.UUID, int] = {}
-    for pending_intake, _ in intakes:
-        pending_by_owner[pending_intake.created_by_user_id] = (
-            pending_by_owner.get(pending_intake.created_by_user_id, 0) + 1
-        )
+    # A fila exibida acima é paginada; os totais por representante não podem
+    # depender das primeiras 50 linhas, ou a carteira ficaria menor justamente
+    # quando houvesse mais cadastros aguardando conferência.
+    pending_by_owner = {
+        owner_id: int(count)
+        for owner_id, count in (
+            await session.execute(
+                select(
+                    CustomerIntake.created_by_user_id,
+                    func.count(CustomerIntake.id),
+                )
+                .where(
+                    CustomerIntake.tenant_id == current_user.tenant_id,
+                    CustomerIntake.status == IntakeStatus.PENDING,
+                )
+                .group_by(CustomerIntake.created_by_user_id)
+            )
+        ).all()
+    }
     sao_paulo = ZoneInfo("America/Sao_Paulo")
     agora_local = datetime.now(UTC).astimezone(sao_paulo)
     hoje = agora_local.date()
@@ -624,13 +638,17 @@ async def pagina_carteira(
             .order_by(Customer.state_code)
             .limit(1)
         )
+        pending_rep = pending_by_owner.get(representante.id, 0)
         representantes_resumo.append({
             "id": str(representante.id),
             "name": representante.full_name,
             "state_code": uf_rep or "—",
-            "customers": clientes_rep,
+            # Um intake pendente já pertence à fila comercial do representante,
+            # embora ainda não seja cliente ativo nem autorize o telefone.
+            "customers": clientes_rep + pending_rep,
+            "confirmed_customers": clientes_rep,
             "contacts": contatos_rep,
-            "pending_intakes": pending_by_owner.get(representante.id, 0),
+            "pending_intakes": pending_rep,
         })
     if pode_gerir:
         sem_titular = int(await session.scalar(
@@ -650,7 +668,8 @@ async def pagina_carteira(
         ) or 0)
         representantes_resumo.append({
             "id": "sem-titular", "name": "Sem titular", "state_code": "—",
-            "customers": sem_titular, "contacts": sem_titular_contatos,
+            "customers": sem_titular, "confirmed_customers": sem_titular,
+            "contacts": sem_titular_contatos,
             "pending_intakes": 0,
         })
     if busca and busca.strip():
@@ -682,6 +701,7 @@ async def pagina_carteira(
                 for cliente, dono in linhas
             ],
             "total": total,
+            "portfolio_total": total + total_intakes,
             "intakes": intakes,
             "selected_intake": selected_intake,
             "total_intakes": total_intakes,
@@ -769,19 +789,27 @@ async def pagina_carteira_do_representante(
     ) or 0)
     ativos = sum(1 for customer, _ in linhas if customer.active)
     pending_intakes = []
+    pending_total = 0
     if owner is not None:
+        pending_total = await CustomerIntakeRepository(session).count(
+            current_user.tenant_id,
+            author_user_id=owner.id,
+            status=IntakeStatus.PENDING,
+        )
         pending_rows = await CustomerIntakeRepository(session).list(
             current_user.tenant_id,
             author_user_id=owner.id,
             status=IntakeStatus.PENDING,
-            limit=100,
+            limit=300,
             offset=0,
         )
-        pending_intakes = [
-            row
-            for row in pending_rows
-            if not busca or busca.casefold() in row[0].legal_name.casefold()
-        ]
+        if situacao in (None, "", "pendentes"):
+            pending_intakes = [
+                row
+                for row in pending_rows
+                if not busca or busca.casefold() in row[0].legal_name.casefold()
+            ]
+    visible_customer_rows = [] if situacao == "pendentes" else linhas
     return _render(
         request,
         "representative_portfolio.html",
@@ -791,9 +819,12 @@ async def pagina_carteira_do_representante(
             "owner_key": owner_key,
             "clientes": [
                 {"customer": customer, "owner": customer_owner}
-                for customer, customer_owner in linhas
+                for customer, customer_owner in visible_customer_rows
             ],
             "total": total,
+            "portfolio_total": total + pending_total,
+            "visible_customer_total": len(visible_customer_rows),
+            "pending_total": pending_total,
             "contatos": contatos,
             "ativos": ativos,
             "pending_intakes": pending_intakes,

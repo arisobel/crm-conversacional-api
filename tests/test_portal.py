@@ -21,6 +21,7 @@ from crm_api.models.assistant_settings import (
 )
 from crm_api.models.customer import Customer, CustomerLocation
 from crm_api.models.customer_contact import CustomerContact
+from crm_api.models.customer_intake import CustomerIntake
 from crm_api.models.interaction import (
     GATEWAY_SOURCE,
     CustomerInteraction,
@@ -190,6 +191,13 @@ async def test_central_exibe_funcionamento_conversa_agenda_e_handoff(world, admi
                 action="PRICE_BATCH_PUBLISHED", entity="price_lists",
                 entity_id=uuid4(), after={"criados": 1},
             ),
+            CustomerIntake(
+                id=uuid4(), tenant_id=world.tenant_id,
+                created_by_user_id=world.representative_a_id,
+                idempotency_key="wamid.MONITOR.INTAKE",
+                legal_name="Cliente aguardando revisão",
+                created_at=now - timedelta(hours=25),
+            ),
         ])
         await session.commit()
 
@@ -202,6 +210,9 @@ async def test_central_exibe_funcionamento_conversa_agenda_e_handoff(world, admi
     assert "Transferências humanas" in page.text
     assert "Gateway WhatsApp" in page.text
     assert "Não foi possível consultar agora" in page.text
+    assert "Cadastros aguardando conferência" in page.text
+    assert "1 há mais de 24h" in page.text
+    assert "1 pré-cadastro(s) aguarda(m) conferência há mais de 24 horas." in page.text
 
 
 @pytest.mark.asyncio
