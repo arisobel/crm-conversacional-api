@@ -13,7 +13,7 @@
     <label>Arquivo CSV<input type="file" name="arquivo" accept=".csv,text/csv" required></label>
     <button type="submit">Importar para revisão</button>
   </form>
-  <p class="dica">Arquivos recebidos pelo assistente no WhatsApp também aparecem abaixo, sempre aguardando confirmação antes da publicação.</p>
+  <p class="dica">Arquivos recebidos pelo assistente no WhatsApp também aparecem abaixo. Documentos apenas anexados ficam arquivados sem alterar preços.</p>
 </section>
 
 <section class="painel painel-glass">
@@ -32,9 +32,9 @@
         <td>{{ autores_lotes.get(lote.created_by, 'Sistema') }}</td>
         <td>{% if lote.source_kind == 'PORTAL_CSV' %}Portal · CSV{% elif lote.source_kind == 'WHATSAPP_PDF' %}WhatsApp · PDF{% elif lote.source_kind == 'WHATSAPP_DOCUMENT' %}WhatsApp · arquivo{% elif lote.source_kind == 'WHATSAPP_MESSAGE' %}WhatsApp · mensagem{% elif lote.source_wamid %}WhatsApp{% else %}Importação do servidor{% endif %}</td>
         <td>{% set anexo = anexos_lotes.get(lote.id) %}{% if anexo %}<a class="acao-glass" href="/portal/prices/batches/{{ lote.id }}/source-file" title="{{ anexo.filename }}">baixar arquivo</a>{% else %}<span class="vazio">sem arquivo</span>{% endif %}</td>
-        <td><span class="status-produto status-{{ lote.status.value|lower }}">{{ lote.status.value }}</span></td>
+        <td>{% if lote.proposal_payload and lote.proposal_payload.get('attachment_only') %}<span class="status-produto">ARQUIVADO</span>{% else %}<span class="status-produto status-{{ lote.status.value|lower }}">{{ lote.status.value }}</span>{% endif %}</td>
         <td class="acoes">
-          {% if lote.status.value not in ('CANCELLED', 'EXPIRED') %}
+          {% if not (lote.proposal_payload and lote.proposal_payload.get('attachment_only')) and lote.status.value not in ('CANCELLED', 'EXPIRED') %}
           <form method="post" action="/portal/prices/publish">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="batch_id" value="{{ lote.id }}">
