@@ -86,6 +86,12 @@ async def test_gateway_status_overview_is_sanitized(monkeypatch):
                 }],
                 "contatos_ativos_7d": 12,
                 "conversas_ativas": 4,
+                "recursos": {
+                    "transcricao_audio": True,
+                    "respostas_naturais": True,
+                    "transbordo_automatico": False,
+                    "limite_audio_segundos": 60,
+                },
             }
 
     class Client:
@@ -111,6 +117,12 @@ async def test_gateway_status_overview_is_sanitized(monkeypatch):
         ).status_overview()
         assert result["version"] == "build-123"
         assert result["active_conversations"] == 4
+        assert result["features"] == {
+            "voice_transcription": True,
+            "natural_replies": True,
+            "automatic_handoff": False,
+            "max_audio_seconds": 60,
+        }
         assert result["lines"] == [{
             "label": "Atendimento", "status": "ACTIVE", "flow": "consulta_cliente"
         }]

@@ -221,6 +221,10 @@ class GatewayWhatsappOnboardingClient:
             or not isinstance(payload.get("linhas"), list)
         ):
             raise GatewayOnboardingError("gateway returned an invalid status response")
+        raw_features = payload.get("recursos")
+        raw_features = raw_features if isinstance(raw_features, dict) else {}
+        raw_audio_limit = raw_features.get("limite_audio_segundos")
+        audio_limit = raw_audio_limit if type(raw_audio_limit) in {int, float} else 0
         return {
             "service": payload["servico"],
             "version": str(payload.get("versao") or "unknown")[:80],
@@ -229,6 +233,12 @@ class GatewayWhatsappOnboardingClient:
             "flows": int(payload.get("fluxos") or 0),
             "active_contacts_7d": int(payload.get("contatos_ativos_7d") or 0),
             "active_conversations": int(payload.get("conversas_ativas") or 0),
+            "features": {
+                "voice_transcription": raw_features.get("transcricao_audio") is True,
+                "natural_replies": raw_features.get("respostas_naturais") is True,
+                "automatic_handoff": raw_features.get("transbordo_automatico") is True,
+                "max_audio_seconds": max(0, min(int(audio_limit), 600)),
+            },
             "lines": [
                 {
                     "label": str(item.get("rotulo") or "Linha WhatsApp")[:120],

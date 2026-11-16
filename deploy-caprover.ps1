@@ -1,11 +1,19 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [string]$EnvironmentFile = (Join-Path $PSScriptRoot ".env"),
+    [string]$EnvironmentFile,
     [string]$TarFile,
     [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
+
+# No Windows PowerShell, `$PSScriptRoot` pode estar vazio enquanto os valores
+# padrao de `param` sao avaliados. Resolva o caminho somente depois que o script
+# foi carregado para que o deploy sem argumentos seja confiavel.
+$scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
+if ([string]::IsNullOrWhiteSpace($EnvironmentFile)) {
+    $EnvironmentFile = Join-Path $scriptDirectory ".env"
+}
 
 function Import-DeployEnvironment {
     param([Parameter(Mandatory)][string]$Path)

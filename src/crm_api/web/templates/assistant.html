@@ -20,6 +20,21 @@
       <small>{% if gateway_status %}{{ gateway_status.lines|length }} linha(s) · {{ gateway_status.active_conversations }} conversa(s) ativa(s){% else %}Não foi possível consultar agora{% endif %}</small>
     </article>
     <article>
+      <span>Mensagens de voz</span>
+      <strong>{% if gateway_status and gateway_status.features.voice_transcription %}Prontas{% else %}Inativas{% endif %}</strong>
+      <small>{% if gateway_status and gateway_status.features.voice_transcription %}Transcrição em português · até {{ gateway_status.features.max_audio_seconds }}s{% else %}Verifique as credenciais Meta e OpenAI{% endif %}</small>
+    </article>
+    <article>
+      <span>Respostas naturais</span>
+      <strong>{% if gateway_status and gateway_status.features.natural_replies %}Ativas{% else %}Inativas{% endif %}</strong>
+      <small>Variação de texto sem alterar regras e confirmações</small>
+    </article>
+    <article>
+      <span>Transferência automática</span>
+      <strong>{% if gateway_status and gateway_status.features.automatic_handoff %}Ativa{% else %}Inativa{% endif %}</strong>
+      <small>Encaminhamento após falhas consecutivas de compreensão</small>
+    </article>
+    <article>
       <span>Mensagens recebidas · 24h</span>
       <strong>{{ monitoring.customer_messages_24h + monitoring.representative_messages_24h }}</strong>
       <small>{{ monitoring.customer_messages_24h }} de clientes · {{ monitoring.representative_messages_24h }} de representantes</small>
