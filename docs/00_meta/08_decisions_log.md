@@ -1,5 +1,19 @@
 # Registro de decisões
 
+## ADR-034 - Linguagem natural limitada por diretiva de domínio
+
+**Status:** aceita em 2026-11-16.
+
+Cadastro, agenda e atualização de preços podem ter a resposta final redigida
+dinamicamente pelo Gateway. O CRM, porém, devolve uma diretiva estruturada com
+estado, campos faltantes, confirmação necessária e ações permitidas. A redação
+não pode criar fatos nem decidir a próxima operação.
+
+O texto gerado é uma camada de apresentação. Preços, horários, clientes,
+permissões, persistência e auditoria continuam deterministas. Em falha, timeout
+ou saída inválida do redator, o Gateway usa a resposta determinística vigente.
+Confirmações e botões devem refletir exclusivamente `allowed_actions`.
+
 ## ADR-001 — Separar Gateway e domínio comercial
 
 **Status:** aceita.

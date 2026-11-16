@@ -12,6 +12,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from crm_api.models.pricing import AvailabilityStatus
+from crm_api.schemas.assistant_conversation import AssistantConversationDirective
 from crm_api.schemas.customer_intake import OpenCustomerIntakeRequest
 from crm_api.schemas.price_lists import CurrentPriceListItemResponse, ProductSuggestionResponse
 
@@ -72,6 +73,7 @@ class AssistantReminderResponse(BaseModel):
     status: str
     due_at: datetime
     kind: str
+    conversation: AssistantConversationDirective | None = None
 
 
 class AssistantReminderListRequest(BaseModel):
@@ -102,6 +104,7 @@ class AssistantManageReminderResponse(BaseModel):
     status: str
     due_at: datetime
     changed: bool
+    conversation: AssistantConversationDirective | None = None
 
 
 class PriceUpdateRow(BaseModel):
@@ -162,6 +165,7 @@ class AssistantPriceUpdateProposalResponse(BaseModel):
     unknown_skus: list[str] = Field(default_factory=list)
     incomplete_rows: list[str] = Field(default_factory=list)
     changes: list[PriceUpdateChangeResponse] = Field(default_factory=list)
+    conversation: AssistantConversationDirective | None = None
 
 
 class AssistantConfirmPriceUpdateRequest(BaseModel):
@@ -172,6 +176,7 @@ class AssistantPendingPriceUpdateResponse(BaseModel):
     pending: bool
     proposal_id: UUID | None = None
     created_at: datetime | None = None
+    conversation: AssistantConversationDirective | None = None
 
 
 class AssistantAttachPriceDocumentRequest(BaseModel):
@@ -186,6 +191,7 @@ class AssistantAttachPriceDocumentResponse(BaseModel):
     batch_id: UUID
     attached: bool = True
     already_attached: bool = False
+    conversation: AssistantConversationDirective | None = None
 
 
 class AssistantPriceUpdateConfirmationResponse(BaseModel):
@@ -198,6 +204,7 @@ class AssistantPriceUpdateConfirmationResponse(BaseModel):
     products_created: int = 0
     products_updated: int = 0
     families_created: int = 0
+    conversation: AssistantConversationDirective | None = None
 
 
 class PriceItemsResponse(BaseModel):

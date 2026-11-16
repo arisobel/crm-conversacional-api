@@ -2516,6 +2516,38 @@ components:
         message_preview:
           type: string
 
+    AssistantConversationDirective:
+      type: object
+      description: >
+        Limites de estado e ação para o Gateway redigir a resposta sem criar
+        fatos de domínio. Campo aditivo nas respostas de cadastro, agenda e
+        atualização de preços da Linha Assistente v2.
+      required:
+        [operation, state, requires_confirmation, missing_fields, allowed_actions]
+      properties:
+        operation:
+          type: string
+          enum: [CUSTOMER_INTAKE, REMINDER, PRICE_UPDATE]
+        state:
+          type: string
+          enum:
+            [IDLE, ATTACHED, NEEDS_INPUT, WAITING_CONFIRMATION,
+             WAITING_REVIEW, COMPLETED, CANCELLED]
+        requires_confirmation:
+          type: boolean
+          default: false
+        missing_fields:
+          type: array
+          items:
+            type: string
+        allowed_actions:
+          type: array
+          items:
+            type: string
+            enum:
+              [REVIEW_IN_CRM, CANCEL, RESCHEDULE, CONFIRM, RESUBMIT,
+               ANALYZE_PRICE_UPDATE, ARCHIVE_IN_CRM]
+
     Offer:
       allOf:
         - $ref: "#/components/schemas/OfferPreview"

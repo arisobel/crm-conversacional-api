@@ -43,6 +43,12 @@ from crm_api.repositories.price_entries import PriceEntryRepository
 from crm_api.repositories.reminders import ReminderRepository
 from crm_api.repositories.users import UserRepository
 from crm_api.repositories.whatsapp_connections import WhatsappConnectionRepository
+from crm_api.schemas.assistant_conversation import (
+    AssistantAllowedAction,
+    AssistantConversationDirective,
+    AssistantOperation,
+    AssistantOutcomeState,
+)
 from crm_api.schemas.customer_intake import (
     CustomerIntakeResponse,
     OpenCustomerIntakeRequest,
@@ -693,6 +699,11 @@ async def assistant_open_customer_intake(
         preferred_products_text=result.preferred_products_text,
         created_at=result.created_at,
         created=opened.created,
+        conversation=AssistantConversationDirective(
+            operation=AssistantOperation.CUSTOMER_INTAKE,
+            state=AssistantOutcomeState.WAITING_REVIEW,
+            allowed_actions=[AssistantAllowedAction.REVIEW_IN_CRM],
+        ),
     )
 
 
@@ -753,6 +764,14 @@ async def assistant_create_reminder(
         status=reminder.status,
         due_at=reminder.due_at,
         kind=reminder.kind,
+        conversation=AssistantConversationDirective(
+            operation=AssistantOperation.REMINDER,
+            state=AssistantOutcomeState.COMPLETED,
+            allowed_actions=[
+                AssistantAllowedAction.CANCEL,
+                AssistantAllowedAction.RESCHEDULE,
+            ],
+        ),
     )
 
 
@@ -857,6 +876,19 @@ async def assistant_manage_reminder(
         status=reminder.status,
         due_at=reminder.due_at,
         changed=changed,
+        conversation=AssistantConversationDirective(
+            operation=AssistantOperation.REMINDER,
+            state=(
+                AssistantOutcomeState.CANCELLED
+                if payload.action == "CANCEL"
+                else AssistantOutcomeState.COMPLETED
+            ),
+            allowed_actions=(
+                []
+                if payload.action == "CANCEL"
+                else [AssistantAllowedAction.CANCEL, AssistantAllowedAction.RESCHEDULE]
+            ),
+        ),
     )
 
 
@@ -918,6 +950,13 @@ async def assistant_propose_price_update(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     await session.commit()
+    missing_fields = []
+    if proposal.duplicate_skus:
+        missing_fields.append("duplicate_skus")
+    if proposal.unknown_skus:
+        missing_fields.append("unknown_skus")
+    if proposal.incomplete_rows:
+        missing_fields.append("incomplete_rows")
     return AssistantPriceUpdateProposalResponse(
         proposal_id=proposal.proposal_id,
         reference_month=proposal.reference_month,
@@ -934,6 +973,21 @@ async def assistant_propose_price_update(
             )
             for change in proposal.changes
         ],
+        conversation=AssistantConversationDirective(
+            operation=AssistantOperation.PRICE_UPDATE,
+            state=(
+                AssistantOutcomeState.WAITING_CONFIRMATION
+                if proposal.ready_for_confirmation
+                else AssistantOutcomeState.NEEDS_INPUT
+            ),
+            requires_confirmation=proposal.ready_for_confirmation,
+            missing_fields=missing_fields,
+            allowed_actions=(
+                [AssistantAllowedAction.CONFIRM, AssistantAllowedAction.CANCEL]
+                if proposal.ready_for_confirmation
+                else [AssistantAllowedAction.RESUBMIT, AssistantAllowedAction.CANCEL]
+            ),
+        ),
     )
 
 
@@ -959,6 +1013,20 @@ async def assistant_pending_price_update(
         pending=batch is not None,
         proposal_id=batch.id if batch is not None else None,
         created_at=batch.created_at if batch is not None else None,
+        conversation=AssistantConversationDirective(
+            operation=AssistantOperation.PRICE_UPDATE,
+            state=(
+                AssistantOutcomeState.WAITING_CONFIRMATION
+                if batch is not None
+                else AssistantOutcomeState.IDLE
+            ),
+            requires_confirmation=batch is not None,
+            allowed_actions=(
+                [AssistantAllowedAction.CONFIRM, AssistantAllowedAction.CANCEL]
+                if batch is not None
+                else []
+            ),
+        ),
     )
 
 
@@ -1001,6 +1069,14 @@ async def assistant_attach_price_document(
         batch_id=batch.id,
         attached=True,
         already_attached=not created,
+        conversation=AssistantConversationDirective(
+            operation=AssistantOperation.PRICE_UPDATE,
+            state=AssistantOutcomeState.ATTACHED,
+            allowed_actions=[
+                AssistantAllowedAction.ANALYZE_PRICE_UPDATE,
+                AssistantAllowedAction.ARCHIVE_IN_CRM,
+            ],
+        ),
     )
 
 
@@ -1029,7 +1105,13 @@ async def assistant_cancel_price_update(
     except PriceUpdateProposalForbidden as error:
         raise HTTPException(status_code=403, detail="price update proposal denied") from error
     await session.commit()
-    return AssistantPendingPriceUpdateResponse(pending=False)
+    return AssistantPendingPriceUpdateResponse(
+        pending=False,
+        conversation=AssistantConversationDirective(
+            operation=AssistantOperation.PRICE_UPDATE,
+            state=AssistantOutcomeState.CANCELLED,
+        ),
+    )
 
 
 @router.post(
@@ -1057,7 +1139,13 @@ async def assistant_confirm_price_update(
         raise HTTPException(status_code=403, detail="price update proposal denied") from error
     if batch.status == PriceListStatus.PUBLISHED:
         return AssistantPriceUpdateConfirmationResponse(
-            proposal_id=batch.id, published=True, already_published=True
+            proposal_id=batch.id,
+            published=True,
+            already_published=True,
+            conversation=AssistantConversationDirective(
+                operation=AssistantOperation.PRICE_UPDATE,
+                state=AssistantOutcomeState.COMPLETED,
+            ),
         )
     if batch.status != PriceListStatus.DRAFT:
         raise HTTPException(status_code=409, detail="price update proposal is not publishable")
@@ -1089,6 +1177,10 @@ async def assistant_confirm_price_update(
         products_created=materialized.products_created,
         products_updated=materialized.products_updated,
         families_created=materialized.families_created,
+        conversation=AssistantConversationDirective(
+            operation=AssistantOperation.PRICE_UPDATE,
+            state=AssistantOutcomeState.COMPLETED,
+        ),
     )
 
 

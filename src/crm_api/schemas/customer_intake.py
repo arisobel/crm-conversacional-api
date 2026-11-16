@@ -11,6 +11,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from crm_api.models.customer_intake import IntakeStatus
+from crm_api.schemas.assistant_conversation import AssistantConversationDirective
 
 
 class OpenCustomerIntakeRequest(BaseModel):
@@ -48,3 +49,4 @@ class CustomerIntakeResponse(BaseModel):
     # resposta ao representante usa isto para não confirmar duas vezes a mesma
     # abertura.
     created: bool
+    conversation: AssistantConversationDirective | None = None

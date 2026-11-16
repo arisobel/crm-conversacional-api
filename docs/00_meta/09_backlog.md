@@ -1,5 +1,15 @@
 # Backlog priorizado
 
+## Linguagem natural controlada — 2026-11-16
+
+- [x] Publicar diretiva estruturada de conversa para cadastro, agenda e preços,
+      sem frase pronta e sem transferir decisão de domínio para a LLM.
+- [ ] Fazer o Gateway consumir `conversation`: redigir de forma natural usando
+      somente os fatos da resposta, oferecer apenas `allowed_actions` e manter
+      o formatador determinístico como fallback em erro ou timeout.
+- [ ] Liberar por flag primeiro no assistente do representante e executar testes
+      ponta a ponta de confirmação, cancelamento, dado ausente e duplicidade.
+
 ## Próximo passo operacional — 2026-11-10
 
 - [ ] Melhorar o e-mail/mensagem de confirmação da atualização de preços.

@@ -1,8 +1,21 @@
 # Progresso central
 
-Atualizado em: 2026-10-25
+Atualizado em: 2026-11-16
 
 ## Estado atual
+
+### Ciclo conversacional seguro para o MVP (2026-11-16)
+
+Cadastro, agenda e atualização de preços agora devolvem uma diretiva comum ao
+Gateway: operação, estado, necessidade de confirmação, dados faltantes e ações
+permitidas. O contrato não traz frase pronta. Ele permite redação natural sem
+dar à LLM autoridade para criar preço, cliente, horário ou comando. O CRM segue
+responsável por autorização, confirmação, persistência e auditoria.
+
+Validação local: 606 testes do CRM e os testes específicos do novo contrato
+passaram. A adoção no redator do Gateway e o teste ponta a ponta continuam como
+próximo corte; até lá, os formatadores atuais permanecem compatíveis porque o
+novo campo de resposta é aditivo.
 
 ### ADR-033 — Linha Assistente central vinculada às linhas de representantes (2026-10-26)
 

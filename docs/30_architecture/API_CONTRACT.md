@@ -1,5 +1,19 @@
 # Contrato da API
 
+## Diretiva conversacional das operações do representante
+
+As respostas de escrita em `/assistant-v2/customer-intakes`,
+`/assistant-v2/reminders` e `/assistant-v2/price-updates` incluem o campo
+aditivo `conversation`. Ele informa `operation`, `state`,
+`requires_confirmation`, `missing_fields` e `allowed_actions`.
+
+O campo não contém frase pronta nem instrução executável. O Gateway pode usar
+esses limites e os demais dados estruturados da resposta para redigir em
+português natural. Ele não pode oferecer ação fora de `allowed_actions`, omitir
+confirmação quando `requires_confirmation=true` nem declarar conclusão quando
+o estado não for `COMPLETED`. A ausência do campo preserva o formatador anterior,
+o que permite implantar CRM e Gateway separadamente.
+
 A fonte executável do contrato é `openapi/crm-api.yaml`.
 
 ## Limite Gateway → CRM
