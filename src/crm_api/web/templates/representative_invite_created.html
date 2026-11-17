@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Convite de representante{% endblock %}
+{% block conteudo %}
+<div class="invite-admin-shell glass-panel">
+  <header class="invite-admin-header">
+    <div>
+      <span class="eyebrow">NOVO REPRESENTANTE</span>
+      <h1>Convite pronto para enviar</h1>
+      <p>Este link é individual, expira em sete dias e só pode ser usado uma vez.</p>
+    </div>
+    <a class="botao botao-secundario" href="/portal/customers">Voltar para Carteira</a>
+  </header>
+  <section class="glass-section invite-link-card">
+    <label for="representative-invite-url">Link do convite</label>
+    <div class="invite-link-row">
+      <input id="representative-invite-url" value="{{ invite_url }}" readonly>
+      <button type="button" data-copy-target="representative-invite-url">Copiar link</button>
+    </div>
+    <p class="dica">O representante preencherá os próprios dados. Nenhuma carteira ou linha individual do assistente será criada nesta etapa.</p>
+  </section>
+</div>
+{% endblock %}

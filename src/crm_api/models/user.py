@@ -32,6 +32,13 @@ class UserRole(StrEnum):
     REPRESENTATIVE = "REPRESENTATIVE"
 
 
+class RepresentativeInviteStatus(StrEnum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    REVOKED = "REVOKED"
+    EXPIRED = "EXPIRED"
+
+
 class User(Base):
     """Identidade autenticável do portal.
 
@@ -100,6 +107,38 @@ class UserSession(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class RepresentativeInvite(Base):
+    """Convite individual para um representante criar o próprio acesso.
+
+    O token em claro só aparece uma vez, na resposta que o administrador copia.
+    O banco guarda exclusivamente seu SHA-256, seguindo o mesmo desenho das
+    sessões do portal. O convite não escolhe linha do assistente nem cria
+    carteira: ambos são conceitos fora do onboarding do usuário.
+    """
+
+    __tablename__ = "representative_invites"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="ux_representative_invites_token"),
+        Index("ix_representative_invites_tenant_status", "tenant_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[RepresentativeInviteStatus] = mapped_column(
+        SqlEnum(RepresentativeInviteStatus, name="representative_invite_status"),
+        default=RepresentativeInviteStatus.PENDING,
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    representative_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class AuditLog(Base):

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Preparando seu acesso{% endblock %}
+{% block conteudo %}
+<div class="onboarding-ready-shell glass-panel" data-onboarding-ready>
+  <section class="onboarding-loading" data-onboarding-loading>
+    <div class="onboarding-spinner" aria-hidden="true"></div>
+    <span class="eyebrow">CONFIGURANDO SEU ACESSO</span>
+    <h1>Está quase tudo pronto, {{ representative.full_name }}.</h1>
+    <p>Seus dados já estão no CRM. Estamos concluindo as configurações iniciais.</p>
+    <div class="onboarding-progress"><i></i></div>
+  </section>
+
+  <section class="onboarding-result" data-onboarding-result hidden>
+    <header>
+      <div>
+        <span class="eyebrow">ACESSO PREPARADO</span>
+        <h1>Falta somente conectar seu WhatsApp Business</h1>
+        <p>O CRM e o assistente central já reconhecem você. A autorização abaixo conecta sua própria linha comercial ao Coexistence.</p>
+      </div>
+      <span class="ready-badge">✓ Dados salvos</span>
+    </header>
+
+    <div class="onboarding-checklist">
+      <article class="done"><span>✓</span><div><strong>Cadastro no CRM</strong><small>{{ representative.email }}</small></div></article>
+      <article class="done"><span>✓</span><div><strong>Linha central do assistente</strong><small>{% if assistant_ready %}Seu número já foi autorizado{% else %}Aguardando configuração administrativa da linha central{% endif %}</small></div></article>
+      <article><span>3</span><div><strong>WhatsApp Business</strong><small>Autorize a Meta para ativar o Coexistence</small></div></article>
+    </div>
+
+    <section class="onboarding-meta-card" id="whatsapp-connection" data-user-id="{{ representative.id }}" data-csrf-token="{{ csrf_token }}">
+      <div><h2>Conectar com a Meta</h2><p>A janela oficial da Meta será aberta para você confirmar a empresa e o número.</p></div>
+      <div data-whatsapp-state>
+      {% if not connection %}
+        <button type="button" data-whatsapp-action="create">Conectar meu WhatsApp Business</button>
+      {% elif connection.status.value == 'CONNECTED' %}
+        <p><strong>WhatsApp conectado</strong></p><p>{{ connection.display_phone_number or 'Número conectado.' }}</p>
+      {% elif connection.status.value == 'ACTION_REQUIRED' %}
+        <button type="button" data-whatsapp-action="resume">Continuar autorização</button>
+      {% elif connection.status.value == 'FAILED' %}
+        <button type="button" data-whatsapp-action="{% if retry_action.value == 'RESTART' %}restart{% else %}resume{% endif %}">Tentar novamente</button>
+      {% else %}
+        <p>Conexão em andamento...</p><button type="button" data-whatsapp-action="cancel">Cancelar tentativa</button>
+      {% endif %}
+      </div>
+    </section>
+  </section>
+</div>
+{% endblock %}

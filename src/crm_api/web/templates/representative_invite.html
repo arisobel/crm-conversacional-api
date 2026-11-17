@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Convite para o CRM</title>
+  <link rel="stylesheet" href="/portal/static/portal.css?v=20261117-invites">
+</head>
+<body class="invite-public-page">
+  <main class="invite-public-shell">
+    <section class="invite-brand-card">
+      <img src="/portal/static/crm-logo.png" alt="CRM">
+      {% if invite_available %}
+      <span class="eyebrow">VOCÊ FOI CONVIDADO</span>
+      <h1>Prepare seu acesso ao CRM</h1>
+      <p>Preencha seus dados uma única vez. Em seguida, seu acesso e o assistente estarão prontos e você seguirá para conectar o WhatsApp Business.</p>
+      {% else %}
+      <span class="eyebrow">CONVITE INDISPONÍVEL</span>
+      <h1>Este link não pode mais ser utilizado</h1>
+      <p>Solicite ao administrador um novo convite individual.</p>
+      {% endif %}
+    </section>
+
+    <section class="invite-form-card">
+      {% if erro %}<p class="aviso erro">{{ erro }}</p>{% endif %}
+      {% if invite_available %}
+      <div class="invite-form-heading">
+        <h2>Seus dados</h2>
+        {% if tenant_name %}<span>{{ tenant_name }}</span>{% endif %}
+      </div>
+      <form method="post" action="/portal/convite/representante/{{ token }}" class="invite-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Nome completo
+          <input name="full_name" value="{{ form.full_name or '' }}" autocomplete="name" required>
+        </label>
+        <label>E-mail
+          <input name="email" type="email" value="{{ form.email or '' }}" autocomplete="email" required>
+        </label>
+        <label>Seu WhatsApp
+          <input name="whatsapp_e164" value="{{ form.whatsapp_e164 or '' }}" inputmode="tel" autocomplete="tel" placeholder="+55 11 99999-9999" required>
+          <small>Este número identifica você na linha central do assistente.</small>
+        </label>
+        <label>Crie sua senha
+          <input name="password" type="password" autocomplete="new-password" minlength="{{ password_min_length or 12 }}" required>
+          <small>Use ao menos {{ password_min_length or 12 }} caracteres, com letra e número.</small>
+        </label>
+        <button type="submit">Preparar meu acesso</button>
+      </form>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

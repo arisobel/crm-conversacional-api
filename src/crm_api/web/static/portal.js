@@ -382,4 +382,28 @@
     });
   }
   ligarTipoPessoa();
+
+  document.querySelectorAll("[data-copy-target]").forEach(function (botao) {
+    botao.addEventListener("click", async function () {
+      var campo = document.getElementById(botao.dataset.copyTarget);
+      if (!campo) return;
+      try {
+        await navigator.clipboard.writeText(campo.value);
+      } catch (_) {
+        campo.select();
+        document.execCommand("copy");
+      }
+      botao.textContent = "Link copiado";
+    });
+  });
+
+  var onboarding = document.querySelector("[data-onboarding-ready]");
+  if (onboarding) {
+    var carregando = onboarding.querySelector("[data-onboarding-loading]");
+    var resultado = onboarding.querySelector("[data-onboarding-result]");
+    window.setTimeout(function () {
+      if (carregando) carregando.hidden = true;
+      if (resultado) resultado.hidden = false;
+    }, 1400);
+  }
 })();

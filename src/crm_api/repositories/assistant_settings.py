@@ -11,7 +11,45 @@ from crm_api.models.assistant_settings import (
     AssistantRepresentativeSettings,
 )
 from crm_api.models.user import User, UserRole
-from crm_api.services.assistant_policy import AssistantPolicy
+from crm_api.services.assistant_policy import REPRESENTATIVE_CAPABILITIES, AssistantPolicy
+
+
+async def enable_representative_assistant(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> None:
+    """Provisiona um convidado com as capacidades comerciais atuais.
+
+    Não liga a organização nem cria linha: a linha assistente é global e o
+    interruptor organizacional continua sendo decisão administrativa.
+    """
+    settings = await session.get(AssistantRepresentativeSettings, (tenant_id, user_id))
+    if settings is None:
+        settings = AssistantRepresentativeSettings(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            enabled=True,
+        )
+        session.add(settings)
+        await session.flush()
+    else:
+        settings.enabled = True
+
+    existing = set(
+        await session.scalars(
+            select(AssistantRepresentativeCapability.capability_id).where(
+                AssistantRepresentativeCapability.tenant_id == tenant_id,
+                AssistantRepresentativeCapability.user_id == user_id,
+            )
+        )
+    )
+    session.add_all(
+        AssistantRepresentativeCapability(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            capability_id=capability_id,
+        )
+        for capability_id in sorted(REPRESENTATIVE_CAPABILITIES - existing)
+    )
 
 
 async def get_assistant_policy(

@@ -54,8 +54,12 @@ from crm_api.models.reminder import (
     RepresentativeReminder,
 )
 from crm_api.models.tax import IcmsRule
-from crm_api.models.user import User, UserRole
+from crm_api.models.user import RepresentativeInviteStatus, User, UserRole
 from crm_api.models.whatsapp_connection import WhatsappConnectionStatus
+from crm_api.repositories.assistant_settings import (
+    enable_representative_assistant,
+    get_assistant_policy,
+)
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.catalog import CatalogRepository, ProductFilters
 from crm_api.repositories.customer_admin import CustomerAdminRepository
@@ -70,6 +74,7 @@ from crm_api.repositories.portfolio import (
 from crm_api.repositories.price_entries import PriceEntryRepository
 from crm_api.repositories.price_lists import PriceListRepository
 from crm_api.repositories.reminders import ReminderRepository
+from crm_api.repositories.representative_invites import RepresentativeInviteRepository
 from crm_api.repositories.users import SessionRepository, UserRepository
 from crm_api.repositories.whatsapp_campaigns import WhatsappCampaignRepository
 from crm_api.repositories.whatsapp_connections import WhatsappConnectionRepository
@@ -143,6 +148,10 @@ from crm_api.services.price_publication import (
     BatchNotFound,
     BatchNotPublishable,
     PricePublicationService,
+)
+from crm_api.services.representative_invites import (
+    RepresentativeInviteService,
+    RepresentativeInviteUnavailable,
 )
 from crm_api.services.users import (
     EmailAlreadyUsed,
@@ -731,6 +740,7 @@ async def pagina_carteira(
                 "contato": contato,
             },
             "pode_gerir": pode_gerir,
+            "pode_convidar_representante": current_user.role is UserRole.ADMIN,
             "somente_minha": not pode_gerir,
             "representantes_resumo": representantes_resumo,
         },
@@ -1947,6 +1957,257 @@ async def salvar_assistente_representante(
 
 
 # ----------------------------------------------------------- representantes
+
+
+def _representative_invite_service(session: AsyncSession) -> RepresentativeInviteService:
+    return RepresentativeInviteService(
+        invites=RepresentativeInviteRepository(session),
+        audit=AuditRepository(session),
+    )
+
+
+def _set_portal_session_cookie(
+    response: Response, settings: Settings, token: str
+) -> None:
+    response.set_cookie(
+        key=settings.session_cookie_name,
+        value=token,
+        max_age=settings.session_absolute_ttl_seconds,
+        httponly=True,
+        samesite="lax",
+        secure=settings.session_cookie_secure,
+        path="/",
+    )
+
+
+def _invite_error_message(error: Exception) -> str:
+    if isinstance(error, EmailAlreadyUsed):
+        return "Este e-mail já está vinculado a um usuário do CRM."
+    if isinstance(error, WhatsappAlreadyUsed):
+        return "Este WhatsApp já está vinculado a um usuário ou cliente do CRM."
+    if isinstance(error, WeakPassword):
+        return str(error)
+    return "Não foi possível concluir o convite. Confira os dados e tente novamente."
+
+
+@router.post("/representative-invites", include_in_schema=False)
+async def criar_convite_de_representante(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    """Gera um link vazio e individual; o representante preenche os próprios dados."""
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/customers", "csrf")
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+
+    issued = await _representative_invite_service(session).create(
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.user_id,
+        request_id=request.headers.get("x-request-id"),
+    )
+    await session.commit()
+    invite_url = str(
+        request.url_for("pagina_convite_representante", token=issued.token)
+    )
+    return _render(
+        request,
+        "representative_invite_created.html",
+        {"invite_url": invite_url, "invite": issued.invite},
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/convite/representante/{token}",
+    name="pagina_convite_representante",
+    include_in_schema=False,
+)
+async def pagina_convite_representante(
+    token: str,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    try:
+        invite = await _representative_invite_service(session).resolve(token)
+    except RepresentativeInviteUnavailable as error:
+        if (
+            error.invite is not None
+            and error.invite.status is RepresentativeInviteStatus.EXPIRED
+        ):
+            await session.commit()
+        else:
+            await session.rollback()
+        return _render(
+            request,
+            "representative_invite.html",
+            {
+                "invite_available": False,
+                "token": token,
+                "password_min_length": request.app.state.settings.password_min_length,
+            },
+            erro_direto=(
+                "Este convite não está mais disponível. "
+                "Peça um novo link ao administrador."
+            ),
+            status_code=410,
+        )
+    tenant = await session.get(Tenant, invite.tenant_id)
+    return _render(
+        request,
+        "representative_invite.html",
+        {
+            "invite_available": True,
+            "token": token,
+            "tenant_name": tenant.name if tenant else "sua empresa",
+            "form": {},
+            "password_min_length": request.app.state.settings.password_min_length,
+        },
+    )
+
+
+@router.post("/convite/representante/{token}", include_in_schema=False)
+async def aceitar_convite_representante(
+    token: str,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    full_name: Annotated[str, Form()],
+    email: Annotated[str, Form()],
+    whatsapp_e164: Annotated[str, Form()],
+    password: Annotated[str, Form()],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    form = {
+        "full_name": full_name,
+        "email": email,
+        "whatsapp_e164": whatsapp_e164,
+    }
+    if not csrf_is_valid(request, csrf_token):
+        return _render(
+            request,
+            "representative_invite.html",
+            {
+                "invite_available": True,
+                "token": token,
+                "form": form,
+                "password_min_length": request.app.state.settings.password_min_length,
+            },
+            erro_direto="A página expirou. Recarregue o convite e tente novamente.",
+            status_code=400,
+        )
+
+    invite_service = _representative_invite_service(session)
+    try:
+        invite = await invite_service.resolve(token, for_update=True)
+        tenant = await session.get(Tenant, invite.tenant_id)
+        name = full_name.strip()
+        if not name:
+            raise ValueError("blank name")
+        user = await _user_service(request, session).create(
+            tenant_id=invite.tenant_id,
+            actor_user_id=invite.created_by_user_id,
+            full_name=name,
+            email=email,
+            password=password,
+            role=UserRole.REPRESENTATIVE,
+            whatsapp_e164=whatsapp_e164,
+            request_id=request.headers.get("x-request-id"),
+        )
+        await session.flush()
+        await enable_representative_assistant(session, invite.tenant_id, user.id)
+        invite_service.accept(
+            invite, user, request_id=request.headers.get("x-request-id")
+        )
+        issued_session = await build_auth_service(request, session).authenticate(
+            tenant_slug=tenant.slug if tenant else request.app.state.settings.tenant_slug,
+            email=email,
+            password=password,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            request_id=request.headers.get("x-request-id"),
+        )
+        await session.commit()
+    except RepresentativeInviteUnavailable as error:
+        if (
+            error.invite is not None
+            and error.invite.status is RepresentativeInviteStatus.EXPIRED
+        ):
+            await session.commit()
+        else:
+            await session.rollback()
+        return _render(
+            request,
+            "representative_invite.html",
+            {
+                "invite_available": False,
+                "token": token,
+                "password_min_length": request.app.state.settings.password_min_length,
+            },
+            erro_direto=(
+                "Este convite não está mais disponível. "
+                "Peça um novo link ao administrador."
+            ),
+            status_code=410,
+        )
+    except Exception as error:  # noqa: BLE001 -- convertido em mensagem pública segura
+        await session.rollback()
+        return _render(
+            request,
+            "representative_invite.html",
+            {
+                "invite_available": True,
+                "token": token,
+                "form": form,
+                "password_min_length": request.app.state.settings.password_min_length,
+            },
+            erro_direto=_invite_error_message(error),
+            status_code=422,
+        )
+
+    response = RedirectResponse("/portal/onboarding/representante", status_code=303)
+    _set_portal_session_cookie(response, request.app.state.settings, issued_session.token)
+    return response
+
+
+@router.get("/onboarding/representante", include_in_schema=False)
+async def pagina_onboarding_representante(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    if current_user.role is not UserRole.REPRESENTATIVE:
+        return _redirect("/portal/customers")
+    representative = await UserRepository(session).get_in_tenant(
+        current_user.tenant_id, current_user.user_id
+    )
+    assistant_policy = await get_assistant_policy(
+        session, current_user.tenant_id, current_user.user_id
+    )
+    connection = await _whatsapp_connection_service(request, session).get(
+        tenant_id=current_user.tenant_id,
+        actor_id=current_user.user_id,
+        role=current_user.role,
+        representative_id=current_user.user_id,
+        refresh=False,
+    )
+    return _render(
+        request,
+        "representative_onboarding_ready.html",
+        {
+            "representative": representative,
+            "connection": connection,
+            "retry_action": retry_action_for(connection),
+            "assistant_ready": bool(
+                request.app.state.settings.assistant_line_phone_number_id
+                and representative
+                and representative.whatsapp_e164
+                and assistant_policy.effective_capabilities()
+            ),
+        },
+        current_user=current_user,
+    )
 
 
 @router.get("/users", include_in_schema=False)

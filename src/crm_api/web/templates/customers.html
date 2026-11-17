@@ -15,7 +15,16 @@
         <span class="workspace-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="11" cy="9" r="4"/><circle cx="22" cy="10" r="3"/><path d="M3 26c0-6 3-9 8-9s8 3 8 9M19 18c5-1 9 2 9 8"/></svg></span>
         <div><h2>Carteira de Clientes</h2><p>Escolha um representante para abrir sua carteira.</p></div>
       </div>
-      <div class="workspace-actions"><a class="botao botao-secundario pre-intake-button" href="/portal/customers?secao=pre-cadastros">Pré-cadastros <strong>{{ total_intakes }}</strong></a><a class="botao" href="/portal/customers/novo">+ Novo cliente</a></div>
+      <div class="workspace-actions">
+        <a class="botao botao-secundario pre-intake-button" href="/portal/customers?secao=pre-cadastros">Pré-cadastros <strong>{{ total_intakes }}</strong></a>
+        {% if pode_convidar_representante %}
+        <form method="post" action="/portal/representative-invites" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="botao botao-secundario">Convidar representante</button>
+        </form>
+        {% endif %}
+        <a class="botao" href="/portal/customers/novo">+ Novo cliente</a>
+      </div>
     </header>
 
     <div class="carteira-metricas">
