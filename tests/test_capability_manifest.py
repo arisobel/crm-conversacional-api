@@ -398,6 +398,37 @@ async def test_pedido_de_pre_cadastro_resolve_a_capacidade_de_escrita(world):
 
 
 @pytest.mark.asyncio
+async def test_frases_naturais_resolvem_sem_alias_generico(world):
+    cliente = (await _pedir(world, TELEFONE_CLIENTE)).json()
+    representante = (await _pedir(world, TELEFONE_REPRESENTANTE)).json()
+
+    assert (
+        _resolve_alias_como_gateway_206c6bf(cliente, "me passa a tabela atual")
+        == "GET_CURRENT_PRICE_LIST"
+    )
+    assert (
+        _resolve_alias_como_gateway_206c6bf(cliente, "vocês têm 75/36 disponível?")
+        == "SEARCH_CURRENT_PRICE_LIST_ITEMS"
+    )
+    # "tem" sozinho aparecia em frases sem relação com produto e gerava falso
+    # positivo. A forma genérica deixa de ser comando determinístico.
+    assert _resolve_alias_como_gateway_206c6bf(cliente, "tem como me ajudar?") is None
+
+    assert (
+        _resolve_alias_como_gateway_206c6bf(
+            representante, "confirma o preço do PUE 20"
+        )
+        == "CRM_REP_SEARCH_PRICE_ITEMS"
+    )
+    assert (
+        _resolve_alias_como_gateway_206c6bf(
+            representante, "o que ficou combinado com a Aurora?"
+        )
+        == "CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY"
+    )
+
+
+@pytest.mark.asyncio
 async def test_os_dois_atores_recebem_apelidos_diferentes(world):
     do_cliente = (await _pedir(world, TELEFONE_CLIENTE)).json()["actor"]["id"]
     do_representante = (await _pedir(world, TELEFONE_REPRESENTANTE)).json()["actor"]["id"]

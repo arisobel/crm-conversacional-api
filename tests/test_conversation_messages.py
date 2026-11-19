@@ -15,8 +15,8 @@ def test_customer_help_is_a_natural_opening():
     )
 
     assert manifest.help_message == (
-        "Oi, Mariana, tudo bem? Como posso te ajudar? Posso consultar a tabela atual ou "
-        "verificar informa\u00e7\u00f5es de um produto para voc\u00ea."
+        "Oi, Mariana, tudo bem? Como posso te ajudar? Posso enviar a tabela atual ou "
+        "consultar pre\u00e7o, disponibilidade e previs\u00e3o de chegada de um produto."
     )
 
 
@@ -38,6 +38,6 @@ def test_unintelligible_message_uses_the_requested_clarification():
     capabilities = get_interaction_capabilities()
 
     assert capabilities.fallback_message == (
-        "Calma, acho que n\u00e3o entendi \U0001f605. Consegue me dar mais informa\u00e7\u00f5es "
-        "do que voc\u00ea precisa?"
+        "Para eu te ajudar certo: voc\u00ea quer receber a tabela de pre\u00e7os ou "
+        "consultar um produto?"
     )

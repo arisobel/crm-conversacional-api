@@ -58,7 +58,7 @@ def get_interaction_capabilities() -> InteractionCapabilitiesResponse:
     )
     return response.model_copy(update={
         "fallback_message": (
-            "Calma, acho que n\u00e3o entendi \U0001f605. Consegue me dar mais informa\u00e7\u00f5es "
-            "do que voc\u00ea precisa?"
+            "Para eu te ajudar certo: voc\u00ea quer receber a tabela de pre\u00e7os ou "
+            "consultar um produto?"
         )
     })

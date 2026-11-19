@@ -51,14 +51,13 @@ _AJUDA_REPRESENTANTE_LEGADA = (
 # Textos enviados ao Gateway no manifesto. As versoes anteriores permanecem
 # nomeadas como legadas para deixar a troca explicita durante a migracao.
 _AJUDA_CLIENTE = (
-    "Oi, tudo bem? Como posso te ajudar? Posso consultar a tabela atual ou "
-    "verificar informa\u00e7\u00f5es de um produto para voc\u00ea."
+    "Oi, tudo bem? Como posso te ajudar? Posso enviar a tabela atual ou consultar "
+    "pre\u00e7o, disponibilidade e previs\u00e3o de chegada de um produto."
 )
 _AJUDA_REPRESENTANTE = (
-    "Oi, tudo bem? Como posso te ajudar hoje? Posso verificar o pre\u00e7o-base de "
-    "um artigo, localizar um cliente da sua carteira, consultar a tabela de um "
-    "cliente, resumir as \u00faltimas intera\u00e7\u00f5es registradas ou abrir um "
-    "pr\u00e9-cadastro de cliente."
+    "Oi, tudo bem? Como posso te ajudar hoje? Posso consultar artigo e pre\u00e7o-base, "
+    "localizar cliente, mostrar carteira ou tabela, resumir intera\u00e7\u00f5es e abrir "
+    "pr\u00e9-cadastro."
 )
 
 
@@ -92,6 +91,9 @@ _CAPACIDADES_CLIENTE = [
                 "relação de produtos e preços",
                 "valores atuais",
                 "preços atuais",
+                "me manda a tabela",
+                "me passa a tabela",
+                "manda os preços",
             ],
             examples=[
                 "poderia me fornecer a lista de preços atual?",
@@ -122,12 +124,18 @@ _CAPACIDADES_CLIENTE = [
                 "artigo",
                 "preço do",
                 "preço de",
+                "qual o preço",
+                "confirma o preço",
                 "valor do",
                 "valor de",
                 "quanto está",
                 "quanto custa",
+                "quanto sai",
                 "quando chega",
-                "tem",
+                "chega quando",
+                "tem previsão",
+                "tem disponível",
+                "vocês têm",
             ],
             examples=[
                 "75/36",
@@ -165,6 +173,10 @@ _CAPACIDADES_REPRESENTANTE = [
                 "artigo",
                 "preço do produto",
                 "preço do artigo",
+                "qual o preço",
+                "confirma o preço",
+                "quanto está",
+                "quanto sai",
                 "consultar produto",
                 "consultar artigo",
                 "buscar produto",
@@ -193,6 +205,9 @@ _CAPACIDADES_REPRESENTANTE = [
                 "buscar cliente",
                 "localizar cliente",
                 "consultar cliente",
+                "dados do cliente",
+                "achar cliente",
+                "quem é o cliente",
             ],
             examples=[
                 "buscar cliente Malhas Silva",
@@ -255,6 +270,8 @@ _CAPACIDADES_REPRESENTANTE = [
                 "consultar tabela do cliente",
                 "preço do cliente",
                 "preços para cliente",
+                "tabela para o cliente",
+                "mandar tabela para",
                 "tabela do",
                 "lista do",
             ],
@@ -285,6 +302,8 @@ _CAPACIDADES_REPRESENTANTE = [
                 "onde parou a conversa",
                 "últimas interações",
                 "historico do cliente",
+                "o que ficou combinado",
+                "como ficou a conversa",
             ],
             examples=[
                 "me dê um resumo da conversa com Patrick",
@@ -316,7 +335,9 @@ _CAPACIDADES_REPRESENTANTE = [
             ],
             examples=[
                 "quero cadastrar um cliente",
+                "quero cadastra um cliente",
                 "cadastre um novo cliente",
+                "preciso incluir um cliente novo",
                 "abrir pr\u00e9-cadastro da Confec\u00e7\u00f5es Aurora",
             ],
         ),

@@ -4,6 +4,7 @@
 # Artefatos locais de build/deploy
 /dist/
 /.venv/
+/.tmp/
 __pycache__/
 *.pyc
 .pytest_cache/
