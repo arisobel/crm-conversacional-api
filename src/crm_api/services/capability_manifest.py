@@ -355,6 +355,27 @@ _CAPACIDADES_REPRESENTANTE = [
 ]
 
 
+def simulation_capabilities(
+    actor_role: ActorRole,
+    *,
+    allowed_capability_ids: frozenset[str] | None = None,
+) -> list[Capability]:
+    """Devolve o catálogo canônico para um ensaio que nunca executa ações."""
+    source = (
+        _CAPACIDADES_REPRESENTANTE
+        if actor_role is ActorRole.REPRESENTATIVE
+        else _CAPACIDADES_CLIENTE
+    )
+    capabilities = [capability.model_copy(deep=True) for capability in source]
+    if actor_role is ActorRole.REPRESENTATIVE and allowed_capability_ids is not None:
+        capabilities = [
+            capability
+            for capability in capabilities
+            if capability.action in allowed_capability_ids
+        ]
+    return capabilities
+
+
 def build_manifest(
     actor: WhatsappActor,
     channel_context: ChannelContext,
@@ -362,14 +383,10 @@ def build_manifest(
     allowed_capability_ids: frozenset[str] | None = None,
 ) -> CapabilityManifest:
     representante = actor.role is ActorRole.REPRESENTATIVE
-    capabilities = list(_CAPACIDADES_REPRESENTANTE if representante else _CAPACIDADES_CLIENTE)
-    if allowed_capability_ids is not None:
-        # A filtragem só existe para a linha assistente, depois de a rota provar
-        # a identidade técnica da linha e carregar a política do representante.
-        # Nunca derive capacidades de cliente daqui.
-        capabilities = [
-            capability for capability in capabilities if capability.action in allowed_capability_ids
-        ]
+    capabilities = simulation_capabilities(
+        actor.role,
+        allowed_capability_ids=allowed_capability_ids,
+    )
 
     help_message = _AJUDA_REPRESENTANTE if representante else _AJUDA_CLIENTE
     help_message = help_message.replace("Oi, tudo bem?", _saudacao(actor), 1)

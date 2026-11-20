@@ -7,6 +7,7 @@ traduz o resultado em redirecionamento. Nenhuma regra de negócio vive aqui.
 import csv
 import hashlib
 import io
+import json
 import re
 import tempfile
 import uuid
@@ -81,6 +82,7 @@ from crm_api.repositories.whatsapp_connections import WhatsappConnectionReposito
 from crm_api.services.assistant_monitoring import assistant_monitoring_snapshot
 from crm_api.services.assistant_policy import REPRESENTATIVE_CAPABILITIES
 from crm_api.services.auth import AuthenticationFailed, normalize_email
+from crm_api.services.capability_manifest import simulation_capabilities
 from crm_api.services.catalog import (
     ArticleNotFound,
     BasePriceRequired,
@@ -161,6 +163,7 @@ from crm_api.services.users import (
     WhatsappAlreadyUsed,
     WrongCurrentPassword,
 )
+from crm_api.services.whatsapp_actor import ActorRole
 from crm_api.services.whatsapp_connections import (
     ConnectionForbidden,
     ConnectionNotFound,
@@ -1708,6 +1711,35 @@ _BEHAVIOR_DEFAULT_INSTRUCTIONS = (
 )
 _BEHAVIOR_TONES = {"cordial", "objetivo", "consultivo"}
 _BEHAVIOR_BOTS = {"ASSISTANT", "COEXISTENCE"}
+_SIMULATOR_MODES = {"REPRESENTATIVE_ASSISTANT", "CUSTOMER_SERVICE"}
+
+
+def _simulator_history(raw: str) -> list[dict[str, str]]:
+    """Aceita apenas o recorte textual que o próprio portal devolveu."""
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    history: list[dict[str, str]] = []
+    for item in parsed[-12:]:
+        if not isinstance(item, dict) or item.get("role") not in {"user", "assistant"}:
+            continue
+        text = item.get("text")
+        if isinstance(text, str) and text.strip():
+            history.append({"role": item["role"], "text": text.strip()[:1000]})
+    return history
+
+
+async def _simulator_representatives(
+    session: AsyncSession, tenant_id: uuid.UUID
+) -> list[User]:
+    return list(await session.scalars(select(User).where(
+        User.tenant_id == tenant_id,
+        User.role == UserRole.REPRESENTATIVE,
+        User.active.is_(True),
+    ).order_by(User.full_name)))
 
 
 @router.get("/assistant", include_in_schema=False)
@@ -1759,6 +1791,120 @@ async def pagina_assistente(
         "gateway_error": gateway_error,
         "enabled_representatives": sum(setting.enabled for setting in settings),
     }, current_user=current_user, mensagem=m)
+
+
+@router.get("/simulator", include_in_schema=False)
+async def pagina_simulador(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    representatives = await _simulator_representatives(session, current_user.tenant_id)
+    return _render(
+        request,
+        "simulator.html",
+        {
+            "mode": "REPRESENTATIVE_ASSISTANT",
+            "representatives": representatives,
+            "selected_representative_id": str(representatives[0].id) if representatives else "",
+            "messages": [],
+            "history_json": "[]",
+            "simulation": None,
+        },
+        current_user=current_user,
+    )
+
+
+@router.post("/simulator", include_in_schema=False)
+async def simular_mensagem(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    mode: Annotated[str, Form()] = "REPRESENTATIVE_ASSISTANT",
+    representative_id: Annotated[str, Form()] = "",
+    message: Annotated[str, Form()] = "",
+    conversation_history: Annotated[str, Form()] = "[]",
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/simulator", "csrf")
+
+    representatives = await _simulator_representatives(session, current_user.tenant_id)
+    if mode not in _SIMULATOR_MODES:
+        mode = "REPRESENTATIVE_ASSISTANT"
+    text = message.strip()[:1000]
+    history = _simulator_history(conversation_history)
+    simulation = None
+    direct_error = None
+    selected_id = representative_id
+
+    actor_role = ActorRole.CUSTOMER
+    allowed_capabilities: frozenset[str] | None = None
+    if mode == "REPRESENTATIVE_ASSISTANT":
+        try:
+            selected_uuid = uuid.UUID(representative_id)
+        except ValueError:
+            selected_uuid = representatives[0].id if representatives else None
+        representative = next((item for item in representatives if item.id == selected_uuid), None)
+        if representative is None:
+            direct_error = "Selecione um representante ativo para realizar o ensaio."
+        else:
+            selected_id = str(representative.id)
+            actor_role = ActorRole.REPRESENTATIVE
+            policy = await get_assistant_policy(
+                session, current_user.tenant_id, representative.id
+            )
+            allowed_capabilities = policy.effective_capabilities()
+
+    if not text:
+        direct_error = "Digite uma mensagem para simular."
+    elif direct_error is None:
+        capabilities = simulation_capabilities(
+            actor_role,
+            allowed_capability_ids=allowed_capabilities,
+        )
+        try:
+            simulation = await GatewayWhatsappOnboardingClient(
+                request.app.state.settings
+            ).simulate_message(
+                actor_role=actor_role.value,
+                text=text,
+                capabilities=[
+                    capability.model_dump(mode="json", exclude_none=True)
+                    for capability in capabilities
+                ],
+                history=[dict(item) for item in history],
+            )
+            history.extend([
+                {"role": "user", "text": text},
+                {"role": "assistant", "text": simulation.reply},
+            ])
+            history = history[-12:]
+        except GatewayOnboardingError:
+            direct_error = (
+                "O motor de interpretação não respondeu agora. "
+                "Nenhuma mensagem foi enviada e nenhuma ação foi executada."
+            )
+
+    return _render(
+        request,
+        "simulator.html",
+        {
+            "mode": mode,
+            "representatives": representatives,
+            "selected_representative_id": selected_id,
+            "messages": history,
+            "history_json": json.dumps(history, ensure_ascii=False),
+            "simulation": simulation,
+        },
+        current_user=current_user,
+        erro_direto=direct_error,
+        status_code=503 if direct_error and text else 200,
+    )
 
 
 @router.get("/assistant/unresolved", include_in_schema=False)

@@ -30,6 +30,10 @@ from crm_api.models.interaction import (
 )
 from crm_api.models.reminder import ReminderOrigin, ReminderStatus, RepresentativeReminder
 from crm_api.models.user import AuditLog, User
+from crm_api.services.gateway_whatsapp_onboarding import (
+    GatewaySimulationResult,
+    GatewayWhatsappOnboardingClient,
+)
 
 _CSRF = re.compile(r'name="csrf_token" value="([^"]+)"')
 
@@ -98,6 +102,62 @@ async def test_assistente_salva_configuracao_e_auditoria(world, admin):
         ))).all()
         assert len(entries) == 1
         assert entries[0].after["capabilities"] == ["CRM_REP_LOOKUP_CUSTOMER"]
+
+
+@pytest.mark.asyncio
+async def test_simulador_fica_no_menu_e_nao_executa_acao(world, admin, monkeypatch):
+    captured = {}
+
+    async def simulate(_client, **payload):
+        captured.update(payload)
+        return GatewaySimulationResult(
+            status="RESOLVED",
+            reply="Entendi. Neste ensaio, nenhum dado foi consultado.",
+            source="LLM",
+            capability_id="CRM_REP_LOOKUP_CUSTOMER",
+            capability_title="Localizar cliente",
+            action="CRM_REP_LOOKUP_CUSTOMER",
+            slots={"customer_query": "Aurora"},
+        )
+
+    monkeypatch.setattr(GatewayWhatsappOnboardingClient, "simulate_message", simulate)
+    page = await admin.get("/portal/simulator")
+
+    assert page.status_code == 200
+    assert "Simulador de conversas" in page.text
+    assert page.text.index("/portal/users") < page.text.index("/portal/simulator")
+    assert page.text.index("/portal/simulator") < page.text.index("/portal/assistant")
+    assert "Modo seguro" in page.text
+    assert '<svg viewBox="0 0 32 32"><circle cx="16" cy="9"' in page.text
+
+    response = await admin.post(
+        "/portal/simulator",
+        data={
+            "csrf_token": _token(page.text),
+            "mode": "CUSTOMER_SERVICE",
+            "representative_id": "",
+            "message": "Pode localizar o cliente Aurora?",
+            "conversation_history": "[]",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Pedido reconhecido" in response.text
+    assert "Localizar cliente" in response.text
+    assert "Aurora" in response.text
+    assert captured["actor_role"] == "cliente"
+    assert captured["history"] == []
+    assert captured["capabilities"]
+
+
+@pytest.mark.asyncio
+async def test_simulador_e_restrito_ao_administrador(world):
+    async with _browser(world) as representative:
+        await _entrar(representative, REPRESENTATIVE_A_EMAIL)
+        response = await representative.get("/portal/simulator")
+
+    assert "/portal/customers" in str(response.url)
+    assert "/portal/simulator" not in response.text
 
 
 @pytest.mark.asyncio

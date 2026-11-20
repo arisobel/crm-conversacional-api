@@ -383,6 +383,26 @@
   }
   ligarTipoPessoa();
 
+  function ligarSimulador() {
+    var formulario = document.querySelector("[data-simulator-form]");
+    if (!formulario) return;
+    var modos = formulario.querySelectorAll('input[name="mode"]');
+    var representante = formulario.querySelector("[data-simulator-representative]");
+    var conversa = formulario.querySelector(".simulator-chat");
+    function atualizar() {
+      var escolhido = formulario.querySelector('input[name="mode"]:checked');
+      formulario.querySelectorAll(".simulator-mode").forEach(function (item) {
+        var radio = item.querySelector('input[name="mode"]');
+        item.classList.toggle("selected", Boolean(radio && radio.checked));
+      });
+      if (representante) representante.hidden = !escolhido || escolhido.value !== "REPRESENTATIVE_ASSISTANT";
+    }
+    modos.forEach(function (modo) { modo.addEventListener("change", atualizar); });
+    atualizar();
+    if (conversa) conversa.scrollTop = conversa.scrollHeight;
+  }
+  ligarSimulador();
+
   document.querySelectorAll("[data-copy-target]").forEach(function (botao) {
     botao.addEventListener("click", async function () {
       var campo = document.getElementById(botao.dataset.copyTarget);

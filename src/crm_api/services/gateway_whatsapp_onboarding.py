@@ -23,6 +23,18 @@ class GatewayOnboarding:
     gateway_line_reference: str | None = None
 
 
+@dataclass(frozen=True)
+class GatewaySimulationResult:
+    status: str
+    reply: str
+    source: str
+    capability_id: str | None = None
+    capability_title: str | None = None
+    action: str | None = None
+    requires_confirmation: bool = False
+    slots: dict[str, str] | None = None
+
+
 class GatewayWhatsappOnboardingClient:
     """Não retorna resposta bruta e nunca registra o token interno."""
 
@@ -249,3 +261,71 @@ class GatewayWhatsappOnboardingClient:
                 if isinstance(item, dict)
             ],
         }
+
+    async def simulate_message(
+        self,
+        *,
+        actor_role: str,
+        text: str,
+        capabilities: list[dict],
+        history: list[dict[str, str]],
+    ) -> GatewaySimulationResult:
+        """Interpreta no Gateway sem enviar mensagem nem executar uma ação."""
+        self._ready()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(self._timeout)) as client:
+                response = await client.post(
+                    f"{self._base_url}/internal/simulator/interpret",
+                    json={
+                        "actor_role": actor_role,
+                        "text": text,
+                        "capabilities": capabilities,
+                        "history": history,
+                    },
+                    headers={"Authorization": f"Bearer {self._token.get_secret_value()}"},
+                )
+        except httpx.TimeoutException as error:
+            raise GatewayOnboardingError("gateway simulator request timed out") from error
+        except httpx.HTTPError as error:
+            raise GatewayOnboardingError("gateway simulator is unavailable") from error
+        if response.status_code in {401, 403}:
+            raise GatewayOnboardingError("gateway authentication failed")
+        if response.status_code >= 500:
+            raise GatewayOnboardingError("gateway simulator is unavailable")
+        if response.status_code >= 400:
+            raise GatewayOnboardingError("gateway rejected the simulation", status_code=422)
+        try:
+            payload = response.json()
+        except ValueError as error:
+            raise GatewayOnboardingError("gateway returned an invalid simulation") from error
+        if (
+            not isinstance(payload, dict)
+            or payload.get("status") not in {"RESOLVED", "OUT_OF_SCOPE", "UNCLEAR"}
+            or not isinstance(payload.get("reply"), str)
+            or not isinstance(payload.get("source"), str)
+        ):
+            raise GatewayOnboardingError("gateway returned an invalid simulation")
+        raw_slots = payload.get("slots")
+        slots = (
+            {str(key)[:40]: str(value)[:120] for key, value in raw_slots.items()}
+            if isinstance(raw_slots, dict)
+            else {}
+        )
+        return GatewaySimulationResult(
+            status=payload["status"],
+            reply=payload["reply"][:1000],
+            source=payload["source"][:32],
+            capability_id=(
+                str(payload["capability_id"])[:120]
+                if payload.get("capability_id")
+                else None
+            ),
+            capability_title=(
+                str(payload["capability_title"])[:160]
+                if payload.get("capability_title")
+                else None
+            ),
+            action=str(payload["action"])[:120] if payload.get("action") else None,
+            requires_confirmation=payload.get("requires_confirmation") is True,
+            slots=slots,
+        )

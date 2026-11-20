@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Simulador de conversas{% endblock %}
+{% block body_class %}pagina-simulador{% endblock %}
+{% block conteudo %}
+<div class="simulator-header">
+  <div>
+    <p class="inicio-etiqueta">AMBIENTE DE ENSAIO</p>
+    <h1>Simulador de conversas</h1>
+    <p>Teste a compreensão dos robôs sem enviar WhatsApp e sem alterar dados do CRM.</p>
+  </div>
+  <div class="simulator-safe-badge" title="O simulador não possui executor de ações">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v6c0 5-3.3 8-8 10-4.7-2-8-5-8-10V6Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>
+    Modo seguro
+  </div>
+</div>
+
+<form method="post" action="/portal/simulator" class="simulator-shell" data-simulator-form>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="conversation_history" value="{{ history_json }}">
+
+  <aside class="simulator-config painel-glass">
+    <div class="simulator-panel-title">
+      <span class="simulator-glass-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M9 18h6"/><circle cx="7" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="12" cy="18" r="2"/></svg></span>
+      <div><strong>Cenário</strong><small>Escolha quem está falando</small></div>
+    </div>
+
+    <div class="simulator-mode-list">
+      <label class="simulator-mode {% if mode == 'REPRESENTATIVE_ASSISTANT' %}selected{% endif %}">
+        <input type="radio" name="mode" value="REPRESENTATIVE_ASSISTANT" {% if mode == 'REPRESENTATIVE_ASSISTANT' %}checked{% endif %}>
+        <span class="simulator-mode-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="7" r="3"/><path d="M2 18c0-4 2-6 6-6s6 2 6 6"/><rect x="14" y="5" width="8" height="10" rx="3"/><path d="M18 2v3M17 10h2M16 18h4"/></svg></span>
+        <span><strong>Representante → Assistente</strong><small>Agenda, carteira, preços e cadastros</small></span>
+      </label>
+      <label class="simulator-mode {% if mode == 'CUSTOMER_SERVICE' %}selected{% endif %}">
+        <input type="radio" name="mode" value="CUSTOMER_SERVICE" {% if mode == 'CUSTOMER_SERVICE' %}checked{% endif %}>
+        <span class="simulator-mode-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="7" r="3"/><path d="M1 18c0-4 2-6 6-6s6 2 6 6"/><path d="M15 5h5a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-3l-3 3v-3"/></svg></span>
+        <span><strong>Cliente → Atendimento</strong><small>Conversa e consultas comerciais</small></span>
+      </label>
+    </div>
+
+    <label class="simulator-representative-field" data-simulator-representative>
+      <span>Representante simulado</span>
+      <select name="representative_id">
+        {% for representative in representatives %}
+        <option value="{{ representative.id }}" {% if selected_representative_id == representative.id|string %}selected{% endif %}>{{ representative.full_name }}</option>
+        {% else %}<option value="">Nenhum representante ativo</option>{% endfor %}
+      </select>
+      <small>O ensaio respeita as capacidades liberadas para esta pessoa.</small>
+    </label>
+
+    <div class="simulator-safety-note">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg>
+      <p><strong>Nada será executado.</strong> O motor apenas interpreta e mostra qual seria o próximo passo.</p>
+    </div>
+  </aside>
+
+  <section class="simulator-phone painel-glass">
+    <header class="simulator-chat-header">
+      <span class="simulator-avatar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3Z"/><circle cx="9" cy="13" r="1.3"/><circle cx="15" cy="13" r="1.3"/><path d="M12 3v4M9 17h6"/></svg></span>
+      <div><strong>{% if mode == 'CUSTOMER_SERVICE' %}Atendimento comercial{% else %}Assistente do representante{% endif %}</strong><small><i></i> Simulação ativa</small></div>
+      <a href="/portal/simulator" class="simulator-reset">Nova conversa</a>
+    </header>
+
+    <div class="simulator-chat" aria-live="polite">
+      {% if messages %}
+        {% for item in messages %}
+        <div class="simulator-message-row {{ item.role }}">
+          <div class="simulator-bubble">
+            <small>{% if item.role == 'user' %}{% if mode == 'CUSTOMER_SERVICE' %}Cliente{% else %}Representante{% endif %}{% else %}Robô CRM{% endif %}</small>
+            <p>{{ item.text }}</p>
+            <time>ensaio</time>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+      <div class="simulator-empty-chat">
+        <span class="simulator-glass-icon large"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3h-8l-5 4v-4H4a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3Z"/><path d="M7 10h10M7 14h7"/></svg></span>
+        <strong>Comece uma conversa de teste</strong>
+        <p>Use frases naturais, erros de digitação ou pedidos incompletos para verificar como o robô interpreta.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="simulator-composer">
+      <label for="simulator-message" class="sr-only">Mensagem para simular</label>
+      <textarea id="simulator-message" name="message" rows="1" maxlength="1000" placeholder="Digite uma mensagem como no WhatsApp..." required></textarea>
+      <button type="submit" aria-label="Simular mensagem" title="Simular mensagem">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-8-7 18-3-7Z"/><path d="m11 14 4-4"/></svg>
+        <span>Simular</span>
+      </button>
+    </div>
+  </section>
+
+  <aside class="simulator-diagnostic painel-glass">
+    <div class="simulator-panel-title">
+      <span class="simulator-glass-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V4M16 19v-7M22 19V7"/></svg></span>
+      <div><strong>Leitura do robô</strong><small>Diagnóstico do último envio</small></div>
+    </div>
+    {% if simulation %}
+      <span class="simulator-result-status status-{{ simulation.status|lower }}">
+        {% if simulation.status == 'RESOLVED' %}Pedido reconhecido{% elif simulation.status == 'OUT_OF_SCOPE' %}Fora do escopo atual{% else %}Precisa esclarecer{% endif %}
+      </span>
+      <dl class="simulator-result-list">
+        <div><dt>Interpretação</dt><dd>{{ simulation.capability_title or 'Conversa ou solicitação geral' }}</dd></div>
+        <div><dt>Origem da leitura</dt><dd>{% if simulation.source == 'ALIAS' %}Regra direta{% elif simulation.source == 'SLOT_KIND' %}Dado reconhecido{% elif simulation.source == 'LLM' %}Interpretação por IA{% else %}Conversa contextual{% endif %}</dd></div>
+        <div><dt>Próximo passo</dt><dd>{% if simulation.requires_confirmation %}Preparar e pedir confirmação{% elif simulation.status == 'RESOLVED' %}Consultar o CRM e responder{% elif simulation.status == 'OUT_OF_SCOPE' %}Registrar ou encaminhar{% else %}Fazer uma pergunta curta{% endif %}</dd></div>
+      </dl>
+      {% if simulation.slots %}
+      <div class="simulator-slots"><strong>Dados identificados</strong>{% for key, value in simulation.slots.items() %}<span><b>{{ key|replace('_', ' ') }}</b>{{ value }}</span>{% endfor %}</div>
+      {% endif %}
+      {% if simulation.requires_confirmation %}<p class="simulator-confirmation">Esta ação exigiria confirmação antes de gravar.</p>{% endif %}
+      <details class="simulator-technical"><summary>Detalhes técnicos</summary><code>{{ simulation.capability_id or 'conversation' }}</code><code>{{ simulation.action or 'no_action' }}</code></details>
+    {% else %}
+      <div class="simulator-empty-result">
+        <span>01</span><p>Escolha um cenário.</p>
+        <span>02</span><p>Envie uma frase de teste.</p>
+        <span>03</span><p>Confira intenção, dados e segurança.</p>
+      </div>
+    {% endif %}
+  </aside>
+</form>
+{% endblock %}
