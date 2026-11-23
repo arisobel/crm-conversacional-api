@@ -78,6 +78,7 @@ from crm_api.schemas.representative_whatsapp import (
     AssistantSearchPriceItemsRequest,
     CustomerConversationEntryResponse,
     CustomerConversationSummaryResponse,
+    CustomerFactResponse,
     CustomerMatchesResponse,
     CustomerMatchResponse,
     PortfolioCustomersResponse,
@@ -638,6 +639,10 @@ async def assistant_customer_conversation_summary(
     return CustomerConversationSummaryResponse(
         customer_id=result.customer.id,
         customer_name=result.customer.trade_name or result.customer.legal_name,
+        additional_information=[
+            CustomerFactResponse(category=item.category, text=item.fact_text)
+            for item in result.facts
+        ],
         interactions=[
             CustomerConversationEntryResponse(
                 occurred_at=item.occurred_at,

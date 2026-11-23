@@ -423,5 +423,5 @@ async def test_combobox_mantem_o_select_nativo_no_formulario(world, admin):
 
     assert "data-combobox" in pagina.text
     assert 'name="product_id"' in pagina.text
-    assert '<script src="/portal/static/portal.js" defer></script>' in pagina.text
+    assert '<script src="/portal/static/portal.js' in pagina.text
     assert '/portal/static/portal-nojs.css' in pagina.text

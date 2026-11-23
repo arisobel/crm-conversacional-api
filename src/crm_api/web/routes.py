@@ -38,7 +38,7 @@ from crm_api.models.assistant_settings import (
     AssistantRepresentativeSettings,
     ConversationBehaviorSettings,
 )
-from crm_api.models.customer import Customer, Tenant
+from crm_api.models.customer import Customer, CustomerFactCategory, Tenant
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.customer_intake import CustomerIntake, IntakeStatus
 from crm_api.models.interaction import (
@@ -102,10 +102,13 @@ from crm_api.services.catalog import (
 from crm_api.services.customer_admin import (
     ContactNotFound,
     CustomerAdminService,
+    CustomerFactNotFound,
     DefaultLocationRequired,
+    DuplicateCustomerFact,
     DuplicateDocument,
     DuplicatePreferredProduct,
     DuplicateWhatsapp,
+    InvalidCustomerFact,
     LocationNotFound,
     PreferredProductNotFound,
     ProductNotFound,
@@ -192,6 +195,7 @@ _CODIGOS: list[tuple[type[Exception], str]] = [
     (CustomerNotInScope, "nao-encontrado"),
     (ContactNotFound, "nao-encontrado"),
     (LocationNotFound, "nao-encontrado"),
+    (CustomerFactNotFound, "nao-encontrado"),
     (UserNotFound, "nao-encontrado"),
     (PreferredProductNotFound, "nao-encontrado"),
     (BatchNotFound, "nao-encontrado"),
@@ -208,6 +212,8 @@ _CODIGOS: list[tuple[type[Exception], str]] = [
     (InvalidStateCode, "uf-invalida"),
     (DuplicateDocument, "documento-duplicado"),
     (DuplicateWhatsapp, "telefone-duplicado"),
+    (DuplicateCustomerFact, "informacao-duplicada"),
+    (InvalidCustomerFact, "informacao-invalida"),
     (IntakeWhatsappAlreadyUsed, "telefone-em-uso"),
     (IntakeNotFound, "nao-encontrado"),
     (IntakeAlreadyResolved, "intake-ja-resolvido"),
@@ -1284,6 +1290,7 @@ async def pagina_cliente(
         escopo, customer_id, limit=_TIMELINE_NA_FICHA, offset=0
     )
     preferidos = await servico.list_preferred_products(escopo, customer_id)
+    informacoes_adicionais = await servico.list_customer_facts(escopo, customer_id)
     ja_preferidos = {produto.id for _, produto, _ in preferidos}
 
     # Um preferido sem preço na competência simplesmente não sai na lista, e
@@ -1318,13 +1325,22 @@ async def pagina_cliente(
         "customer_detail.html",
         {
             "cliente": cliente,
-            "aba": aba if aba in {"cadastro", "produtos", "historico"} else "cadastro",
+            "aba": aba
+            if aba in {"cadastro", "informacoes", "produtos", "historico"}
+            else "cadastro",
             "titular": dono,
             "campanhas": campanhas_do_cliente,
             "contatos": contatos,
             "estado_assistente": estado_assistente,
             "localidades": await servico.list_locations(escopo, customer_id),
             "preferidos": preferidos,
+            "informacoes_adicionais": informacoes_adicionais,
+            "categorias_informacao": [
+                (CustomerFactCategory.PREFERENCE.value, "Preferências"),
+                (CustomerFactCategory.PERSONAL_CONTEXT.value, "Contexto pessoal"),
+                (CustomerFactCategory.COMMERCIAL.value, "Contexto comercial"),
+                (CustomerFactCategory.OTHER.value, "Outros"),
+            ],
             "catalogo": [
                 (produto, familia)
                 for produto, familia in await CustomerAdminRepository(session).list_products(
@@ -1353,6 +1369,68 @@ async def pagina_cliente(
         },
         current_user=current_user,
         mensagem=m,
+    )
+
+
+@router.post("/customers/{customer_id}/facts", include_in_schema=False)
+async def criar_informacao_adicional(
+    request: Request,
+    customer_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    fact_text: Annotated[str, Form()],
+    category: Annotated[str, Form()] = CustomerFactCategory.OTHER.value,
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    destino = f"/portal/customers/{customer_id}?aba=informacoes"
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+    try:
+        await _admin_service(request, session).create_customer_fact(
+            scope_for(current_user),
+            customer_id,
+            actor_user_id=current_user.user_id,
+            fact_text=fact_text,
+            category=category,
+        )
+    except Exception as error:  # noqa: BLE001
+        await session.rollback()
+        return _redirect(destino, _codigo_do_erro(error))
+    await session.commit()
+    return _redirect(destino, "informacao-adicionada")
+
+
+@router.post("/customers/{customer_id}/facts/{fact_id}", include_in_schema=False)
+async def atualizar_informacao_adicional(
+    request: Request,
+    customer_id: uuid.UUID,
+    fact_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    acao: Annotated[str, Form()],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    destino = f"/portal/customers/{customer_id}?aba=informacoes"
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+    action = {"confirmar": "confirm", "rejeitar": "reject", "arquivar": "archive"}.get(acao)
+    if action is None:
+        return _redirect(destino, "informacao-invalida")
+    try:
+        await _admin_service(request, session).update_customer_fact(
+            scope_for(current_user),
+            customer_id,
+            fact_id,
+            actor_user_id=current_user.user_id,
+            action=action,
+        )
+    except Exception as error:  # noqa: BLE001
+        await session.rollback()
+        return _redirect(destino, _codigo_do_erro(error))
+    await session.commit()
+    return _redirect(
+        destino,
+        "informacao-confirmada" if action == "confirm" else "informacao-arquivada",
     )
 
 
@@ -1404,6 +1482,49 @@ async def retomar_assistente_do_cliente(
         destino,
         "assistente-retomado" if status == "RESUMED" else "assistente-ja-ativo",
     )
+
+
+@router.post("/customers/{customer_id}/assistant/pause", include_in_schema=False)
+async def assumir_atendimento_do_cliente(
+    request: Request,
+    customer_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    destino = f"/portal/customers/{customer_id}"
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect(destino, "csrf")
+    escopo = scope_for(current_user)
+    encontrado = await CustomerPortfolioRepository(session).get_customer(escopo, customer_id)
+    if encontrado is None:
+        return _redirect("/portal/customers", "nao-encontrado")
+    _cliente, titular = encontrado
+    if titular is None:
+        return _redirect(destino, "assistente-sem-titular")
+    conexao = await WhatsappConnectionRepository(session).get_for_representative(
+        current_user.tenant_id, titular.id
+    )
+    contatos = await _admin_service(request, session).list_contacts(escopo, customer_id)
+    contato = next((item for item in contatos if item.active and item.is_primary), None)
+    contato = contato or next((item for item in contatos if item.active), None)
+    if (
+        conexao is None
+        or conexao.status is not WhatsappConnectionStatus.CONNECTED
+        or not conexao.gateway_line_reference
+        or contato is None
+    ):
+        return _redirect(destino, "assistente-indisponivel")
+    try:
+        await GatewayWhatsappOnboardingClient(request.app.state.settings).activate_handoff(
+            gateway_line_reference=conexao.gateway_line_reference,
+            contact_phone_e164=contato.whatsapp_e164,
+            idempotency_key=uuid.uuid4().hex,
+        )
+    except Exception as error:
+        request.app.logger.warning("portal handoff activation failed: %s", error)
+        return _redirect(destino, "assistente-indisponivel")
+    return _redirect(destino, "assistente-pausado")
 
 
 @router.post("/customers/{customer_id}/notas", include_in_schema=False)

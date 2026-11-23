@@ -25,7 +25,7 @@ from crm_api.models.assistant_settings import (
     AssistantRepresentativeSettings,
 )
 from crm_api.models.catalog import CustomerPreferredProduct
-from crm_api.models.customer import Tenant
+from crm_api.models.customer import CustomerFact, CustomerFactStatus, Tenant
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.pricing import (
     AvailabilityStatus,
@@ -291,6 +291,74 @@ async def test_linha_assistente_v2_isola_dois_representantes_por_conexao_politic
         payload["context"]["representative_line_reference"] = "line-b"
         denied = await _post(mundo, f"{BASE}/{TELEFONE_A}/assistant-v2/customers", payload)
         assert denied.status_code == 403
+    finally:
+        await mundo.app.state.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_resumo_do_assistente_recebe_somente_memoria_confirmada_do_cliente():
+    mundo = await build_portal_world(assistant_line_phone_number_id="1164849720052678")
+    try:
+        async with mundo.app.state.session_factory() as session:
+            user = await session.get(User, mundo.representative_a_id)
+            user.whatsapp_e164 = TELEFONE_A
+            session.add_all([
+                RepresentativeWhatsappConnection(
+                    id=uuid4(),
+                    tenant_id=mundo.tenant_id,
+                    representative_user_id=mundo.representative_a_id,
+                    status=WhatsappConnectionStatus.CONNECTED,
+                    idempotency_key="connection-memory-a",
+                    gateway_line_reference="line-a",
+                    created_by_user_id=mundo.admin_id,
+                ),
+                AssistantOrganizationSettings(tenant_id=mundo.tenant_id, enabled=True),
+                AssistantRepresentativeSettings(
+                    tenant_id=mundo.tenant_id,
+                    user_id=mundo.representative_a_id,
+                    enabled=True,
+                ),
+                AssistantRepresentativeCapability(
+                    tenant_id=mundo.tenant_id,
+                    user_id=mundo.representative_a_id,
+                    capability_id="CRM_REP_GET_CUSTOMER_CONVERSATION_SUMMARY",
+                ),
+                CustomerFact(
+                    id=uuid4(),
+                    tenant_id=mundo.tenant_id,
+                    customer_id=mundo.customer_a_id,
+                    category="PREFERENCE",
+                    fact_text="Torce para o Santos.",
+                    status=CustomerFactStatus.CONFIRMED.value,
+                ),
+                CustomerFact(
+                    id=uuid4(),
+                    tenant_id=mundo.tenant_id,
+                    customer_id=mundo.customer_a_id,
+                    category="PERSONAL_CONTEXT",
+                    fact_text="Talvez não goste de frio.",
+                    status=CustomerFactStatus.SUGGESTED.value,
+                ),
+            ])
+            await session.commit()
+
+        path = (
+            f"{BASE}/{TELEFONE_A}/assistant-v2/customers/"
+            f"{mundo.customer_a_id}/conversation-summary"
+        )
+        response = await _post(mundo, path, {
+            "context": {
+                "assistant_line_phone_number_id": "1164849720052678",
+                "representative_phone_e164": TELEFONE_A,
+                "representative_line_reference": "line-a",
+                "request_id": "wamid.customer-memory-a",
+            }
+        })
+
+        assert response.status_code == 200
+        assert response.json()["additional_information"] == [
+            {"category": "PREFERENCE", "text": "Torce para o Santos."}
+        ]
     finally:
         await mundo.app.state.engine.dispose()
 

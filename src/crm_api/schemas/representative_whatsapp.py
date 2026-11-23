@@ -260,7 +260,13 @@ class CustomerConversationEntryResponse(BaseModel):
     summary: str | None = None
 
 
+class CustomerFactResponse(BaseModel):
+    category: str
+    text: str
+
+
 class CustomerConversationSummaryResponse(BaseModel):
     customer_id: UUID
     customer_name: str
+    additional_information: list[CustomerFactResponse] = Field(default_factory=list)
     interactions: list[CustomerConversationEntryResponse]

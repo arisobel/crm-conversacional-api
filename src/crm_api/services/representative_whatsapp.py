@@ -22,7 +22,7 @@ from difflib import SequenceMatcher
 
 from crm_api.core.config import Settings
 from crm_api.core.text import normalize_group_name
-from crm_api.models.customer import Customer
+from crm_api.models.customer import Customer, CustomerFact
 from crm_api.models.pricing import AvailabilityStatus
 from crm_api.repositories.campaign_audience import AudienceRepository
 from crm_api.repositories.catalog import CatalogRepository
@@ -91,6 +91,7 @@ class PriceItems:
 class CustomerConversationSummary:
     customer: Customer
     interactions: list
+    facts: list[CustomerFact]
 
 
 @dataclass(frozen=True)
@@ -366,4 +367,9 @@ class RepresentativeWhatsappService:
         interactions = await self._interactions.list_timeline(
             tenant_id, customer_id, limit=8, offset=0
         )
-        return CustomerConversationSummary(customer=customer, interactions=interactions)
+        facts = await self._admin.list_facts(customer_id, confirmed_only=True)
+        return CustomerConversationSummary(
+            customer=customer,
+            interactions=interactions,
+            facts=facts,
+        )

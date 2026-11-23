@@ -8,6 +8,10 @@ from crm_api.models.catalog import CustomerPreferredProduct
 from crm_api.models.customer import (
     Customer,
     CustomerAssignmentHistory,
+    CustomerFact,
+    CustomerFactCategory,
+    CustomerFactSource,
+    CustomerFactStatus,
     CustomerLocation,
     CustomerType,
 )
@@ -52,6 +56,18 @@ class PreferredProductNotFound(Exception):
 
 class DuplicatePreferredProduct(Exception):
     """O produto já está entre os preferidos ativos do cliente."""
+
+
+class CustomerFactNotFound(Exception):
+    """Informação adicional inexistente neste cliente."""
+
+
+class DuplicateCustomerFact(Exception):
+    """A mesma informação já está ativa no perfil do cliente."""
+
+
+class InvalidCustomerFact(Exception):
+    """Informação adicional vazia, longa ou com categoria inválida."""
 
 
 class CustomerAdminService:
@@ -567,3 +583,108 @@ class CustomerAdminService:
             request_id=request_id,
         )
         return preferencia
+
+    # ---------------------------------------------- informações adicionais
+
+    async def list_customer_facts(
+        self,
+        scope: PortfolioScope,
+        customer_id: uuid.UUID,
+        *,
+        confirmed_only: bool = False,
+    ) -> list[CustomerFact]:
+        await self._customer_in_scope(scope, customer_id)
+        return await self._admin.list_facts(customer_id, confirmed_only=confirmed_only)
+
+    async def create_customer_fact(
+        self,
+        scope: PortfolioScope,
+        customer_id: uuid.UUID,
+        *,
+        actor_user_id: uuid.UUID,
+        fact_text: str,
+        category: str = CustomerFactCategory.OTHER.value,
+        source: str = CustomerFactSource.PORTAL.value,
+        status: str = CustomerFactStatus.CONFIRMED.value,
+        request_id: str | None = None,
+    ) -> CustomerFact:
+        await self._customer_in_scope(scope, customer_id)
+        normalized = " ".join(fact_text.split())
+        if not 2 <= len(normalized) <= 500:
+            raise InvalidCustomerFact
+        try:
+            category_value = CustomerFactCategory(category).value
+            source_value = CustomerFactSource(source).value
+            status_value = CustomerFactStatus(status).value
+        except ValueError as error:
+            raise InvalidCustomerFact from error
+        if await self._admin.matching_active_fact(customer_id, normalized) is not None:
+            raise DuplicateCustomerFact
+
+        fact = CustomerFact(
+            id=uuid.uuid4(),
+            tenant_id=scope.tenant_id,
+            customer_id=customer_id,
+            category=category_value,
+            fact_text=normalized,
+            source=source_value,
+            status=status_value,
+            created_by_user_id=actor_user_id,
+            confirmed_by_user_id=(
+                actor_user_id if status_value == CustomerFactStatus.CONFIRMED.value else None
+            ),
+        )
+        self._admin.add(fact)
+        self._audit.record(
+            action="CUSTOMER_FACT_CREATED",
+            entity="customer_facts",
+            tenant_id=scope.tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=fact.id,
+            after={
+                "customer_id": str(customer_id),
+                "category": category_value,
+                "source": source_value,
+                "status": status_value,
+            },
+            request_id=request_id,
+        )
+        return fact
+
+    async def update_customer_fact(
+        self,
+        scope: PortfolioScope,
+        customer_id: uuid.UUID,
+        fact_id: uuid.UUID,
+        *,
+        actor_user_id: uuid.UUID,
+        action: str,
+        request_id: str | None = None,
+    ) -> CustomerFact:
+        await self._customer_in_scope(scope, customer_id)
+        fact = await self._admin.get_fact(customer_id, fact_id)
+        if fact is None:
+            raise CustomerFactNotFound
+        before = {"status": fact.status, "active": fact.active}
+        if action == "confirm":
+            fact.status = CustomerFactStatus.CONFIRMED.value
+            fact.confirmed_by_user_id = actor_user_id
+        elif action == "reject":
+            fact.status = CustomerFactStatus.REJECTED.value
+            fact.active = False
+        elif action == "archive":
+            fact.active = False
+        else:
+            raise InvalidCustomerFact
+        fact.updated_at = datetime.now(UTC)
+        self._audit.record(
+            action="CUSTOMER_FACT_UPDATED",
+            entity="customer_facts",
+            tenant_id=scope.tenant_id,
+            actor_user_id=actor_user_id,
+            entity_id=fact.id,
+            before=before,
+            after={"status": fact.status, "active": fact.active},
+            request_id=request_id,
+        )
+        return fact

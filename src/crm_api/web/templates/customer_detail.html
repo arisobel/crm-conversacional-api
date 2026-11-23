@@ -10,13 +10,14 @@
     <div class="acoes-cabecalho">
       <a class="botao" href="/portal/customers/{{ cliente.id }}/price-list">Lista de preço</a>
       {% if estado_assistente == 'HUMAN_HANDOFF' %}<form method="post" action="/portal/customers/{{ cliente.id }}/assistant/resume"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Retomar assistente</button></form>
-      {% elif estado_assistente == 'ASSISTANT_ACTIVE' %}<span class="estado-assistente">Assistente já está atendendo</span>
+      {% elif estado_assistente == 'ASSISTANT_ACTIVE' %}<form method="post" action="/portal/customers/{{ cliente.id }}/assistant/pause"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="botao botao-secundario" type="submit">Assumir atendimento</button></form>
       {% else %}<span class="estado-assistente estado-indisponivel">Status indisponível</span>{% endif %}
     </div>
   </header>
 
   <nav class="customer-tabs" aria-label="Seções do cliente">
     <a class="{% if aba == 'cadastro' %}atual{% endif %}" href="?aba=cadastro">Cadastro</a>
+    <a class="{% if aba == 'informacoes' %}atual{% endif %}" href="?aba=informacoes">Informações adicionais{% if informacoes_adicionais %} <span class="tab-count">{{ informacoes_adicionais|length }}</span>{% endif %}</a>
     <a class="{% if aba == 'produtos' %}atual{% endif %}" href="?aba=produtos">Produtos do cliente</a>
     <a class="{% if aba == 'historico' %}atual{% endif %}" href="?aba=historico">Histórico de interações</a>
   </nav>
@@ -46,6 +47,23 @@
         <div class="record-label"><div><h2>Localidades</h2><p>Destinos e regras fiscais.</p></div></div>
         <div class="record-content"><div class="tabela-rolagem"><table class="glass-table"><thead><tr><th>Rótulo</th><th>UF</th><th>Cidade</th><th>Padrão</th><th>Situação</th><th></th></tr></thead><tbody>{% for local in localidades %}<tr><td>{{ local.label }}</td><td>{{ local.state_code }}</td><td>{{ local.city or '—' }}</td><td>{{ 'sim' if local.is_default else '—' }}</td><td>{{ 'ativa' if local.active else 'inativa' }}</td><td>{% if not local.is_default %}<form method="post" action="/portal/customers/{{ cliente.id }}/locations/{{ local.id }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="link" name="acao" value="padrao">tornar padrão</button><button class="link" name="acao" value="{{ 'desativar' if local.active else 'ativar' }}">{{ 'desativar' if local.active else 'reativar' }}</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></div><form method="post" action="/portal/customers/{{ cliente.id }}/locations" class="formulario-linha"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input name="label" placeholder="Rótulo (ex.: Filial Caxias)" required><input name="state_code" placeholder="UF" maxlength="2" size="2" required><input name="city" placeholder="Cidade"><label class="inline"><input type="checkbox" name="is_default" value="1"> padrão</label><button type="submit">Adicionar localidade</button></form></div>
       </div>
+    </section>
+  </div>
+
+  <div {% if aba != 'informacoes' %}hidden{% endif %}>
+    <section class="glass-section customer-facts">
+      <div class="section-heading-row"><div><h2>Informações adicionais</h2><p>Memória confirmada para um atendimento mais pessoal e contextual.</p></div></div>
+      <div class="memory-safety-note"><strong>Memória com controle:</strong> sugestões vindas de conversas só podem ser usadas pelo assistente depois da confirmação. Não registre senhas, documentos, saúde, religião ou outras informações sensíveis.</div>
+      <form method="post" action="/portal/customers/{{ cliente.id }}/facts" class="customer-fact-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label><span>Categoria</span><select name="category">{% for valor, rotulo in categorias_informacao %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}</select></label>
+        <label class="fact-text-field"><span>Informação</span><input name="fact_text" maxlength="500" placeholder="Ex.: Torce para o Santos e prefere reuniões pela manhã" required></label>
+        <button type="submit">Adicionar informação</button>
+      </form>
+      {% if informacoes_adicionais %}<ul class="customer-fact-list">{% for informacao in informacoes_adicionais %}<li>
+        <div><div class="fact-meta"><span class="etiqueta">{% if informacao.category == 'PREFERENCE' %}Preferência{% elif informacao.category == 'PERSONAL_CONTEXT' %}Contexto pessoal{% elif informacao.category == 'COMMERCIAL' %}Contexto comercial{% else %}Outros{% endif %}</span><span class="fact-source">{{ 'Sugerida por conversa' if informacao.source != 'PORTAL' else 'Registrada no CRM' }}</span>{% if informacao.status == 'SUGGESTED' %}<span class="etiqueta fact-pending">aguardando confirmação</span>{% endif %}</div><p>{{ informacao.fact_text }}</p></div>
+        <form method="post" action="/portal/customers/{{ cliente.id }}/facts/{{ informacao.id }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% if informacao.status == 'SUGGESTED' %}<button class="link" name="acao" value="confirmar">confirmar</button><button class="link" name="acao" value="rejeitar">rejeitar</button>{% else %}<button class="link" name="acao" value="arquivar">arquivar</button>{% endif %}</form>
+      </li>{% endfor %}</ul>{% else %}<p class="vazio">Nenhuma informação adicional confirmada para este cliente.</p>{% endif %}
     </section>
   </div>
 

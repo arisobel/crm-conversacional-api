@@ -19,7 +19,7 @@ from crm_api.models.assistant_settings import (
     AssistantRepresentativeSettings,
     ConversationBehaviorSettings,
 )
-from crm_api.models.customer import Customer, CustomerLocation
+from crm_api.models.customer import Customer, CustomerFact, CustomerLocation
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.customer_intake import CustomerIntake
 from crm_api.models.interaction import (
@@ -30,6 +30,10 @@ from crm_api.models.interaction import (
 )
 from crm_api.models.reminder import ReminderOrigin, ReminderStatus, RepresentativeReminder
 from crm_api.models.user import AuditLog, User
+from crm_api.models.whatsapp_connection import (
+    RepresentativeWhatsappConnection,
+    WhatsappConnectionStatus,
+)
 from crm_api.services.gateway_whatsapp_onboarding import (
     GatewaySimulationResult,
     GatewayWhatsappOnboardingClient,
@@ -68,6 +72,109 @@ async def _entrar(client, email: str, senha: str = PASSWORD):
         "/portal/login",
         data={"email": email, "password": senha, "csrf_token": _token(pagina.text)},
     )
+
+
+@pytest.mark.asyncio
+async def test_ficha_registra_confirma_e_arquiva_memoria_do_cliente(world, admin):
+    page = await admin.get(f"/portal/customers/{world.customer_a_id}?aba=informacoes")
+    assert "Informações adicionais" in page.text
+
+    created = await admin.post(
+        f"/portal/customers/{world.customer_a_id}/facts",
+        data={
+            "csrf_token": _token(page.text),
+            "category": "PREFERENCE",
+            "fact_text": "Torce para o Santos e prefere reuniões pela manhã.",
+        },
+    )
+    assert "Informação adicional registrada e confirmada" in created.text
+    assert "Torce para o Santos" in created.text
+
+    async with world.app.state.session_factory() as session:
+        fact = await session.scalar(
+            select(CustomerFact).where(CustomerFact.customer_id == world.customer_a_id)
+        )
+        assert fact is not None
+        assert fact.status == "CONFIRMED"
+        fact_id = fact.id
+
+    archived = await admin.post(
+        f"/portal/customers/{world.customer_a_id}/facts/{fact_id}",
+        data={"csrf_token": _token(created.text), "acao": "arquivar"},
+    )
+    assert "Informação retirada da memória ativa" in archived.text
+    assert "Nenhuma informação adicional confirmada" in archived.text
+    async with world.app.state.session_factory() as session:
+        archived_fact = await session.get(CustomerFact, fact_id)
+        assert archived_fact is not None and archived_fact.active is False
+
+
+@pytest.mark.asyncio
+async def test_representante_nao_registra_memoria_fora_da_propria_carteira(world):
+    async with _browser(world) as representative:
+        await _entrar(representative, REPRESENTATIVE_A_EMAIL)
+        own_page = await representative.get(
+            f"/portal/customers/{world.customer_a_id}?aba=informacoes"
+        )
+        response = await representative.post(
+            f"/portal/customers/{world.customer_b_id}/facts",
+            data={
+                "csrf_token": _token(own_page.text),
+                "category": "OTHER",
+                "fact_text": "Não deve ser gravado.",
+            },
+        )
+    assert "/portal/customers" in str(response.url)
+    async with world.app.state.session_factory() as session:
+        facts = list(await session.scalars(select(CustomerFact)))
+    assert facts == []
+
+
+@pytest.mark.asyncio
+async def test_portal_permite_assumir_atendimento_e_pausar_robo(world, admin, monkeypatch):
+    captured = {}
+
+    async def status(_client, **_payload):
+        return "ASSISTANT_ACTIVE"
+
+    async def activate(_client, **payload):
+        captured.update(payload)
+        return "HUMAN_HANDOFF"
+
+    monkeypatch.setattr(GatewayWhatsappOnboardingClient, "handoff_status", status)
+    monkeypatch.setattr(GatewayWhatsappOnboardingClient, "activate_handoff", activate)
+    async with world.app.state.session_factory() as session:
+        session.add_all([
+            CustomerContact(
+                id=uuid4(),
+                tenant_id=world.tenant_id,
+                customer_id=world.customer_a_id,
+                name="Compras Alfa",
+                whatsapp_e164="+5511988887777",
+                is_primary=True,
+            ),
+            RepresentativeWhatsappConnection(
+                id=uuid4(),
+                tenant_id=world.tenant_id,
+                representative_user_id=world.representative_a_id,
+                status=WhatsappConnectionStatus.CONNECTED,
+                idempotency_key="portal-handoff-a",
+                gateway_line_reference="line-a",
+                created_by_user_id=world.admin_id,
+            ),
+        ])
+        await session.commit()
+
+    page = await admin.get(f"/portal/customers/{world.customer_a_id}")
+    assert "Assumir atendimento" in page.text
+    response = await admin.post(
+        f"/portal/customers/{world.customer_a_id}/assistant/pause",
+        data={"csrf_token": _token(page.text)},
+    )
+
+    assert "Atendimento assumido" in response.text
+    assert captured["gateway_line_reference"] == "line-a"
+    assert captured["contact_phone_e164"] == "+5511988887777"
 
 
 @pytest_asyncio.fixture

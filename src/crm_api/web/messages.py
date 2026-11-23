@@ -16,6 +16,10 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
         "Assistente retomado. A próxima mensagem do cliente volta para ele.",
     ),
     "assistente-ja-ativo": ("ok", "O assistente já está atendendo este cliente."),
+    "assistente-pausado": (
+        "ok",
+        "Atendimento assumido. O assistente não responderá até ser retomado.",
+    ),
     "assistente-indisponivel": (
         "erro",
         "Não foi possível consultar ou retomar o assistente agora.",
@@ -25,6 +29,14 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
     # sucesso
     "cliente-criado": ("ok", "Cliente cadastrado."),
     "cliente-salvo": ("ok", "Cadastro atualizado."),
+    "informacao-adicionada": ("ok", "Informação adicional registrada e confirmada."),
+    "informacao-confirmada": ("ok", "Informação confirmada. O assistente já pode usá-la."),
+    "informacao-arquivada": ("ok", "Informação retirada da memória ativa do cliente."),
+    "informacao-duplicada": ("erro", "Essa informação já está registrada para o cliente."),
+    "informacao-invalida": (
+        "erro",
+        "Escreva uma informação entre 2 e 500 caracteres e escolha uma categoria válida.",
+    ),
     "compromisso-criado": ("ok", "Compromisso adicionado à agenda."),
     "compromisso-atualizado": ("ok", "Compromisso atualizado."),
     "compromisso-invalido": (

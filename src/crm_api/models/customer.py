@@ -25,6 +25,25 @@ class CustomerType(StrEnum):
     COMPANY = "COMPANY"
 
 
+class CustomerFactCategory(StrEnum):
+    PREFERENCE = "PREFERENCE"
+    PERSONAL_CONTEXT = "PERSONAL_CONTEXT"
+    COMMERCIAL = "COMMERCIAL"
+    OTHER = "OTHER"
+
+
+class CustomerFactSource(StrEnum):
+    PORTAL = "PORTAL"
+    WHATSAPP = "WHATSAPP"
+    ASSISTANT = "ASSISTANT"
+
+
+class CustomerFactStatus(StrEnum):
+    SUGGESTED = "SUGGESTED"
+    CONFIRMED = "CONFIRMED"
+    REJECTED = "REJECTED"
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
 
@@ -142,4 +161,48 @@ class CustomerAssignmentHistory(Base):
     )
     assigned_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class CustomerFact(Base):
+    """Informação durável usada para personalizar o relacionamento.
+
+    Sugestões extraídas de conversa não se tornam memória automaticamente:
+    somente fatos ``CONFIRMED`` são entregues ao assistente.
+    """
+
+    __tablename__ = "customer_facts"
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('PREFERENCE', 'PERSONAL_CONTEXT', 'COMMERCIAL', 'OTHER')",
+            name="ck_customer_facts_category",
+        ),
+        CheckConstraint(
+            "source IN ('PORTAL', 'WHATSAPP', 'ASSISTANT')",
+            name="ck_customer_facts_source",
+        ),
+        CheckConstraint(
+            "status IN ('SUGGESTED', 'CONFIRMED', 'REJECTED')",
+            name="ck_customer_facts_status",
+        ),
+        Index("ix_customer_facts_customer_status", "customer_id", "active", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id"), index=True)
+    category: Mapped[str] = mapped_column(String(32), default=CustomerFactCategory.OTHER.value)
+    fact_text: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(16), default=CustomerFactSource.PORTAL.value)
+    status: Mapped[str] = mapped_column(String(16), default=CustomerFactStatus.CONFIRMED.value)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    confirmed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 

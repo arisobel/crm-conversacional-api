@@ -206,6 +206,43 @@ class GatewayWhatsappOnboardingClient:
             raise GatewayOnboardingError("gateway returned an invalid handoff response")
         return status
 
+    async def activate_handoff(
+        self, *, gateway_line_reference: str, contact_phone_e164: str, idempotency_key: str
+    ) -> str:
+        """Pausa o robô para que um humano assuma o cliente pelo portal."""
+        self._ready()
+        headers = {
+            "Authorization": f"Bearer {self._token.get_secret_value()}",
+            "Idempotency-Key": idempotency_key,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(self._timeout)) as client:
+                response = await client.post(
+                    f"{self._base_url}/internal/whatsapp/handoffs/activate",
+                    json={
+                        "gateway_line_reference": gateway_line_reference,
+                        "contact_phone_e164": contact_phone_e164,
+                    },
+                    headers=headers,
+                )
+        except httpx.TimeoutException as error:
+            raise GatewayOnboardingError("gateway handoff request timed out") from error
+        except httpx.HTTPError as error:
+            raise GatewayOnboardingError("gateway handoff is unavailable") from error
+        if response.status_code in {401, 403}:
+            raise GatewayOnboardingError("gateway authentication failed")
+        if response.status_code >= 500:
+            raise GatewayOnboardingError("gateway handoff is unavailable")
+        if response.status_code >= 400:
+            raise GatewayOnboardingError("gateway rejected the handoff request", status_code=422)
+        try:
+            status = response.json().get("status")
+        except ValueError as error:
+            raise GatewayOnboardingError("gateway returned an invalid handoff response") from error
+        if status != "HUMAN_HANDOFF":
+            raise GatewayOnboardingError("gateway returned an invalid handoff response")
+        return status
+
     async def status_overview(self) -> dict:
         """Lê somente o resumo operacional sanitizado do Gateway."""
         self._ready()

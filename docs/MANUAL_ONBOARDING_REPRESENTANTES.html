@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manual de onboarding de representantes — CRM</title>
+  <style>
+    :root {
+      --navy: #08243f;
+      --navy-2: #123b5d;
+      --cyan: #09aeb6;
+      --cyan-dark: #047b8f;
+      --mint: #dff9f6;
+      --blue-soft: #eaf6fb;
+      --line: #c9e2eb;
+      --text: #173451;
+      --muted: #5e7890;
+      --green: #087b5a;
+      --green-bg: #e3f7ee;
+      --amber: #9a5a04;
+      --amber-bg: #fff4d8;
+      --red: #a33737;
+      --red-bg: #ffecec;
+    }
+
+    * { box-sizing: border-box; }
+    html { background: #dceff5; }
+    body {
+      width: 210mm;
+      margin: 0 auto;
+      color: var(--text);
+      background: #fff;
+      font: 10.4pt/1.48 "Segoe UI", Arial, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    @page { size: A4; margin: 13mm 14mm 14mm; }
+    @media print {
+      html, body { width: auto; background: #fff; }
+      .page-break { break-before: page; }
+      a { color: inherit; text-decoration: none; }
+    }
+
+    main { padding: 0; }
+    .cover {
+      position: relative;
+      min-height: 270mm;
+      overflow: hidden;
+      padding: 24mm 17mm 18mm;
+      color: #fff;
+      background:
+        radial-gradient(circle at 90% 10%, rgba(51, 239, 224, .38), transparent 30%),
+        radial-gradient(circle at 10% 82%, rgba(18, 179, 215, .30), transparent 31%),
+        linear-gradient(145deg, #031c35 0%, #074c68 58%, #0ba1a9 100%);
+    }
+    .cover::before, .cover::after {
+      content: "";
+      position: absolute;
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 50%;
+    }
+    .cover::before { width: 155mm; height: 155mm; right: -72mm; top: 30mm; }
+    .cover::after { width: 125mm; height: 125mm; left: -66mm; bottom: -30mm; }
+    .cover-logo {
+      position: relative;
+      width: 48mm;
+      padding: 5mm 7mm;
+      border: 1px solid rgba(255,255,255,.45);
+      border-radius: 8mm;
+      background: rgba(255,255,255,.92);
+      box-shadow: 0 7mm 18mm rgba(0,0,0,.18);
+    }
+    .cover .eyebrow { margin-top: 31mm; color: #8ff5ec; }
+    .cover h1 { max-width: 150mm; margin: 4mm 0; font-size: 31pt; line-height: 1.08; letter-spacing: -.8pt; }
+    .cover .subtitle { max-width: 135mm; margin: 0; color: #d8f3f6; font-size: 14pt; }
+    .cover-card {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8mm;
+      margin-top: 33mm;
+      padding: 8mm;
+      border: 1px solid rgba(255,255,255,.28);
+      border-radius: 7mm;
+      background: rgba(255,255,255,.10);
+      backdrop-filter: blur(12px);
+    }
+    .cover-card strong, .cover-card span { display: block; }
+    .cover-card span { margin-top: 1mm; color: #c8edf1; }
+    .cover-meta { position: absolute; right: 17mm; bottom: 16mm; color: #c7edf1; text-align: right; }
+
+    .eyebrow {
+      display: block;
+      color: var(--cyan-dark);
+      font-size: 8.5pt;
+      font-weight: 800;
+      letter-spacing: 1.4pt;
+      text-transform: uppercase;
+    }
+    .content { padding: 2mm 0 0; }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 5mm;
+      margin: 0 0 7mm;
+      padding-bottom: 4mm;
+      border-bottom: 1px solid var(--line);
+    }
+    .section-number {
+      display: grid;
+      flex: 0 0 13mm;
+      width: 13mm;
+      height: 13mm;
+      place-items: center;
+      border-radius: 4mm;
+      color: #fff;
+      background: linear-gradient(145deg, var(--cyan-dark), var(--cyan));
+      font-size: 15pt;
+      font-weight: 900;
+      box-shadow: 0 2mm 6mm rgba(7, 132, 151, .22);
+    }
+    h2 { margin: 0; color: var(--navy); font-size: 22pt; line-height: 1.1; }
+    h3 { margin: 7mm 0 3mm; color: var(--navy); font-size: 14pt; }
+    h4 { margin: 0 0 1mm; color: var(--navy); font-size: 11pt; }
+    p { margin: 0 0 3.5mm; }
+    ul, ol { margin: 2.5mm 0 4mm; padding-left: 7mm; }
+    li { margin: 1.4mm 0; }
+    code { padding: .5mm 1.2mm; border-radius: 1mm; background: #edf5f8; font-family: Consolas, monospace; font-size: 9pt; }
+
+    .lead {
+      margin: 0 0 7mm;
+      padding: 5mm 6mm;
+      border-left: 1.5mm solid var(--cyan);
+      border-radius: 0 4mm 4mm 0;
+      color: var(--navy-2);
+      background: linear-gradient(90deg, var(--mint), #f7fcfd);
+      font-size: 11.3pt;
+    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+    .card {
+      break-inside: avoid;
+      padding: 5mm;
+      border: 1px solid var(--line);
+      border-radius: 4mm;
+      background: linear-gradient(145deg, #fff, #f4fafc);
+      box-shadow: 0 2mm 7mm rgba(18, 72, 99, .07);
+    }
+    .card p:last-child, .callout p:last-child { margin-bottom: 0; }
+    .role-admin { border-top: 1.3mm solid var(--navy-2); }
+    .role-rep { border-top: 1.3mm solid var(--cyan); }
+    .tag {
+      display: inline-block;
+      margin-bottom: 2mm;
+      padding: 1mm 2.5mm;
+      border-radius: 99px;
+      color: var(--cyan-dark);
+      background: var(--mint);
+      font-size: 8pt;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .callout {
+      break-inside: avoid;
+      margin: 5mm 0;
+      padding: 4.5mm 5mm;
+      border: 1px solid;
+      border-radius: 4mm;
+    }
+    .callout.info { border-color: #9dd9e4; background: var(--blue-soft); }
+    .callout.ok { border-color: #99d7bf; background: var(--green-bg); }
+    .callout.warning { border-color: #efcc78; background: var(--amber-bg); }
+    .callout.danger { border-color: #efb7b7; background: var(--red-bg); }
+    .callout strong { display: block; margin-bottom: 1mm; }
+
+    .steps { display: grid; gap: 3.6mm; margin-top: 4mm; }
+    .step {
+      break-inside: avoid;
+      display: grid;
+      grid-template-columns: 11mm 1fr;
+      gap: 4mm;
+      align-items: start;
+      padding: 4mm 5mm 4mm 4mm;
+      border: 1px solid var(--line);
+      border-radius: 4mm;
+      background: #fff;
+    }
+    .step > span {
+      display: grid;
+      width: 10mm;
+      height: 10mm;
+      place-items: center;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--cyan-dark);
+      font-weight: 900;
+    }
+    .step p { margin: 0; color: var(--muted); }
+    .step ul { margin-bottom: 0; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 3mm;
+      margin: 5mm 0 7mm;
+    }
+    .flow div {
+      position: relative;
+      padding: 4mm 3mm;
+      border-radius: 3mm;
+      color: var(--navy);
+      background: var(--blue-soft);
+      text-align: center;
+      font-weight: 800;
+    }
+    .flow div:not(:last-child)::after {
+      content: "›";
+      position: absolute;
+      right: -2.5mm;
+      top: 50%;
+      z-index: 2;
+      color: var(--cyan-dark);
+      font-size: 18pt;
+      transform: translateY(-54%);
+    }
+
+    table { width: 100%; border-collapse: collapse; margin: 4mm 0 6mm; font-size: 9.4pt; }
+    th { padding: 3mm; color: #fff; background: var(--navy-2); text-align: left; }
+    td { padding: 3mm; border-bottom: 1px solid var(--line); vertical-align: top; }
+    tr:nth-child(even) td { background: #f3f9fb; }
+    .status { font-weight: 800; white-space: nowrap; }
+    .status.ok { color: var(--green); }
+    .status.review { color: var(--amber); }
+    .checklist { list-style: none; padding: 0; }
+    .checklist li { position: relative; padding-left: 7mm; }
+    .checklist li::before {
+      content: "□";
+      position: absolute;
+      left: 0;
+      top: -1mm;
+      color: var(--cyan-dark);
+      font-size: 15pt;
+      font-weight: 800;
+    }
+    .footer-note {
+      margin-top: 8mm;
+      padding-top: 3mm;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 8.5pt;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="cover">
+      <img class="cover-logo" src="../src/crm_api/web/static/crm-logo.png" alt="CRM">
+      <span class="eyebrow">Manual operacional</span>
+      <h1>Onboarding de representantes</h1>
+      <p class="subtitle">Do convite individual à conexão do WhatsApp Business em Coexistence e à liberação final pelo administrador.</p>
+
+      <div class="cover-card">
+        <div><strong>Para quem administra</strong><span>Convite, conferência, permissões e liberação.</span></div>
+        <div><strong>Para o representante</strong><span>Cadastro rápido e autorização oficial na Meta.</span></div>
+      </div>
+      <p class="cover-meta">Versão 1.0<br>23 de novembro de 2026</p>
+    </section>
+
+    <section class="content page-break">
+      <header class="section-header">
+        <span class="section-number">1</span>
+        <div><span class="eyebrow">Visão geral</span><h2>O que este onboarding entrega</h2></div>
+      </header>
+      <p class="lead">O objetivo é deixar o representante apto a usar o CRM, a linha central do assistente e seu próprio WhatsApp Business conectado em Coexistence, com o menor trabalho possível para ele e controle final do administrador.</p>
+
+      <div class="grid-2">
+        <article class="card role-admin">
+          <span class="tag">Administrador</span>
+          <h3>Prepara e libera</h3>
+          <ul>
+            <li>Gera um convite individual.</li>
+            <li>Confere usuário, linha e estado da conexão.</li>
+            <li>Revisa as permissões antes do uso.</li>
+          </ul>
+        </article>
+        <article class="card role-rep">
+          <span class="tag">Representante</span>
+          <h3>Cadastra e autoriza</h3>
+          <ul>
+            <li>Preenche seus dados uma única vez.</li>
+            <li>Autoriza a Meta.</li>
+            <li>Confirma a conexão no WhatsApp Business.</li>
+          </ul>
+        </article>
+      </div>
+
+      <h3>Duas linhas, duas finalidades</h3>
+      <table>
+        <thead><tr><th>Linha</th><th>Como funciona</th><th>Quem usa</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Linha central do assistente</strong></td><td>É a mesma linha para todos os representantes. O CRM reconhece quem está falando pelo WhatsApp cadastrado no convite.</td><td>Representante conversa com o assistente.</td></tr>
+          <tr><td><strong>Linha comercial em Coexistence</strong></td><td>É o WhatsApp Business do representante conectado à API sem retirar o uso normal do aplicativo.</td><td>Representante, clientes e automação comercial.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout warning">
+        <strong>Regra de propriedade</strong>
+        <p>O portfólio, os dados empresariais e o site informados à Meta devem pertencer à empresa que realmente controla o número. Não use os dados do CRM apenas porque o convite foi enviado pelo CRM.</p>
+      </div>
+
+      <h3>Antes de começar</h3>
+      <ul class="checklist">
+        <li>O representante utiliza o aplicativo <strong>WhatsApp Business</strong> atualizado.</li>
+        <li>O número está ativo e pode receber confirmações.</li>
+        <li>Existe acesso à conta Meta que administrará os ativos empresariais.</li>
+        <li>Foi definido quem é o proprietário do número e do portfólio empresarial.</li>
+        <li>Há um site ou perfil comercial público da empresa proprietária.</li>
+      </ul>
+      <p class="footer-note">CRM · Manual de onboarding de representantes</p>
+    </section>
+
+    <section class="content page-break">
+      <header class="section-header">
+        <span class="section-number">2</span>
+        <div><span class="eyebrow">Etapa do administrador</span><h2>Gerar e enviar o convite</h2></div>
+      </header>
+
+      <div class="flow">
+        <div>Carteira &amp; Agenda</div><div>Convidar representante</div><div>Copiar link</div><div>Enviar individualmente</div>
+      </div>
+
+      <div class="steps">
+        <article class="step"><span>1</span><div><h4>Acesse como administrador</h4><p>Entre no portal do CRM usando um usuário com perfil administrativo.</p></div></article>
+        <article class="step"><span>2</span><div><h4>Abra Carteira &amp; Agenda</h4><p>Na área da carteira, localize o botão <strong>Convidar representante</strong>.</p></div></article>
+        <article class="step"><span>3</span><div><h4>Gere o convite</h4><p>O CRM cria um link exclusivo, válido por sete dias e utilizável uma única vez.</p></div></article>
+        <article class="step"><span>4</span><div><h4>Envie ao representante</h4><p>Copie o link e envie somente à pessoa convidada. Não reutilize o mesmo link para outra pessoa.</p></div></article>
+      </div>
+
+      <div class="callout info">
+        <strong>O que ainda não acontece nesta etapa</strong>
+        <p>O convite não cria carteira de clientes nem uma nova linha central do assistente. A linha central continua única e compartilhada.</p>
+      </div>
+
+      <h3>O que o CRM prepara após a aceitação</h3>
+      <ul>
+        <li>Usuário com papel de representante.</li>
+        <li>WhatsApp usado para identificar o representante na linha central.</li>
+        <li>Acesso inicial ao assistente e às capacidades comerciais atuais.</li>
+        <li>Sessão autenticada para seguir direto à conexão do WhatsApp Business.</li>
+      </ul>
+
+      <div class="callout warning">
+        <strong>Permissões iniciais não substituem a revisão</strong>
+        <p>O cadastro prepara o representante, mas o administrador deve conferir e salvar as permissões finais antes do piloto.</p>
+      </div>
+      <p class="footer-note">CRM · Manual de onboarding de representantes</p>
+    </section>
+
+    <section class="content page-break">
+      <header class="section-header">
+        <span class="section-number">3</span>
+        <div><span class="eyebrow">Etapa do representante</span><h2>Preencher o cadastro</h2></div>
+      </header>
+
+      <div class="steps">
+        <article class="step"><span>1</span><div><h4>Abra o link do convite</h4><p>A página deve mostrar que o representante foi convidado e identificar a empresa responsável pelo CRM.</p></div></article>
+        <article class="step"><span>2</span><div><h4>Preencha os quatro campos</h4><ul><li>Nome completo;</li><li>e-mail;</li><li>WhatsApp pessoal/profissional usado para falar com a linha central;</li><li>senha de acesso ao CRM.</li></ul></div></article>
+        <article class="step"><span>3</span><div><h4>Clique em Preparar meu acesso</h4><p>O CRM salva os dados e autentica o novo representante.</p></div></article>
+        <article class="step"><span>4</span><div><h4>Confira a tela “Está quase tudo pronto”</h4><p>Ela confirma o cadastro no CRM e informa que falta conectar o WhatsApp Business.</p></div></article>
+      </div>
+
+      <div class="callout ok">
+        <strong>Resultado esperado</strong>
+        <p>O representante já aparece no CRM e já pode ser reconhecido pela linha central. A conexão em Coexistence ainda precisa ser concluída.</p>
+      </div>
+
+      <h3>Se o link não abrir</h3>
+      <table>
+        <thead><tr><th>Mensagem</th><th>Significado</th><th>Ação</th></tr></thead>
+        <tbody>
+          <tr><td>Convite expirado</td><td>Passaram-se mais de sete dias.</td><td>O administrador gera outro link.</td></tr>
+          <tr><td>Convite indisponível</td><td>O link já foi utilizado ou cancelado.</td><td>Não tente reaproveitar; gere outro.</td></tr>
+          <tr><td>E-mail/telefone em uso</td><td>Já existe cadastro com o dado informado.</td><td>Localize o usuário existente antes de criar outro.</td></tr>
+        </tbody>
+      </table>
+      <p class="footer-note">CRM · Manual de onboarding de representantes</p>
+    </section>
+
+    <section class="content page-break">
+      <header class="section-header">
+        <span class="section-number">4</span>
+        <div><span class="eyebrow">Meta e Coexistence</span><h2>Conectar o WhatsApp Business</h2></div>
+      </header>
+
+      <div class="steps">
+        <article class="step"><span>1</span><div><h4>Clique em Conectar meu WhatsApp Business</h4><p>Uma janela oficial da Meta será aberta. Se o navegador bloquear a janela, permita pop-ups para o domínio do CRM e tente novamente.</p></div></article>
+        <article class="step"><span>2</span><div><h4>Entre na conta Meta correta</h4><p>Use uma conta que possa administrar o portfólio empresarial proprietário do número.</p></div></article>
+        <article class="step"><span>3</span><div><h4>Selecione o portfólio empresarial</h4><p>Escolha o portfólio da empresa que realmente controla o número. Não selecione o portfólio do CRM/BPTI se ele não for o proprietário.</p></div></article>
+        <article class="step"><span>4</span><div><h4>Informe os dados dos novos ativos, se solicitado</h4><p>Use dados reais da empresa proprietária: nome, e-mail, país e site ou perfil comercial público.</p></div></article>
+        <article class="step"><span>5</span><div><h4>Selecione o número</h4><p>Escolha a linha do WhatsApp Business que será usada pelo representante em Coexistence.</p></div></article>
+        <article class="step"><span>6</span><div><h4>Autorize no aplicativo</h4><p>Abra a solicitação no próprio WhatsApp Business e confirme a conexão. Não escolha opções de apagar histórico, sair do aplicativo ou migrar para outro proprietário.</p></div></article>
+        <article class="step"><span>7</span><div><h4>Volte ao CRM</h4><p>O CRM acompanha a operação automaticamente até receber o estado <code>CONNECTED</code>.</p></div></article>
+      </div>
+
+      <div class="callout info">
+        <strong>Qual site informar?</strong>
+        <p>Use o site ou perfil comercial da empresa dona do número. Somente quando o CRM/BPTI for o proprietário, pode-se usar o endereço público do sistema: <code>https://crm-conversacional-api.lion.app.br</code>. Para produção, prefira uma página institucional pública.</p>
+      </div>
+
+      <div class="callout ok">
+        <strong>Por que o botão de conexão desaparece?</strong>
+        <p>Depois de <code>CONNECTED</code>, a conexão já foi concluída. O botão só volta em caso de falha, expiração, cancelamento ou necessidade de uma nova autorização.</p>
+      </div>
+      <p class="footer-note">CRM · Manual de onboarding de representantes</p>
+    </section>
+
+    <section class="content page-break">
+      <header class="section-header">
+        <span class="section-number">5</span>
+        <div><span class="eyebrow">Conferência administrativa</span><h2>Validar a conexão e as permissões</h2></div>
+      </header>
+
+      <h3>5.1 Conferir o usuário</h3>
+      <ol>
+        <li>Entre novamente com a conta administrativa.</li>
+        <li>Abra <strong>Usuários</strong>.</li>
+        <li>Localize o representante e confirme: usuário ativo, papel Representante e WhatsApp correto.</li>
+        <li>Abra <strong>WhatsApp Business</strong> desse representante.</li>
+        <li>Confirme o estado <code>CONNECTED</code>, o número correto e ausência de ação pendente.</li>
+      </ol>
+
+      <h3>5.2 Conferir a operação</h3>
+      <ol>
+        <li>Abra <strong>Central dos robôs</strong>.</li>
+        <li>Confirme <strong>Gateway WhatsApp: Online</strong>.</li>
+        <li>Confira a linha entre as linhas/fluxos ativos.</li>
+        <li>Confirme que não existem conflitos de operação ou falhas de integração.</li>
+        <li>Em <strong>Assistente da empresa</strong>, mantenha a empresa habilitada.</li>
+      </ol>
+
+      <h3>5.3 Revisar o acesso do representante</h3>
+      <p>Em <strong>Acesso dos representantes</strong>, localize o novo usuário, marque <strong>Habilitar este representante</strong> e revise as capacidades:</p>
+      <table>
+        <thead><tr><th>Capacidade</th><th>Piloto recomendado</th><th>Observação</th></tr></thead>
+        <tbody>
+          <tr><td>Consultar preços de produtos</td><td class="status ok">Liberar</td><td>Consulta, sem alteração.</td></tr>
+          <tr><td>Consultar clientes</td><td class="status ok">Liberar</td><td>Respeita o escopo permitido.</td></tr>
+          <tr><td>Listar e filtrar minha carteira</td><td class="status ok">Liberar</td><td>Somente a carteira do representante.</td></tr>
+          <tr><td>Consultar tabela de preços do cliente</td><td class="status ok">Liberar</td><td>Consulta comercial.</td></tr>
+          <tr><td>Criar pré-cadastros de clientes</td><td class="status ok">Liberar</td><td>Exige conferência posterior no CRM.</td></tr>
+          <tr><td>Criar compromissos e lembretes</td><td class="status ok">Liberar</td><td>Agenda pessoal do representante.</td></tr>
+          <tr><td>Resumir conversa do cliente</td><td class="status review">Revisar</td><td>Libere apenas se o acesso ao histórico estiver autorizado.</td></tr>
+          <tr><td>Propor e confirmar atualizações de preços</td><td class="status review">Manter bloqueado</td><td>Libere somente após autorização expressa e teste controlado.</td></tr>
+        </tbody>
+      </table>
+      <p>Ao terminar, clique em <strong>Salvar representante</strong>.</p>
+
+      <div class="callout ok">
+        <strong>Onboarding administrativo concluído</strong>
+        <p>O usuário está ativo, a linha está conectada, a empresa e o representante estão habilitados e as capacidades foram revisadas.</p>
+      </div>
+      <p class="footer-note">CRM · Manual de onboarding de representantes</p>
+    </section>
+
+    <section class="content page-break">
+      <header class="section-header">
+        <span class="section-number">6</span>
+        <div><span class="eyebrow">Aceite do piloto</span><h2>Checklist final e primeiro teste</h2></div>
+      </header>
+
+      <h3>Checklist de liberação</h3>
+      <ul class="checklist">
+        <li>Convite utilizado pela pessoa correta.</li>
+        <li>Usuário ativo e cadastrado como representante.</li>
+        <li>WhatsApp de identificação correto.</li>
+        <li>Conexão do representante em estado <code>CONNECTED</code>.</li>
+        <li>Gateway WhatsApp online.</li>
+        <li>Linha e fluxo exibidos como ativos.</li>
+        <li>Assistente habilitado para a empresa.</li>
+        <li>Representante habilitado.</li>
+        <li>Permissões revisadas e salvas.</li>
+        <li>Permissão de atualizar preços bloqueada ou formalmente autorizada.</li>
+      </ul>
+
+      <h3>Teste 1 — linha central do assistente</h3>
+      <div class="card">
+        <p><strong>Origem:</strong> WhatsApp cadastrado no convite.</p>
+        <p><strong>Destino:</strong> linha central compartilhada do assistente.</p>
+        <p><strong>Mensagem sugerida:</strong> “Me lembre de ligar para o cliente Patrick daqui a 10 minutos.”</p>
+        <p><strong>Esperado:</strong> o assistente reconhece o representante, interpreta o horário e confirma o compromisso.</p>
+      </div>
+
+      <h3>Teste 2 — linha comercial em Coexistence</h3>
+      <div class="card">
+        <p><strong>Origem:</strong> outro número, simulando um cliente.</p>
+        <p><strong>Destino:</strong> WhatsApp Business conectado do representante.</p>
+        <p><strong>Mensagem sugerida:</strong> “Olá, gostaria de consultar um produto.”</p>
+        <p><strong>Esperado:</strong> a mensagem chega ao Gateway, segue para o fluxo correto e permanece visível no WhatsApp Business do representante.</p>
+      </div>
+
+      <h3>Registro do aceite</h3>
+      <table>
+        <tbody>
+          <tr><td><strong>Representante</strong></td><td>________________________________________</td></tr>
+          <tr><td><strong>Número conectado</strong></td><td>________________________________________</td></tr>
+          <tr><td><strong>Administrador responsável</strong></td><td>________________________________________</td></tr>
+          <tr><td><strong>Data da liberação</strong></td><td>____ / ____ / ______</td></tr>
+          <tr><td><strong>Resultado</strong></td><td>□ Aprovado &nbsp;&nbsp; □ Aprovado com ressalvas &nbsp;&nbsp; □ Reprovado</td></tr>
+        </tbody>
+      </table>
+      <p class="footer-note">CRM · Manual de onboarding de representantes</p>
+    </section>
+
+    <section class="content page-break">
+      <header class="section-header">
+        <span class="section-number">7</span>
+        <div><span class="eyebrow">Suporte rápido</span><h2>Problemas comuns</h2></div>
+      </header>
+
+      <table>
+        <thead><tr><th>Situação</th><th>O que significa</th><th>Como agir</th></tr></thead>
+        <tbody>
+          <tr><td>O botão Conectar não aparece</td><td>A linha pode já estar conectada.</td><td>Confira em Usuários → WhatsApp Business e procure o estado <code>CONNECTED</code>.</td></tr>
+          <tr><td>Após concluir, abriu a Central dos robôs</td><td>O representante voltou ao ambiente do CRM.</td><td>Não refaça a conexão. O administrador deve conferir o estado da linha.</td></tr>
+          <tr><td>Popup não abriu</td><td>O navegador bloqueou a janela da Meta.</td><td>Permita pop-ups para o CRM e tente iniciar novamente.</td></tr>
+          <tr><td>Conexão em andamento</td><td>O Gateway ainda está concluindo o provisionamento.</td><td>Aguarde e atualize a página uma vez. Não crie outra tentativa imediatamente.</td></tr>
+          <tr><td>Ação adicional necessária</td><td>A Meta precisa de outra confirmação.</td><td>Use Retomar configuração e siga a orientação exibida.</td></tr>
+          <tr><td>Falha ou autorização expirada</td><td>A tentativa não pode ser concluída.</td><td>Use Tentar novamente. O CRM decidirá entre retomar ou criar nova autorização.</td></tr>
+          <tr><td>Portfólio errado</td><td>Os ativos podem ficar sob a empresa incorreta.</td><td>Não prossiga. Solicite revisão administrativa antes de autorizar o número.</td></tr>
+          <tr><td>Número incorreto</td><td>A linha escolhida não pertence ao representante esperado.</td><td>Interrompa o teste e não envie mensagens até a correção.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout danger">
+        <strong>Não repita a conexão sem verificar o estado</strong>
+        <p>Várias tentativas podem criar ativos duplicados ou deixar dúvidas sobre qual autorização está valendo. Primeiro consulte o representante em Usuários e a situação operacional na Central dos robôs.</p>
+      </div>
+
+      <h3>Dados que nunca devem ser compartilhados</h3>
+      <ul>
+        <li>Senha da conta Meta ou do CRM;</li>
+        <li>códigos de autenticação recebidos por SMS ou aplicativo;</li>
+        <li>App Secret, tokens da Meta ou tokens internos do Gateway;</li>
+        <li>capturas de tela que revelem credenciais.</li>
+      </ul>
+
+      <div class="callout info">
+        <strong>Ao solicitar suporte</strong>
+        <p>Informe o nome do representante, o horário aproximado, a etapa em que parou e a mensagem exibida. Não envie senhas ou tokens.</p>
+      </div>
+      <p class="footer-note">CRM · Manual de onboarding de representantes · Versão 1.0</p>
+    </section>
+  </main>
+</body>
+</html>

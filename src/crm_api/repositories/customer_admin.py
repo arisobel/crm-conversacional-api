@@ -7,11 +7,11 @@ isso permitiria enumerar contatos de carteiras alheias.
 
 import uuid
 
-from sqlalchemy import Select, select, update
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.models.catalog import CustomerPreferredProduct, Product, ProductFamily
-from crm_api.models.customer import Customer, CustomerLocation
+from crm_api.models.customer import Customer, CustomerFact, CustomerFactStatus, CustomerLocation
 from crm_api.models.customer_contact import CustomerContact
 
 
@@ -21,7 +21,13 @@ class CustomerAdminRepository:
 
     def add(
         self,
-        entity: Customer | CustomerContact | CustomerLocation | CustomerPreferredProduct,
+        entity: (
+            Customer
+            | CustomerContact
+            | CustomerLocation
+            | CustomerPreferredProduct
+            | CustomerFact
+        ),
     ) -> None:
         self._session.add(entity)
 
@@ -190,3 +196,39 @@ class CustomerAdminRepository:
         if excluding is not None:
             statement = statement.where(CustomerLocation.id != excluding)
         return len(list(await self._session.scalars(statement)))
+
+    async def list_facts(
+        self, customer_id: uuid.UUID, *, confirmed_only: bool = False
+    ) -> list[CustomerFact]:
+        statement = select(CustomerFact).where(
+            CustomerFact.customer_id == customer_id,
+            CustomerFact.active.is_(True),
+        )
+        if confirmed_only:
+            statement = statement.where(CustomerFact.status == CustomerFactStatus.CONFIRMED.value)
+        return list(
+            await self._session.scalars(
+                statement.order_by(CustomerFact.status, CustomerFact.created_at.desc())
+            )
+        )
+
+    async def get_fact(
+        self, customer_id: uuid.UUID, fact_id: uuid.UUID
+    ) -> CustomerFact | None:
+        return await self._session.scalar(
+            select(CustomerFact).where(
+                CustomerFact.customer_id == customer_id,
+                CustomerFact.id == fact_id,
+            )
+        )
+
+    async def matching_active_fact(
+        self, customer_id: uuid.UUID, fact_text: str
+    ) -> CustomerFact | None:
+        return await self._session.scalar(
+            select(CustomerFact).where(
+                CustomerFact.customer_id == customer_id,
+                CustomerFact.active.is_(True),
+                func.lower(CustomerFact.fact_text) == fact_text.lower(),
+            )
+        )
