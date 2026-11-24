@@ -31,6 +31,7 @@ from crm_api.core.database import get_session
 from crm_api.core.numbers import InvalidDecimal, parse_decimal
 from crm_api.core.passwords import WeakPassword
 from crm_api.core.states import InvalidStateCode, normalize_state_code
+from crm_api.core.text import strip_accents
 from crm_api.imports.price_table import import_price_table
 from crm_api.models.assistant_settings import (
     AssistantOrganizationSettings,
@@ -1893,6 +1894,28 @@ def _simulator_history(raw: str) -> list[dict[str, str]]:
     return history
 
 
+def _scenario_fragments(raw: str | None) -> list[str]:
+    """Allow readable rules separated by lines or vertical bars."""
+    if not raw:
+        return []
+    return [fragment.strip() for fragment in re.split(r"[|\r\n]+", raw) if fragment.strip()]
+
+
+def _scenario_comparable_text(value: str) -> str:
+    return re.sub(r"\s+", " ", strip_accents(value).casefold()).strip()
+
+
+def _scenario_context_before_last_message(
+    history: list[dict[str, str]], message: str
+) -> list[dict[str, str]]:
+    """A saved scenario repeats the final user turn, so retain only prior context."""
+    if len(history) >= 2 and history[-2]["role"] == "user" and history[-2]["text"] == message:
+        return history[:-2]
+    if history and history[-1]["role"] == "user" and history[-1]["text"] == message:
+        return history[:-1]
+    return history
+
+
 async def _simulator_representatives(session: AsyncSession, tenant_id: uuid.UUID) -> list[User]:
     return list(
         await session.scalars(
@@ -1954,7 +1977,7 @@ async def _run_simulator_scenario(
             capabilities=[
                 capability.model_dump(mode="json", exclude_none=True) for capability in capabilities
             ],
-            history=[],
+            history=[dict(item) for item in scenario.conversation_history],
         )
     except GatewayOnboardingError:
         return False, "Motor de interpretação indisponível."
@@ -1980,6 +2003,39 @@ async def _run_simulator_scenario(
         differences.append(
             f"informação aprendida: {', '.join(facts) or 'nenhuma'} "
             f"(esperada: {scenario.expected_fact_text})"
+        )
+    comparable_reply = _scenario_comparable_text(simulation.reply)
+    required_fragments = _scenario_fragments(scenario.expected_reply_contains)
+    if required_fragments:
+        missing = [
+            fragment
+            for fragment in required_fragments
+            if _scenario_comparable_text(fragment) not in comparable_reply
+        ]
+        checks.append(not missing)
+        differences.append(
+            "resposta contém os trechos esperados"
+            if not missing
+            else f"trechos ausentes: {', '.join(missing)}"
+        )
+    forbidden_fragments = _scenario_fragments(scenario.forbidden_reply_contains)
+    if forbidden_fragments:
+        found = [
+            fragment
+            for fragment in forbidden_fragments
+            if _scenario_comparable_text(fragment) in comparable_reply
+        ]
+        checks.append(not found)
+        differences.append(
+            "resposta não contém trechos proibidos"
+            if not found
+            else f"trechos proibidos encontrados: {', '.join(found)}"
+        )
+    if scenario.max_questions is not None:
+        question_count = simulation.reply.count("?")
+        checks.append(question_count <= scenario.max_questions)
+        differences.append(
+            f"perguntas: {question_count} (máximo: {scenario.max_questions})"
         )
     return all(checks), "; ".join(differences)[:1000]
 
@@ -2077,6 +2133,7 @@ async def pagina_simulador(
             "selected_representative_id": str(representatives[0].id) if representatives else "",
             "messages": [],
             "history_json": "[]",
+            "scenario_history_json": "[]",
             "simulation": None,
             "last_message": "",
             "scenarios": scenarios,
@@ -2169,6 +2226,9 @@ async def simular_mensagem(
             "selected_representative_id": selected_id,
             "messages": history,
             "history_json": json.dumps(history, ensure_ascii=False),
+            "scenario_history_json": json.dumps(
+                _scenario_context_before_last_message(history, text), ensure_ascii=False
+            ),
             "simulation": simulation,
             "last_message": text,
             "scenarios": scenarios,
@@ -2192,6 +2252,10 @@ async def salvar_cenario_simulador(
     expected_capability_id: Annotated[str, Form()] = "",
     expected_action: Annotated[str, Form()] = "",
     expected_fact_text: Annotated[str, Form()] = "",
+    conversation_history: Annotated[str, Form()] = "[]",
+    expected_reply_contains: Annotated[str, Form()] = "",
+    forbidden_reply_contains: Annotated[str, Form()] = "",
+    max_questions: Annotated[str, Form()] = "1",
     csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
 ) -> Response:
     if current_user.role is not UserRole.ADMIN:
@@ -2201,11 +2265,20 @@ async def salvar_cenario_simulador(
 
     name = scenario_name.strip()[:120]
     text = message.strip()[:1000]
+    history = _simulator_history(conversation_history)
+    invalid_question_limit = False
+    try:
+        question_limit = int(max_questions) if max_questions.strip() else None
+    except ValueError:
+        invalid_question_limit = True
+        question_limit = None
     if (
         mode not in _SIMULATOR_MODES
         or expected_status not in {"RESOLVED", "OUT_OF_SCOPE", "UNCLEAR"}
         or not name
         or not text
+        or invalid_question_limit
+        or (question_limit is not None and question_limit not in range(0, 6))
     ):
         return _redirect("/portal/simulator", "cenario-invalido")
 
@@ -2232,11 +2305,15 @@ async def salvar_cenario_simulador(
             name=name,
             mode=mode,
             representative_user_id=representative_uuid,
+            conversation_history=history,
             message=text,
             expected_status=expected_status,
             expected_capability_id=expected_capability_id.strip()[:120] or None,
             expected_action=expected_action.strip()[:120] or None,
             expected_fact_text=expected_fact_text.strip()[:240] or None,
+            expected_reply_contains=expected_reply_contains.strip()[:1000] or None,
+            forbidden_reply_contains=forbidden_reply_contains.strip()[:1000] or None,
+            max_questions=question_limit,
             created_by_user_id=current_user.user_id,
         )
     )

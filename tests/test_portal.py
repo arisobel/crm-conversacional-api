@@ -1,3 +1,4 @@
+import json
 import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -308,6 +309,15 @@ async def test_simulador_salva_e_reexecuta_cenario_sem_acao(world, admin, monkey
             "expected_capability_id": "",
             "expected_action": "",
             "expected_fact_text": "Torcedor do Santos.",
+            "conversation_history": json.dumps(
+                [
+                    {"role": "user", "text": "Oi"},
+                    {"role": "assistant", "text": "Como posso ajudar?"},
+                ]
+            ),
+            "expected_reply_contains": "entendi a preferencia",
+            "forbidden_reply_contains": "não entendi|envie novamente",
+            "max_questions": "0",
         },
     )
     assert "Cenário de teste salvo" in saved.text
@@ -320,13 +330,61 @@ async def test_simulador_salva_e_reexecuta_cenario_sem_acao(world, admin, monkey
     assert "Aprovado" in executed.text
     assert len(calls) == 1
     assert calls[0]["actor_role"] == "cliente"
-    assert calls[0]["history"] == []
+    assert calls[0]["history"] == [
+        {"role": "user", "text": "Oi"},
+        {"role": "assistant", "text": "Como posso ajudar?"},
+    ]
 
     async with world.app.state.session_factory() as session:
         scenario = await session.scalar(select(ConversationSimulationScenario))
     assert scenario is not None
+    assert len(scenario.conversation_history) == 2
+    assert scenario.expected_reply_contains == "entendi a preferencia"
+    assert scenario.forbidden_reply_contains == "não entendi|envie novamente"
+    assert scenario.max_questions == 0
     assert scenario.last_passed is True
     assert scenario.last_run_at is not None
+
+
+@pytest.mark.asyncio
+async def test_simulador_reprova_resposta_robotica_ou_incompleta(world, admin, monkeypatch):
+    async def simulate(_client, **_payload):
+        return GatewaySimulationResult(
+            status="RESOLVED",
+            reply="Não entendi. Pode repetir? Quer tentar novamente?",
+            source="FALLBACK",
+        )
+
+    monkeypatch.setattr(GatewayWhatsappOnboardingClient, "simulate_message", simulate)
+    page = await admin.get("/portal/simulator")
+    saved = await admin.post(
+        "/portal/simulator/scenarios",
+        data={
+            "csrf_token": _token(page.text),
+            "scenario_name": "Confirma o que compreendeu",
+            "mode": "CUSTOMER_SERVICE",
+            "representative_id": "",
+            "message": "Meu contato é a Juliana",
+            "expected_status": "RESOLVED",
+            "expected_reply_contains": "Juliana|contato",
+            "forbidden_reply_contains": "não entendi",
+            "max_questions": "1",
+        },
+    )
+
+    executed = await admin.post(
+        "/portal/simulator/scenarios/run",
+        data={"csrf_token": _token(saved.text)},
+    )
+
+    assert "Um ou mais cenários reprovaram" in executed.text
+    async with world.app.state.session_factory() as session:
+        scenario = await session.scalar(select(ConversationSimulationScenario))
+    assert scenario is not None
+    assert scenario.last_passed is False
+    assert "trechos ausentes: Juliana, contato" in scenario.last_result
+    assert "trechos proibidos encontrados: não entendi" in scenario.last_result
+    assert "perguntas: 2 (máximo: 1)" in scenario.last_result
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -16,11 +17,14 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from crm_api.models.base import Base
 from crm_api.models.customer import Tenant  # noqa: F401
 from crm_api.models.user import User  # noqa: F401
+
+_JSON_COLUMN = JSON().with_variant(JSONB(), "postgresql")
 
 
 class AssistantOrganizationSettings(Base):
@@ -96,6 +100,10 @@ class ConversationSimulationScenario(Base):
             "mode IN ('REPRESENTATIVE_ASSISTANT', 'CUSTOMER_SERVICE')",
             name="ck_simulation_scenario_mode",
         ),
+        CheckConstraint(
+            "max_questions IS NULL OR max_questions BETWEEN 0 AND 5",
+            name="ck_simulation_scenario_max_questions",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -105,11 +113,17 @@ class ConversationSimulationScenario(Base):
     representative_user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )
+    conversation_history: Mapped[list[dict[str, str]]] = mapped_column(
+        _JSON_COLUMN, default=list, server_default=text("'[]'"), nullable=False
+    )
     message: Mapped[str] = mapped_column(Text)
     expected_status: Mapped[str] = mapped_column(String(32))
     expected_capability_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     expected_action: Mapped[str | None] = mapped_column(String(120), nullable=True)
     expected_fact_text: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    expected_reply_contains: Mapped[str | None] = mapped_column(Text, nullable=True)
+    forbidden_reply_contains: Mapped[str | None] = mapped_column(Text, nullable=True)
+    max_questions: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     last_result: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

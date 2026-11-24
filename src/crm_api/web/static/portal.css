@@ -931,9 +931,10 @@ html[data-theme="dark"] .intake-review-grid, html[data-theme="dark"] .intake-lis
 .simulator-scenario-save { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(360px, 1.2fr); gap: 24px; align-items: end; }
 .simulator-scenario-save h2, .simulator-scenario-library h2 { margin: 3px 0 4px; color: #123457; }
 .simulator-scenario-save p:not(.inicio-etiqueta), .simulator-scenario-library header p:not(.inicio-etiqueta) { margin: 0; color: #67849a; font-size: 12px; }
-.simulator-scenario-save form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.simulator-scenario-save form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: end; }
 .simulator-scenario-save label { display: grid; gap: 6px; color: #173a5b; font-size: 11px; font-weight: 800; }
 .portal-autenticado .simulator-scenario-save input { width: 100%; min-height: 44px; border-color: #c7e1e9; border-radius: 13px; background: rgb(255 255 255 / 78%); }
+.simulator-scenario-save .scenario-save-button { grid-column: 1 / -1; justify-self: end; }
 .simulator-scenario-library header { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .simulator-scenario-list { display: grid; gap: 9px; margin-top: 18px; }
 .simulator-scenario-list article { display: grid; grid-template-columns: 105px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 14px; border: 1px solid rgb(172 211 224 / 64%); border-radius: 15px; background: rgb(255 255 255 / 49%); }
