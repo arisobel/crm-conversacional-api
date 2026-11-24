@@ -13,14 +13,22 @@ este módulo:
    próprio; o lote responde item a item.
 """
 
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from crm_api.models.customer import (
+    CustomerFact,
+    CustomerFactCategory,
+    CustomerFactSource,
+    CustomerFactStatus,
+)
 from crm_api.models.interaction import (
     GATEWAY_SOURCE,
     NOTE_CHANNELS,
@@ -40,6 +48,17 @@ from crm_api.services.portfolio import CustomerNotInScope
 # Corta o conteúdo antes de gravar. A projeção existe para dar contexto ao
 # representante, não para ser um arquivo da conversa — que continua no Gateway.
 _LIMITE_RESUMO = 2000
+
+_SENSITIVE_MEMORY = re.compile(
+    r"\b(?:cpf|cnpj|rg|senha|cart[aã]o|conta\s+banc[aá]ria|pix|doen[çc]a|"
+    r"diagn[oó]stico|rem[eé]dio|religi[aã]o|igreja|pol[ií]tic[ao]|partido|"
+    r"orienta[çc][aã]o\s+sexual)\b",
+    re.IGNORECASE,
+)
+
+
+def _contains_sensitive_memory(value: str) -> bool:
+    return bool(_SENSITIVE_MEMORY.search(value))
 
 
 class RetentionNotConfigured(Exception):
@@ -83,6 +102,15 @@ class IncomingInteraction:
     channel: str = WHATSAPP_CHANNEL
     summary: str | None = None
     payload: dict | None = None
+    fact_suggestions: tuple["IncomingFactSuggestion", ...] = ()
+
+
+@dataclass(frozen=True)
+class IncomingFactSuggestion:
+    category: str
+    text: str
+    source_excerpt: str
+    confidence_score: int
 
 
 @dataclass(frozen=True)
@@ -148,9 +176,7 @@ class InteractionService:
 
         for evento in eventos:
             if evento.external_ref in conhecidos[evento.source]:
-                resultados.append(
-                    IngestOutcome(evento.external_ref, Outcome.DUPLICATE)
-                )
+                resultados.append(IngestOutcome(evento.external_ref, Outcome.DUPLICATE))
                 continue
 
             try:
@@ -191,12 +217,69 @@ class InteractionService:
             resultados.append(
                 IngestOutcome(evento.external_ref, Outcome.CREATED, interaction_id=interacao.id)
             )
+            if dono.customer_id is not None and evento.direction is InteractionDirection.INBOUND:
+                await self._record_fact_suggestions(
+                    tenant_id=tenant_id,
+                    customer_id=dono.customer_id,
+                    interaction=interacao,
+                    suggestions=evento.fact_suggestions,
+                )
 
         return IngestReport(results=resultados)
 
-    async def _resolver(
-        self, tenant_id: uuid.UUID, evento: IncomingInteraction
-    ) -> "_Owner":
+    async def _record_fact_suggestions(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        customer_id: uuid.UUID,
+        interaction: CustomerInteraction,
+        suggestions: tuple[IncomingFactSuggestion, ...],
+    ) -> None:
+        """Persiste apenas memória explícita, não sensível e ainda não confirmada."""
+        accepted: set[str] = set()
+        for suggestion in suggestions[:3]:
+            text = " ".join(suggestion.text.split())
+            excerpt = " ".join(suggestion.source_excerpt.split())[:300]
+            normalized = text.casefold()
+            if (
+                suggestion.confidence_score < 80
+                or not 2 <= len(text) <= 500
+                or not 2 <= len(excerpt) <= 300
+                or normalized in accepted
+                or _contains_sensitive_memory(text)
+                or _contains_sensitive_memory(excerpt)
+            ):
+                continue
+            try:
+                category = CustomerFactCategory(suggestion.category).value
+            except ValueError:
+                continue
+            duplicate = await self._session.scalar(
+                select(CustomerFact.id).where(
+                    CustomerFact.customer_id == customer_id,
+                    CustomerFact.active.is_(True),
+                    func.lower(CustomerFact.fact_text) == text.lower(),
+                )
+            )
+            if duplicate is not None:
+                continue
+            accepted.add(normalized)
+            self._session.add(
+                CustomerFact(
+                    id=uuid.uuid4(),
+                    tenant_id=tenant_id,
+                    customer_id=customer_id,
+                    category=category,
+                    fact_text=text,
+                    source=CustomerFactSource.WHATSAPP.value,
+                    status=CustomerFactStatus.SUGGESTED.value,
+                    source_interaction_id=interaction.id,
+                    source_excerpt=excerpt,
+                    confidence_score=suggestion.confidence_score,
+                )
+            )
+
+    async def _resolver(self, tenant_id: uuid.UUID, evento: IncomingInteraction) -> "_Owner":
         if evento.customer_id is not None:
             escopo = PortfolioScope(tenant_id=tenant_id, owner_user_id=None)
             encontrado = await self._portfolio.get_customer(escopo, evento.customer_id)
@@ -393,9 +476,7 @@ class InteractionService:
         não um valor padrão que o código escolhe sozinho.
         """
         if retention_days is None or retention_days <= 0:
-            raise RetentionNotConfigured(
-                "defina CRM_INTERACTION_RETENTION_DAYS antes de expurgar"
-            )
+            raise RetentionNotConfigured("defina CRM_INTERACTION_RETENTION_DAYS antes de expurgar")
 
         corte = (now or datetime.now(UTC)) - timedelta(days=retention_days)
         removidas = await self._interactions.delete_before(tenant_id, corte)

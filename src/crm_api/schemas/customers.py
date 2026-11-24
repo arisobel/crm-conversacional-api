@@ -1,7 +1,18 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class CustomerContextFactResponse(BaseModel):
+    category: str
+    text: str
+
+
+class CustomerRecentInteractionResponse(BaseModel):
+    direction: str
+    summary: str
+    occurred_at: datetime
 
 
 class CustomerContactResponse(BaseModel):
@@ -13,6 +24,8 @@ class CustomerContactResponse(BaseModel):
     contact_id: UUID
     contact_name: str
     whatsapp_e164: str
+    confirmed_facts: list[CustomerContextFactResponse] = Field(default_factory=list)
+    recent_interactions: list[CustomerRecentInteractionResponse] = Field(default_factory=list)
 
 
 class AuthorizedContactsResponse(BaseModel):

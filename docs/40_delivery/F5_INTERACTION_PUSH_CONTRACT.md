@@ -2,9 +2,8 @@
 
 Complemento de R5 do [plano F5](F5_REPRESENTATIVE_PORTAL.md). Ver ADR-016.
 
-**Estado: o lado do CRM está implementado; o lado do Gateway não.** Este
-documento existe para que a implementação no outro repositório não precise
-adivinhar nada — e para deixar registrado que ela ainda não foi feita.
+**Estado: implementado no CRM e no Gateway.** O push é assíncrono e também pode
+transportar sugestões de informações adicionais para conferência humana.
 
 ## Por que o CRM não puxa
 
@@ -42,13 +41,22 @@ Corpo:
       "summary": "Bom dia, tem 75/36 cru disponível?",
       "channel": "WHATSAPP",
       "source": "whatsapp-gateway",
-      "payload": {"message_type": "text"}
+      "payload": {"message_type": "text"},
+      "fact_suggestions": [{
+        "category": "PREFERENCE",
+        "text": "Prefere contato pela manhã.",
+        "source_excerpt": "Prefiro que me chame pela manhã.",
+        "confidence_score": 96
+      }]
     }
   ]
 }
 ```
 
 Até 200 eventos por chamada. `whatsapp_e164` **ou** `customer_id` é obrigatório.
+Cada evento aceita no máximo três sugestões. Elas nunca são confirmadas
+automaticamente: o CRM bloqueia conteúdo sensível, baixa confiança e duplicatas,
+e mantém a evidência para conferência no cadastro do cliente.
 
 Resposta, sempre `200` quando a autenticação passa:
 

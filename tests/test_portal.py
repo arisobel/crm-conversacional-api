@@ -18,6 +18,7 @@ from sqlalchemy import select
 from crm_api.models.assistant_settings import (
     AssistantRepresentativeSettings,
     ConversationBehaviorSettings,
+    ConversationSimulationScenario,
 )
 from crm_api.models.customer import Customer, CustomerFact, CustomerLocation
 from crm_api.models.customer_contact import CustomerContact
@@ -144,25 +145,27 @@ async def test_portal_permite_assumir_atendimento_e_pausar_robo(world, admin, mo
     monkeypatch.setattr(GatewayWhatsappOnboardingClient, "handoff_status", status)
     monkeypatch.setattr(GatewayWhatsappOnboardingClient, "activate_handoff", activate)
     async with world.app.state.session_factory() as session:
-        session.add_all([
-            CustomerContact(
-                id=uuid4(),
-                tenant_id=world.tenant_id,
-                customer_id=world.customer_a_id,
-                name="Compras Alfa",
-                whatsapp_e164="+5511988887777",
-                is_primary=True,
-            ),
-            RepresentativeWhatsappConnection(
-                id=uuid4(),
-                tenant_id=world.tenant_id,
-                representative_user_id=world.representative_a_id,
-                status=WhatsappConnectionStatus.CONNECTED,
-                idempotency_key="portal-handoff-a",
-                gateway_line_reference="line-a",
-                created_by_user_id=world.admin_id,
-            ),
-        ])
+        session.add_all(
+            [
+                CustomerContact(
+                    id=uuid4(),
+                    tenant_id=world.tenant_id,
+                    customer_id=world.customer_a_id,
+                    name="Compras Alfa",
+                    whatsapp_e164="+5511988887777",
+                    is_primary=True,
+                ),
+                RepresentativeWhatsappConnection(
+                    id=uuid4(),
+                    tenant_id=world.tenant_id,
+                    representative_user_id=world.representative_a_id,
+                    status=WhatsappConnectionStatus.CONNECTED,
+                    idempotency_key="portal-handoff-a",
+                    gateway_line_reference="line-a",
+                    created_by_user_id=world.admin_id,
+                ),
+            ]
+        )
         await session.commit()
 
     page = await admin.get(f"/portal/customers/{world.customer_a_id}")
@@ -190,13 +193,16 @@ async def test_assistente_salva_configuracao_e_auditoria(world, admin):
     page = await admin.get("/portal/assistant")
     assert "As escolhas salvas aqui controlam as permissões" in page.text
     token = _token(page.text)
-    await admin.post("/portal/assistant/organization", data={
-        "csrf_token": token, "enabled": "true",
-    })
+    await admin.post(
+        "/portal/assistant/organization",
+        data={
+            "csrf_token": token,
+            "enabled": "true",
+        },
+    )
     response = await admin.post(
         f"/portal/assistant/representatives/{world.representative_a_id}",
-        data={"csrf_token": token, "enabled": "true",
-              "capabilities": "CRM_REP_LOOKUP_CUSTOMER"},
+        data={"csrf_token": token, "enabled": "true", "capabilities": "CRM_REP_LOOKUP_CUSTOMER"},
     )
     assert "Configuração do assistente salva" in response.text
     async with world.app.state.session_factory() as session:
@@ -204,9 +210,11 @@ async def test_assistente_salva_configuracao_e_auditoria(world, admin):
             AssistantRepresentativeSettings, (world.tenant_id, world.representative_a_id)
         )
         assert rep is not None and rep.enabled
-        entries = (await session.scalars(select(AuditLog).where(
-            AuditLog.action == "assistant.representative.updated"
-        ))).all()
+        entries = (
+            await session.scalars(
+                select(AuditLog).where(AuditLog.action == "assistant.representative.updated")
+            )
+        ).all()
         assert len(entries) == 1
         assert entries[0].after["capabilities"] == ["CRM_REP_LOOKUP_CUSTOMER"]
 
@@ -268,30 +276,92 @@ async def test_simulador_e_restrito_ao_administrador(world):
 
 
 @pytest.mark.asyncio
+async def test_simulador_salva_e_reexecuta_cenario_sem_acao(world, admin, monkeypatch):
+    calls = []
+
+    async def simulate(_client, **payload):
+        calls.append(payload)
+        return GatewaySimulationResult(
+            status="RESOLVED",
+            reply="Entendi a preferência.",
+            source="LLM",
+            suggested_facts=(
+                {
+                    "category": "PREFERENCE",
+                    "text": "Torcedor do Santos.",
+                    "confidence_score": 96,
+                },
+            ),
+        )
+
+    monkeypatch.setattr(GatewayWhatsappOnboardingClient, "simulate_message", simulate)
+    page = await admin.get("/portal/simulator")
+    saved = await admin.post(
+        "/portal/simulator/scenarios",
+        data={
+            "csrf_token": _token(page.text),
+            "scenario_name": "Aprende time do cliente",
+            "mode": "CUSTOMER_SERVICE",
+            "representative_id": "",
+            "message": "Eu torço para o Santos",
+            "expected_status": "RESOLVED",
+            "expected_capability_id": "",
+            "expected_action": "",
+            "expected_fact_text": "Torcedor do Santos.",
+        },
+    )
+    assert "Cenário de teste salvo" in saved.text
+
+    executed = await admin.post(
+        "/portal/simulator/scenarios/run",
+        data={"csrf_token": _token(saved.text)},
+    )
+    assert "Todos os cenários de conversa foram aprovados" in executed.text
+    assert "Aprovado" in executed.text
+    assert len(calls) == 1
+    assert calls[0]["actor_role"] == "cliente"
+    assert calls[0]["history"] == []
+
+    async with world.app.state.session_factory() as session:
+        scenario = await session.scalar(select(ConversationSimulationScenario))
+    assert scenario is not None
+    assert scenario.last_passed is True
+    assert scenario.last_run_at is not None
+
+
+@pytest.mark.asyncio
 async def test_central_exibe_mensagem_que_o_robo_nao_entendeu(world, admin):
     now = datetime.now(UTC)
     async with world.app.state.session_factory() as session:
-        session.add_all([
-            CustomerInteraction(
-                id=uuid4(), tenant_id=world.tenant_id,
-                customer_id=world.customer_a_id,
-                kind=InteractionKind.CUSTOMER_CHANNEL,
-                direction=InteractionDirection.INBOUND,
-                source=GATEWAY_SOURCE, channel="WHATSAPP",
-                external_ref="wamid.UNDERSTOOD.TEST", occurred_at=now,
-                summary="Quero separar uma amostra para sexta",
-            ),
-            CustomerInteraction(
-                id=uuid4(), tenant_id=world.tenant_id,
-                customer_id=world.customer_a_id,
-                kind=InteractionKind.CUSTOMER_CHANNEL,
-                direction=InteractionDirection.OUTBOUND,
-                source=GATEWAY_SOURCE, channel="WHATSAPP",
-                external_ref="wamid.UNDERSTOOD.TEST:out:1", occurred_at=now,
-                summary="Pode explicar melhor o que você precisa?",
-                payload={"outcome": "RECOVERY"},
-            ),
-        ])
+        session.add_all(
+            [
+                CustomerInteraction(
+                    id=uuid4(),
+                    tenant_id=world.tenant_id,
+                    customer_id=world.customer_a_id,
+                    kind=InteractionKind.CUSTOMER_CHANNEL,
+                    direction=InteractionDirection.INBOUND,
+                    source=GATEWAY_SOURCE,
+                    channel="WHATSAPP",
+                    external_ref="wamid.UNDERSTOOD.TEST",
+                    occurred_at=now,
+                    summary="Quero separar uma amostra para sexta",
+                ),
+                CustomerInteraction(
+                    id=uuid4(),
+                    tenant_id=world.tenant_id,
+                    customer_id=world.customer_a_id,
+                    kind=InteractionKind.CUSTOMER_CHANNEL,
+                    direction=InteractionDirection.OUTBOUND,
+                    source=GATEWAY_SOURCE,
+                    channel="WHATSAPP",
+                    external_ref="wamid.UNDERSTOOD.TEST:out:1",
+                    occurred_at=now,
+                    summary="Pode explicar melhor o que você precisa?",
+                    payload={"outcome": "RECOVERY"},
+                ),
+            ]
+        )
         await session.commit()
 
     page = await admin.get("/portal/assistant/unresolved")
@@ -306,66 +376,90 @@ async def test_central_exibe_mensagem_que_o_robo_nao_entendeu(world, admin):
 async def test_central_exibe_funcionamento_conversa_agenda_e_handoff(world, admin):
     now = datetime.now(UTC)
     async with world.app.state.session_factory() as session:
-        session.add_all([
-            CustomerInteraction(
-                id=uuid4(), tenant_id=world.tenant_id,
-                customer_id=world.customer_a_id,
-                kind=InteractionKind.CUSTOMER_CHANNEL,
-                direction=InteractionDirection.INBOUND,
-                source=GATEWAY_SOURCE, channel="WHATSAPP",
-                external_ref="wamid.MONITOR.CUSTOMER", occurred_at=now,
-                summary="Mensagem do cliente",
-            ),
-            CustomerInteraction(
-                id=uuid4(), tenant_id=world.tenant_id,
-                customer_id=world.customer_a_id,
-                kind=InteractionKind.CUSTOMER_CHANNEL,
-                direction=InteractionDirection.OUTBOUND,
-                source=GATEWAY_SOURCE, channel="WHATSAPP",
-                external_ref="wamid.MONITOR.CUSTOMER:out:1", occurred_at=now,
-                summary="Pode explicar de outra forma?", payload={"outcome": "RECOVERY"},
-            ),
-            CustomerInteraction(
-                id=uuid4(), tenant_id=world.tenant_id,
-                customer_id=world.customer_a_id,
-                kind=InteractionKind.CUSTOMER_CHANNEL,
-                direction=InteractionDirection.OUTBOUND,
-                source=GATEWAY_SOURCE, channel="WHATSAPP",
-                external_ref="wamid.MONITOR.CUSTOMER:out:2", occurred_at=now,
-                summary="Vou encaminhar seu pedido.", payload={"outcome": "HUMAN_HANDOFF"},
-            ),
-            CustomerInteraction(
-                id=uuid4(), tenant_id=world.tenant_id,
-                actor_user_id=world.representative_a_id,
-                kind=InteractionKind.ACTOR_CHANNEL,
-                direction=InteractionDirection.INBOUND,
-                source=GATEWAY_SOURCE, channel="WHATSAPP",
-                external_ref="wamid.MONITOR.REP", occurred_at=now,
-                summary="Mensagem do representante",
-            ),
-            RepresentativeReminder(
-                id=uuid4(), tenant_id=world.tenant_id,
-                representative_user_id=world.representative_a_id,
-                customer_id=world.customer_a_id,
-                origin=ReminderOrigin.CUSTOMER.value,
-                kind="CALL", status=ReminderStatus.CONFIRMED.value,
-                note="Ligação atrasada", due_at=now - timedelta(minutes=5),
-                timezone="America/Sao_Paulo", source_wamid="wamid.MONITOR.REMINDER",
-            ),
-            AuditLog(
-                id=uuid4(), tenant_id=world.tenant_id,
-                actor_user_id=world.representative_a_id,
-                action="PRICE_BATCH_PUBLISHED", entity="price_lists",
-                entity_id=uuid4(), after={"criados": 1},
-            ),
-            CustomerIntake(
-                id=uuid4(), tenant_id=world.tenant_id,
-                created_by_user_id=world.representative_a_id,
-                idempotency_key="wamid.MONITOR.INTAKE",
-                legal_name="Cliente aguardando revisão",
-                created_at=now - timedelta(hours=25),
-            ),
-        ])
+        session.add_all(
+            [
+                CustomerInteraction(
+                    id=uuid4(),
+                    tenant_id=world.tenant_id,
+                    customer_id=world.customer_a_id,
+                    kind=InteractionKind.CUSTOMER_CHANNEL,
+                    direction=InteractionDirection.INBOUND,
+                    source=GATEWAY_SOURCE,
+                    channel="WHATSAPP",
+                    external_ref="wamid.MONITOR.CUSTOMER",
+                    occurred_at=now,
+                    summary="Mensagem do cliente",
+                ),
+                CustomerInteraction(
+                    id=uuid4(),
+                    tenant_id=world.tenant_id,
+                    customer_id=world.customer_a_id,
+                    kind=InteractionKind.CUSTOMER_CHANNEL,
+                    direction=InteractionDirection.OUTBOUND,
+                    source=GATEWAY_SOURCE,
+                    channel="WHATSAPP",
+                    external_ref="wamid.MONITOR.CUSTOMER:out:1",
+                    occurred_at=now,
+                    summary="Pode explicar de outra forma?",
+                    payload={"outcome": "RECOVERY"},
+                ),
+                CustomerInteraction(
+                    id=uuid4(),
+                    tenant_id=world.tenant_id,
+                    customer_id=world.customer_a_id,
+                    kind=InteractionKind.CUSTOMER_CHANNEL,
+                    direction=InteractionDirection.OUTBOUND,
+                    source=GATEWAY_SOURCE,
+                    channel="WHATSAPP",
+                    external_ref="wamid.MONITOR.CUSTOMER:out:2",
+                    occurred_at=now,
+                    summary="Vou encaminhar seu pedido.",
+                    payload={"outcome": "HUMAN_HANDOFF"},
+                ),
+                CustomerInteraction(
+                    id=uuid4(),
+                    tenant_id=world.tenant_id,
+                    actor_user_id=world.representative_a_id,
+                    kind=InteractionKind.ACTOR_CHANNEL,
+                    direction=InteractionDirection.INBOUND,
+                    source=GATEWAY_SOURCE,
+                    channel="WHATSAPP",
+                    external_ref="wamid.MONITOR.REP",
+                    occurred_at=now,
+                    summary="Mensagem do representante",
+                ),
+                RepresentativeReminder(
+                    id=uuid4(),
+                    tenant_id=world.tenant_id,
+                    representative_user_id=world.representative_a_id,
+                    customer_id=world.customer_a_id,
+                    origin=ReminderOrigin.CUSTOMER.value,
+                    kind="CALL",
+                    status=ReminderStatus.CONFIRMED.value,
+                    note="Ligação atrasada",
+                    due_at=now - timedelta(minutes=5),
+                    timezone="America/Sao_Paulo",
+                    source_wamid="wamid.MONITOR.REMINDER",
+                ),
+                AuditLog(
+                    id=uuid4(),
+                    tenant_id=world.tenant_id,
+                    actor_user_id=world.representative_a_id,
+                    action="PRICE_BATCH_PUBLISHED",
+                    entity="price_lists",
+                    entity_id=uuid4(),
+                    after={"criados": 1},
+                ),
+                CustomerIntake(
+                    id=uuid4(),
+                    tenant_id=world.tenant_id,
+                    created_by_user_id=world.representative_a_id,
+                    idempotency_key="wamid.MONITOR.INTAKE",
+                    legal_name="Cliente aguardando revisão",
+                    created_at=now - timedelta(hours=25),
+                ),
+            ]
+        )
         await session.commit()
 
     page = await admin.get("/portal/assistant")
@@ -389,9 +483,7 @@ async def test_carteira_unifica_calendario_e_cria_compromisso_manual(world, admi
     assert "Agenda e Notificações" in page.text
     assert "Novo compromisso" in page.text
 
-    due_local = (datetime.now(UTC) + timedelta(days=2)).astimezone(
-        ZoneInfo("America/Sao_Paulo")
-    )
+    due_local = (datetime.now(UTC) + timedelta(days=2)).astimezone(ZoneInfo("America/Sao_Paulo"))
     response = await admin.post(
         "/portal/customers/reminders",
         data={
@@ -421,10 +513,15 @@ async def test_personalidade_dos_robos_e_salva_separadamente(world, admin):
     token = _token(page.text)
     assert "Atendimento aos clientes · Coexistence" in page.text
     for bot, tone in [("ASSISTANT", "objetivo"), ("COEXISTENCE", "cordial")]:
-        result = await admin.post(f"/portal/assistant/behavior/{bot}", data={
-            "csrf_token": token, "tone": tone, "context_minutes": "120",
-            "instructions": f"Converse naturalmente: {bot}",
-        })
+        result = await admin.post(
+            f"/portal/assistant/behavior/{bot}",
+            data={
+                "csrf_token": token,
+                "tone": tone,
+                "context_minutes": "120",
+                "instructions": f"Converse naturalmente: {bot}",
+            },
+        )
         assert "Configuração do assistente salva" in result.text
     async with world.app.state.session_factory() as session:
         assistant = await session.get(ConversationBehaviorSettings, (world.tenant_id, "ASSISTANT"))
@@ -434,9 +531,11 @@ async def test_personalidade_dos_robos_e_salva_separadamente(world, admin):
         assert assistant.tone == "objetivo"
         assert coexistence.tone == "cordial"
         assert assistant.context_minutes == coexistence.context_minutes == 120
-        audit = (await session.scalars(select(AuditLog).where(
-            AuditLog.action == "conversation.behavior.updated"
-        ))).all()
+        audit = (
+            await session.scalars(
+                select(AuditLog).where(AuditLog.action == "conversation.behavior.updated")
+            )
+        ).all()
         assert len(audit) == 2
 
 
@@ -444,44 +543,69 @@ async def test_personalidade_dos_robos_e_salva_separadamente(world, admin):
 async def test_personalidade_rejeita_valores_invalidos_e_outros_usuarios(world, admin):
     page = await admin.get("/portal/assistant")
     token = _token(page.text)
-    await admin.post("/portal/assistant/behavior/COEXISTENCE", data={
-        "csrf_token": token, "tone": "cordial", "context_minutes": "1",
-        "instructions": "Olá",
-    })
+    await admin.post(
+        "/portal/assistant/behavior/COEXISTENCE",
+        data={
+            "csrf_token": token,
+            "tone": "cordial",
+            "context_minutes": "1",
+            "instructions": "Olá",
+        },
+    )
     async with _browser(world) as representative:
         page = await _entrar(representative, REPRESENTATIVE_A_EMAIL)
-        await representative.post("/portal/assistant/behavior/COEXISTENCE", data={
-            "csrf_token": _token(page.text), "tone": "cordial", "context_minutes": "120",
-            "instructions": "Olá",
-        })
+        await representative.post(
+            "/portal/assistant/behavior/COEXISTENCE",
+            data={
+                "csrf_token": _token(page.text),
+                "tone": "cordial",
+                "context_minutes": "120",
+                "instructions": "Olá",
+            },
+        )
     async with world.app.state.session_factory() as session:
-        assert await session.get(
-            ConversationBehaviorSettings, (world.tenant_id, "COEXISTENCE")
-        ) is None
+        assert (
+            await session.get(ConversationBehaviorSettings, (world.tenant_id, "COEXISTENCE"))
+            is None
+        )
 
 
 @pytest.mark.asyncio
 async def test_assistente_recusa_representante_e_capacidade_desconhecida(world, admin):
     page = await admin.get("/portal/assistant")
     token = _token(page.text)
-    await admin.post(f"/portal/assistant/representatives/{world.representative_a_id}", data={
-        "csrf_token": token, "enabled": "true", "capabilities": "UNKNOWN",
-    })
+    await admin.post(
+        f"/portal/assistant/representatives/{world.representative_a_id}",
+        data={
+            "csrf_token": token,
+            "enabled": "true",
+            "capabilities": "UNKNOWN",
+        },
+    )
     async with world.app.state.session_factory() as session:
-        assert await session.get(
-            AssistantRepresentativeSettings, (world.tenant_id, world.representative_a_id)
-        ) is None
+        assert (
+            await session.get(
+                AssistantRepresentativeSettings, (world.tenant_id, world.representative_a_id)
+            )
+            is None
+        )
     async with _browser(world) as representative:
         await _entrar(representative, REPRESENTATIVE_A_EMAIL)
         page = await representative.get("/portal/assistant")
         assert "/portal/customers" in str(page.url)
-        await representative.post("/portal/assistant/organization", data={
-            "csrf_token": _token(page.text), "enabled": "true",
-        })
+        await representative.post(
+            "/portal/assistant/organization",
+            data={
+                "csrf_token": _token(page.text),
+                "enabled": "true",
+            },
+        )
         async with world.app.state.session_factory() as session:
-            entries = (await session.scalars(select(AuditLog).where(
-                AuditLog.action == "assistant.organization.updated"
-            ))).all()
+            entries = (
+                await session.scalars(
+                    select(AuditLog).where(AuditLog.action == "assistant.organization.updated")
+                )
+            ).all()
             assert not entries
 
 
@@ -758,9 +882,7 @@ async def test_representante_nao_transfere_titular(world):
     assert "Seu papel não permite" in resposta.text
 
     async with world.app.state.session_factory() as session:
-        cliente = await session.scalar(
-            select(Customer).where(Customer.id == world.customer_a_id)
-        )
+        cliente = await session.scalar(select(Customer).where(Customer.id == world.customer_a_id))
     assert cliente.owner_user_id == world.representative_a_id
 
 

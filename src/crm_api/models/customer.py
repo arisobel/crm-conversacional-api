@@ -184,6 +184,10 @@ class CustomerFact(Base):
             "status IN ('SUGGESTED', 'CONFIRMED', 'REJECTED')",
             name="ck_customer_facts_status",
         ),
+        CheckConstraint(
+            "confidence_score IS NULL OR confidence_score BETWEEN 0 AND 100",
+            name="ck_customer_facts_confidence",
+        ),
         Index("ix_customer_facts_customer_status", "customer_id", "active", "status"),
     )
 
@@ -200,6 +204,11 @@ class CustomerFact(Base):
     confirmed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )
+    source_interaction_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("customer_interactions.id"), nullable=True, index=True
+    )
+    source_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence_score: Mapped[int | None] = mapped_column(nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

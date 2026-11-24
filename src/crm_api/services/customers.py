@@ -3,7 +3,12 @@ from datetime import UTC, datetime
 
 from crm_api.core.phone import InvalidWhatsappNumber, normalize_whatsapp_e164
 from crm_api.repositories.customers import CustomerRepository
-from crm_api.schemas.customers import AuthorizedContactsResponse, CustomerContactResponse
+from crm_api.schemas.customers import (
+    AuthorizedContactsResponse,
+    CustomerContactResponse,
+    CustomerContextFactResponse,
+    CustomerRecentInteractionResponse,
+)
 
 # Reexportados: a regra de telefone mudou de módulo, não de contrato. Quem já
 # importava daqui continua funcionando.
@@ -36,6 +41,8 @@ class CustomerService:
         if contact_and_customer is None:
             return None
         contact, customer = contact_and_customer
+        facts = await self._repository.confirmed_facts(customer.id)
+        interactions = await self._repository.recent_interactions(customer.id)
         return CustomerContactResponse(
             customer_id=customer.id,
             customer_name=customer.legal_name,
@@ -43,6 +50,19 @@ class CustomerService:
             contact_id=contact.id,
             contact_name=contact.name,
             whatsapp_e164=contact.whatsapp_e164,
+            confirmed_facts=[
+                CustomerContextFactResponse(category=item.category, text=item.fact_text)
+                for item in facts
+            ],
+            recent_interactions=[
+                CustomerRecentInteractionResponse(
+                    direction=item.direction.value if item.direction is not None else "UNKNOWN",
+                    summary=item.summary or "",
+                    occurred_at=item.occurred_at,
+                )
+                for item in interactions
+                if item.summary
+            ],
         )
 
     async def authorized_contacts(self, tenant_slug: str) -> AuthorizedContactsResponse:

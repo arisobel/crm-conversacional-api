@@ -11,6 +11,7 @@ from crm_api.models.assistant_settings import (  # noqa: F401
     AssistantRepresentativeCapability,
     AssistantRepresentativeSettings,
     ConversationBehaviorSettings,
+    ConversationSimulationScenario,
 )
 from crm_api.models.base import Base
 from crm_api.models.catalog import Product, ProductFamily  # noqa: F401

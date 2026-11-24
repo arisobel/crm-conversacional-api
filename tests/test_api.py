@@ -15,8 +15,13 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from crm_api.core.config import Settings
 from crm_api.main import create_app
 from crm_api.models.catalog import Product, ProductFamily
-from crm_api.models.customer import Customer, Tenant
+from crm_api.models.customer import Customer, CustomerFact, Tenant
 from crm_api.models.customer_contact import CustomerContact
+from crm_api.models.interaction import (
+    CustomerInteraction,
+    InteractionDirection,
+    InteractionKind,
+)
 from crm_api.models.pricing import AvailabilityStatus, PriceList, PriceListItem, PriceListStatus
 from crm_api.repositories.audit import AuditRepository
 from crm_api.repositories.price_entries import PriceEntryRepository
@@ -221,6 +226,53 @@ async def test_find_customer_by_whatsapp_normalizes_presentation_characters(clie
     assert response.json()["customer_name"] == "Tecelagem Exemplo Ltda."
     assert response.json()["contact_name"] == "VitÃ³ria Exemplo"
     assert response.json()["whatsapp_e164"] == "+5511999999999"
+
+
+@pytest.mark.asyncio
+async def test_find_customer_includes_confirmed_facts_and_recent_context(app, client):
+    now = datetime.now(UTC)
+    async with app.state.session_factory() as session:
+        customer = await session.scalar(
+            select(Customer).where(Customer.legal_name == "Tecelagem Exemplo Ltda.")
+        )
+        assert customer is not None
+        session.add_all([
+            CustomerFact(
+                id=uuid4(),
+                tenant_id=customer.tenant_id,
+                customer_id=customer.id,
+                category="PREFERENCE",
+                fact_text="Prefere contato pela manhã.",
+                source="PORTAL",
+                status="CONFIRMED",
+            ),
+            CustomerInteraction(
+                id=uuid4(),
+                tenant_id=customer.tenant_id,
+                kind=InteractionKind.CUSTOMER_CHANNEL,
+                customer_id=customer.id,
+                channel="WHATSAPP",
+                direction=InteractionDirection.OUTBOUND,
+                source="whatsapp-gateway",
+                external_ref="wamid.HUMAN.CONTEXT",
+                occurred_at=now - timedelta(minutes=2),
+                summary="Vou conferir isso para você.",
+                payload={"actor": "HUMAN"},
+            ),
+        ])
+        await session.commit()
+
+    path = "/customers/by-whatsapp/+5511999999999"
+    response = await client.get(path, headers=_headers(path))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["confirmed_facts"] == [{
+        "category": "PREFERENCE",
+        "text": "Prefere contato pela manhã.",
+    }]
+    assert body["recent_interactions"][0]["direction"] == "OUTBOUND"
+    assert body["recent_interactions"][0]["summary"] == "Vou conferir isso para você."
 
 
 @pytest.mark.asyncio

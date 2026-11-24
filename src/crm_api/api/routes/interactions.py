@@ -26,7 +26,11 @@ from crm_api.schemas.interactions import (
     InteractionPage,
     InteractionResponse,
 )
-from crm_api.services.interactions import IncomingInteraction, InteractionService
+from crm_api.services.interactions import (
+    IncomingFactSuggestion,
+    IncomingInteraction,
+    InteractionService,
+)
 from crm_api.services.portfolio import CustomerNotInScope
 
 router = APIRouter(tags=["Interactions"])
@@ -77,6 +81,15 @@ async def ingest_interactions(
                 channel=item.channel,
                 summary=item.summary,
                 payload=item.payload,
+                fact_suggestions=tuple(
+                    IncomingFactSuggestion(
+                        category=suggestion.category,
+                        text=suggestion.text,
+                        source_excerpt=suggestion.source_excerpt,
+                        confidence_score=suggestion.confidence_score,
+                    )
+                    for suggestion in item.fact_suggestions
+                ),
             )
             for item in payload.interactions
         ],

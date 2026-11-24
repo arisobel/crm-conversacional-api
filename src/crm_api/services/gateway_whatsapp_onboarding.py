@@ -33,6 +33,7 @@ class GatewaySimulationResult:
     action: str | None = None
     requires_confirmation: bool = False
     slots: dict[str, str] | None = None
+    suggested_facts: tuple[dict[str, object], ...] = ()
 
 
 class GatewayWhatsappOnboardingClient:
@@ -348,6 +349,18 @@ class GatewayWhatsappOnboardingClient:
             if isinstance(raw_slots, dict)
             else {}
         )
+        suggested_facts = tuple(
+            {
+                "category": str(item["category"])[:32],
+                "text": str(item["text"])[:240],
+                "confidence_score": int(item["confidence_score"]),
+            }
+            for item in payload.get("suggested_facts", [])[:3]
+            if isinstance(item, dict)
+            and isinstance(item.get("category"), str)
+            and isinstance(item.get("text"), str)
+            and isinstance(item.get("confidence_score"), int)
+        )
         return GatewaySimulationResult(
             status=payload["status"],
             reply=payload["reply"][:1000],
@@ -365,4 +378,5 @@ class GatewayWhatsappOnboardingClient:
             action=str(payload["action"])[:120] if payload.get("action") else None,
             requires_confirmation=payload.get("requires_confirmation") is True,
             slots=slots,
+            suggested_facts=suggested_facts,
         )

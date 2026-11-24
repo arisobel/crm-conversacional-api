@@ -107,6 +107,14 @@
       {% if simulation.slots %}
       <div class="simulator-slots"><strong>Dados identificados</strong>{% for key, value in simulation.slots.items() %}<span><b>{{ key|replace('_', ' ') }}</b>{{ value }}</span>{% endfor %}</div>
       {% endif %}
+      {% if simulation.suggested_facts %}
+      <div class="simulator-slots simulator-facts">
+        <strong>Informações que poderiam ser aprendidas</strong>
+        {% for fact in simulation.suggested_facts %}
+        <span><b>{{ fact.category|replace('_', ' ') }} · {{ fact.confidence_score }}%</b>{{ fact.text }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
       {% if simulation.requires_confirmation %}<p class="simulator-confirmation">Esta ação exigiria confirmação antes de gravar.</p>{% endif %}
       <details class="simulator-technical"><summary>Detalhes técnicos</summary><code>{{ simulation.capability_id or 'conversation' }}</code><code>{{ simulation.action or 'no_action' }}</code></details>
     {% else %}
@@ -118,4 +126,63 @@
     {% endif %}
   </aside>
 </form>
+
+{% if simulation and last_message %}
+<section class="simulator-scenario-save painel-glass">
+  <div>
+    <p class="inicio-etiqueta">REGRESSÃO</p>
+    <h2>Guardar este comportamento</h2>
+    <p>Salve o resultado aprovado para conferir automaticamente depois de cada evolução do robô.</p>
+  </div>
+  <form method="post" action="/portal/simulator/scenarios">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="mode" value="{{ mode }}">
+    <input type="hidden" name="representative_id" value="{{ selected_representative_id }}">
+    <input type="hidden" name="message" value="{{ last_message }}">
+    <input type="hidden" name="expected_status" value="{{ simulation.status }}">
+    <input type="hidden" name="expected_capability_id" value="{{ simulation.capability_id or '' }}">
+    <input type="hidden" name="expected_action" value="{{ simulation.action or '' }}">
+    <input type="hidden" name="expected_fact_text" value="{% if simulation.suggested_facts %}{{ simulation.suggested_facts[0].text }}{% endif %}">
+    <label><span>Nome do cenário</span><input name="scenario_name" maxlength="120" placeholder="Ex.: cliente informa preferência por futebol" required></label>
+    <button type="submit">Salvar como cenário</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="simulator-scenario-library painel-glass">
+  <header>
+    <div>
+      <p class="inicio-etiqueta">BATERIA DE CONVERSAS</p>
+      <h2>Cenários salvos</h2>
+      <p>Repita os comportamentos importantes sem enviar mensagens ou alterar o CRM.</p>
+    </div>
+    <form method="post" action="/portal/simulator/scenarios/run">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" {% if not scenarios %}disabled{% endif %}>Executar todos</button>
+    </form>
+  </header>
+  {% if scenarios %}
+  <div class="simulator-scenario-list">
+    {% for scenario in scenarios %}
+    <article>
+      <span class="scenario-state {% if scenario.last_passed is sameas true %}passed{% elif scenario.last_passed is sameas false %}failed{% endif %}">
+        {% if scenario.last_passed is sameas true %}Aprovado{% elif scenario.last_passed is sameas false %}Reprovado{% else %}Ainda não executado{% endif %}
+      </span>
+      <div>
+        <strong>{{ scenario.name }}</strong>
+        <p>“{{ scenario.message }}”</p>
+        <small>{% if scenario.mode == 'CUSTOMER_SERVICE' %}Cliente → Atendimento{% else %}Representante → Assistente{% endif %} · esperado: {{ scenario.expected_status }}</small>
+        {% if scenario.last_result %}<details><summary>Último diagnóstico</summary><p>{{ scenario.last_result }}</p></details>{% endif %}
+      </div>
+      <form method="post" action="/portal/simulator/scenarios/{{ scenario.id }}/archive">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="scenario-archive">Arquivar</button>
+      </form>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="simulator-scenario-empty">Faça uma simulação e salve o primeiro comportamento que não pode regredir.</p>
+  {% endif %}
+</section>
 {% endblock %}

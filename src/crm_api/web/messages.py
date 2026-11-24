@@ -26,6 +26,15 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
     ),
     "assistente-sem-titular": ("erro", "Este cliente ainda não tem representante titular."),
     "comportamento-invalido": ("erro", "Confira o tom, as orientações e o tempo de contexto."),
+    "cenario-salvo": ("ok", "Cenário de teste salvo."),
+    "cenario-arquivado": ("ok", "Cenário de teste arquivado."),
+    "cenarios-aprovados": ("ok", "Todos os cenários de conversa foram aprovados."),
+    "cenarios-reprovados": (
+        "erro",
+        "Um ou mais cenários reprovaram. Confira os resultados antes de publicar.",
+    ),
+    "cenario-vazio": ("erro", "Salve pelo menos um cenário antes de executar a bateria."),
+    "cenario-invalido": ("erro", "Confira o nome, a mensagem e o resultado esperado."),
     # sucesso
     "cliente-criado": ("ok", "Cliente cadastrado."),
     "cliente-salvo": ("ok", "Cadastro atualizado."),

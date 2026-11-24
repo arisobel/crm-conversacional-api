@@ -13,6 +13,15 @@ from crm_api.models.interaction import (
 _LOTE_MAXIMO = 200
 
 
+class IncomingFactSuggestionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category: str = Field(max_length=32)
+    text: str = Field(min_length=2, max_length=500)
+    source_excerpt: str = Field(min_length=2, max_length=300)
+    confidence_score: int = Field(ge=0, le=100)
+
+
 class IncomingInteractionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -35,14 +44,15 @@ class IncomingInteractionRequest(BaseModel):
         description="Texto ou resumo da mensagem. Truncado em 2000 caracteres.",
     )
     payload: dict | None = None
+    fact_suggestions: list[IncomingFactSuggestionRequest] = Field(
+        default_factory=list, max_length=3
+    )
 
 
 class IngestInteractionsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    interactions: list[IncomingInteractionRequest] = Field(
-        min_length=1, max_length=_LOTE_MAXIMO
-    )
+    interactions: list[IncomingInteractionRequest] = Field(min_length=1, max_length=_LOTE_MAXIMO)
 
 
 class IngestOutcomeResponse(BaseModel):

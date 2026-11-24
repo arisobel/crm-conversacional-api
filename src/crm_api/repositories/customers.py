@@ -1,8 +1,11 @@
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from crm_api.models.customer import Customer, Tenant
+from crm_api.models.customer import Customer, CustomerFact, CustomerFactStatus, Tenant
 from crm_api.models.customer_contact import CustomerContact
+from crm_api.models.interaction import CustomerInteraction
 
 
 class CustomerRepository:
@@ -50,6 +53,38 @@ class CustomerRepository:
             .order_by(CustomerContact.whatsapp_e164)
         )
         return list(result)
+
+    async def confirmed_facts(self, customer_id, *, limit: int = 8) -> list[CustomerFact]:
+        return list(
+            await self._session.scalars(
+                select(CustomerFact)
+                .where(
+                    CustomerFact.customer_id == customer_id,
+                    CustomerFact.active.is_(True),
+                    CustomerFact.status == CustomerFactStatus.CONFIRMED.value,
+                )
+                .order_by(CustomerFact.updated_at.desc())
+                .limit(limit)
+            )
+        )
+
+    async def recent_interactions(
+        self, customer_id, *, limit: int = 6
+    ) -> list[CustomerInteraction]:
+        cutoff = datetime.now(UTC) - timedelta(hours=24)
+        items = list(
+            await self._session.scalars(
+                select(CustomerInteraction)
+                .where(
+                    CustomerInteraction.customer_id == customer_id,
+                    CustomerInteraction.summary.is_not(None),
+                    CustomerInteraction.occurred_at >= cutoff,
+                )
+                .order_by(CustomerInteraction.occurred_at.desc(), CustomerInteraction.id.desc())
+                .limit(limit)
+            )
+        )
+        return list(reversed(items))
 
     async def get_tenant(self, tenant_slug: str) -> Tenant | None:
         """Tenant ativo da implantação.

@@ -85,3 +85,34 @@ class ConversationBehaviorSettings(Base):
     instructions: Mapped[str] = mapped_column(Text, nullable=False)
     context_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ConversationSimulationScenario(Base):
+    """Caso de regressão salvo pelo administrador, sempre executado sem escrita."""
+
+    __tablename__ = "conversation_simulation_scenarios"
+    __table_args__ = (
+        CheckConstraint(
+            "mode IN ('REPRESENTATIVE_ASSISTANT', 'CUSTOMER_SERVICE')",
+            name="ck_simulation_scenario_mode",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    mode: Mapped[str] = mapped_column(String(32))
+    representative_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    message: Mapped[str] = mapped_column(Text)
+    expected_status: Mapped[str] = mapped_column(String(32))
+    expected_capability_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    expected_action: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    expected_fact_text: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    last_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    last_result: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

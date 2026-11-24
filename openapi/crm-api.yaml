@@ -1953,6 +1953,36 @@ components:
           description: Texto ou resumo. Truncado em 2000 caracteres antes de gravar.
         payload:
           type: [object, "null"]
+        fact_suggestions:
+          type: array
+          maxItems: 3
+          description: >
+            Informações duráveis, explícitas e não sensíveis extraídas da mensagem.
+            Entram como sugestão e só ficam disponíveis ao assistente após confirmação humana.
+          items:
+            $ref: "#/components/schemas/IncomingFactSuggestion"
+
+    IncomingFactSuggestion:
+      type: object
+      additionalProperties: false
+      required: [category, text, source_excerpt, confidence_score]
+      properties:
+        category:
+          type: string
+          enum: [PREFERENCE, PERSONAL_CONTEXT, COMMERCIAL, OTHER]
+        text:
+          type: string
+          minLength: 2
+          maxLength: 500
+        source_excerpt:
+          type: string
+          minLength: 2
+          maxLength: 300
+          description: Trecho da conversa usado pelo administrador para conferir a sugestão.
+        confidence_score:
+          type: integer
+          minimum: 0
+          maximum: 100
 
     IngestInteractionsResult:
       type: object
@@ -2209,7 +2239,7 @@ components:
 
     CustomerContact:
       type: object
-      required: [customer_id, customer_name, state_code, contact_id, contact_name, whatsapp_e164]
+      required: [customer_id, customer_name, state_code, contact_id, contact_name, whatsapp_e164, confirmed_facts, recent_interactions]
       properties:
         customer_id:
           type: string
@@ -2226,6 +2256,33 @@ components:
           type: string
         whatsapp_e164:
           type: string
+        confirmed_facts:
+          type: array
+          description: Informações adicionais confirmadas que podem personalizar a conversa.
+          items:
+            type: object
+            required: [category, text]
+            properties:
+              category:
+                type: string
+                enum: [PREFERENCE, PERSONAL_CONTEXT, COMMERCIAL, OTHER]
+              text:
+                type: string
+        recent_interactions:
+          type: array
+          description: Contexto cronológico das últimas 24 horas para continuidade do atendimento.
+          items:
+            type: object
+            required: [direction, summary, occurred_at]
+            properties:
+              direction:
+                type: string
+                enum: [INBOUND, OUTBOUND, UNKNOWN]
+              summary:
+                type: string
+              occurred_at:
+                type: string
+                format: date-time
 
     AuthorizationDecisionRequest:
       type: object

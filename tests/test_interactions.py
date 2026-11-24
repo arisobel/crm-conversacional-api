@@ -18,6 +18,7 @@ from conftest import (
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 
+from crm_api.models.customer import CustomerFact
 from crm_api.models.customer_contact import CustomerContact
 from crm_api.models.interaction import CustomerInteraction, InteractionDirection
 from crm_api.models.user import AuditLog
@@ -66,7 +67,7 @@ async def world():
                     # continuar sendo aceito.
                     active=False,
                 ),
-            ]
+            ],
         )
         await session.commit()
     return mundo
@@ -78,9 +79,7 @@ def _corpo(*eventos: dict) -> bytes:
 
 def _headers(corpo: bytes, *, secret: bytes = b"test-secret") -> dict[str, str]:
     timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    canonical = b".".join(
-        [timestamp.encode(), b"POST", b"/internal/interactions", corpo]
-    )
+    canonical = b".".join([timestamp.encode(), b"POST", b"/internal/interactions", corpo])
     return {
         "X-Tenant-Slug": "test-tenant",
         "X-Timestamp": timestamp,
@@ -144,6 +143,86 @@ async def test_evento_do_gateway_vira_linha_na_ficha_do_cliente(world):
 
 
 @pytest.mark.asyncio
+async def test_conversa_sugere_informacao_com_evidencia_sem_confirmar(world):
+    corpo = _corpo(
+        _evento(
+            summary="Prefiro receber novidades pela manhã.",
+            fact_suggestions=[
+                {
+                    "category": "PREFERENCE",
+                    "text": "Prefere receber novidades pela manhã.",
+                    "source_excerpt": "Prefiro receber novidades pela manhã.",
+                    "confidence_score": 94,
+                }
+            ],
+        )
+    )
+    async with _cliente(world) as client:
+        resposta = await client.post(
+            "/internal/interactions", content=corpo, headers=_headers(corpo)
+        )
+
+    assert resposta.json()["created"] == 1
+    async with world.app.state.session_factory() as session:
+        fact = await session.scalar(select(CustomerFact))
+    assert fact is not None
+    assert fact.status == "SUGGESTED"
+    assert fact.source == "WHATSAPP"
+    assert fact.confidence_score == 94
+    assert fact.source_excerpt == "Prefiro receber novidades pela manhã."
+    assert fact.source_interaction_id is not None
+
+
+@pytest.mark.asyncio
+async def test_conversa_nao_memoriza_dado_sensivel_ou_baixa_confianca(world):
+    corpo = _corpo(
+        _evento(
+            fact_suggestions=[
+                {
+                    "category": "OTHER",
+                    "text": "O CNPJ é 12.345.678/0001-90.",
+                    "source_excerpt": "Meu CNPJ é 12.345.678/0001-90.",
+                    "confidence_score": 99,
+                },
+                {
+                    "category": "PREFERENCE",
+                    "text": "Talvez prefira contato à tarde.",
+                    "source_excerpt": "Talvez à tarde.",
+                    "confidence_score": 51,
+                },
+            ]
+        )
+    )
+    async with _cliente(world) as client:
+        await client.post("/internal/interactions", content=corpo, headers=_headers(corpo))
+
+    async with world.app.state.session_factory() as session:
+        facts = list(await session.scalars(select(CustomerFact)))
+    assert facts == []
+
+
+@pytest.mark.asyncio
+async def test_conversa_nao_duplica_a_mesma_sugestao(world):
+    suggestion = [
+        {
+            "category": "COMMERCIAL",
+            "text": "Tem interesse em fios reciclados.",
+            "source_excerpt": "Tenho interesse em fios reciclados.",
+            "confidence_score": 92,
+        }
+    ]
+    primeiro = _corpo(_evento(fact_suggestions=suggestion))
+    segundo = _corpo(_evento(fact_suggestions=suggestion))
+    async with _cliente(world) as client:
+        await client.post("/internal/interactions", content=primeiro, headers=_headers(primeiro))
+        await client.post("/internal/interactions", content=segundo, headers=_headers(segundo))
+
+    async with world.app.state.session_factory() as session:
+        count = await session.scalar(select(func.count(CustomerFact.id)))
+    assert count == 1
+
+
+@pytest.mark.asyncio
 async def test_reenviar_a_mesma_referencia_nao_duplica(world):
     evento = _evento()
     async with _cliente(world) as client:
@@ -170,9 +249,7 @@ async def test_reenviar_a_mesma_referencia_nao_duplica(world):
 @pytest.mark.asyncio
 async def test_referencia_repetida_dentro_do_mesmo_lote_grava_uma_vez(world):
     referencia = f"wamid.{uuid4()}"
-    corpo = _corpo(
-        _evento(external_ref=referencia), _evento(external_ref=referencia)
-    )
+    corpo = _corpo(_evento(external_ref=referencia), _evento(external_ref=referencia))
     async with _cliente(world) as client:
         resposta = await client.post(
             "/internal/interactions", content=corpo, headers=_headers(corpo)
@@ -222,9 +299,7 @@ async def test_contato_desativado_continua_alimentando_o_historico(world):
 
 @pytest.mark.asyncio
 async def test_evento_endereçado_por_customer_id_dispensa_telefone(world):
-    corpo = _corpo(
-        _evento(whatsapp_e164=None, customer_id=str(world.customer_unassigned_id))
-    )
+    corpo = _corpo(_evento(whatsapp_e164=None, customer_id=str(world.customer_unassigned_id)))
     async with _cliente(world) as client:
         resposta = await client.post(
             "/internal/interactions", content=corpo, headers=_headers(corpo)
@@ -339,9 +414,7 @@ async def test_timeline_vem_da_mais_recente_para_a_mais_antiga(world):
     await _semear(world, customer_id=world.customer_a_id, quantos=3)
 
     async with _cliente(world, REPRESENTATIVE_A_EMAIL) as client:
-        resposta = await client.get(
-            f"/admin/customers/{world.customer_a_id}/interactions"
-        )
+        resposta = await client.get(f"/admin/customers/{world.customer_a_id}/interactions")
 
     assert resposta.status_code == 200
     dados = resposta.json()
@@ -375,9 +448,7 @@ async def test_representante_nao_le_a_conversa_de_carteira_alheia(world):
     await _semear(world, customer_id=world.customer_a_id, quantos=2)
 
     async with _cliente(world, REPRESENTATIVE_B_EMAIL) as client:
-        resposta = await client.get(
-            f"/admin/customers/{world.customer_a_id}/interactions"
-        )
+        resposta = await client.get(f"/admin/customers/{world.customer_a_id}/interactions")
 
     # 404, e não 403: confirmar a existência já entregaria a carteira alheia.
     assert resposta.status_code == 404
@@ -386,9 +457,7 @@ async def test_representante_nao_le_a_conversa_de_carteira_alheia(world):
 @pytest.mark.asyncio
 async def test_timeline_exige_sessao(world):
     async with _cliente(world) as client:
-        resposta = await client.get(
-            f"/admin/customers/{world.customer_a_id}/interactions"
-        )
+        resposta = await client.get(f"/admin/customers/{world.customer_a_id}/interactions")
     assert resposta.status_code == 401
 
 
@@ -397,9 +466,7 @@ async def test_admin_le_a_timeline_de_qualquer_cliente(world):
     await _semear(world, customer_id=world.customer_b_id, quantos=1)
 
     async with _cliente(world, ADMIN_EMAIL) as client:
-        resposta = await client.get(
-            f"/admin/customers/{world.customer_b_id}/interactions"
-        )
+        resposta = await client.get(f"/admin/customers/{world.customer_b_id}/interactions")
 
     assert resposta.status_code == 200
     assert resposta.json()["total"] == 1
@@ -466,9 +533,7 @@ async def test_expurgo_sem_politica_recusa_rodar(world):
 
     async with world.app.state.session_factory() as session:
         with pytest.raises(RetentionNotConfigured):
-            await _servico(session).purge(
-                tenant_id=world.tenant_id, retention_days=None
-            )
+            await _servico(session).purge(tenant_id=world.tenant_id, retention_days=None)
 
 
 @pytest.mark.asyncio
@@ -482,9 +547,7 @@ async def test_expurgo_remove_apenas_o_que_passou_do_corte_e_audita(world):
     )
 
     async with world.app.state.session_factory() as session:
-        removidas = await _servico(session).purge(
-            tenant_id=world.tenant_id, retention_days=365
-        )
+        removidas = await _servico(session).purge(tenant_id=world.tenant_id, retention_days=365)
         await session.commit()
 
     assert removidas == 2

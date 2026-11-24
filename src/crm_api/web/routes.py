@@ -37,6 +37,7 @@ from crm_api.models.assistant_settings import (
     AssistantRepresentativeCapability,
     AssistantRepresentativeSettings,
     ConversationBehaviorSettings,
+    ConversationSimulationScenario,
 )
 from crm_api.models.customer import Customer, CustomerFactCategory, Tenant
 from crm_api.models.customer_contact import CustomerContact
@@ -464,10 +465,16 @@ async def pagina_inicio(
     total = await portfolio.count_customers(scope, CustomerFilters())
     active = await portfolio.count_customers(scope, CustomerFilters(active=True))
     without_contact = await portfolio.count_customers(scope, CustomerFilters(interacted=False))
-    return _render(request, "home.html", {
-        "total_clientes": total, "clientes_ativos": active,
-        "clientes_sem_interacao": without_contact,
-    }, current_user=current_user)
+    return _render(
+        request,
+        "home.html",
+        {
+            "total_clientes": total,
+            "clientes_ativos": active,
+            "clientes_sem_interacao": without_contact,
+        },
+        current_user=current_user,
+    )
 
 
 @router.get("/customers", include_in_schema=False)
@@ -533,9 +540,7 @@ async def pagina_carteira(
     hoje = agora_local.date()
     try:
         cursor_mes = (
-            datetime.strptime(f"{mes}-01", "%Y-%m-%d").date()
-            if mes
-            else hoje.replace(day=1)
+            datetime.strptime(f"{mes}-01", "%Y-%m-%d").date() if mes else hoje.replace(day=1)
         )
     except ValueError:
         cursor_mes = hoje.replace(day=1)
@@ -584,7 +589,8 @@ async def pagina_carteira(
     ]
     agenda_do_dia = [item for item in agenda if item["due_local"].date() == dia_selecionado]
     notificacoes = [
-        item for item in agenda
+        item
+        for item in agenda
         if item["due_local"] >= agora_local and item["reminder"].notified_at is None
     ]
     contagem_por_dia: dict[date, int] = {}
@@ -609,16 +615,30 @@ async def pagina_carteira(
     ids_visiveis = [cliente.id for cliente, _ in linhas]
     contatos_ativos = 0
     if ids_visiveis:
-        contatos_ativos = int(await session.scalar(
-            select(func.count(CustomerContact.id)).where(
-                CustomerContact.tenant_id == current_user.tenant_id,
-                CustomerContact.customer_id.in_(ids_visiveis),
-                CustomerContact.active.is_(True),
+        contatos_ativos = int(
+            await session.scalar(
+                select(func.count(CustomerContact.id)).where(
+                    CustomerContact.tenant_id == current_user.tenant_id,
+                    CustomerContact.customer_id.in_(ids_visiveis),
+                    CustomerContact.active.is_(True),
+                )
             )
-        ) or 0)
+            or 0
+        )
     nomes_meses = (
-        "", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+        "",
+        "Janeiro",
+        "Fevereiro",
+        "Março",
+        "Abril",
+        "Maio",
+        "Junho",
+        "Julho",
+        "Agosto",
+        "Setembro",
+        "Outubro",
+        "Novembro",
+        "Dezembro",
     )
     sete_dias = hoje + timedelta(days=7)
     representantes = await UserRepository(session).list_users(
@@ -632,21 +652,27 @@ async def pagina_carteira(
         representantes = [item for item in representantes if item.id == current_user.user_id]
     representantes_resumo = []
     for representante in representantes:
-        clientes_rep = int(await session.scalar(
-            select(func.count(Customer.id)).where(
-                Customer.tenant_id == current_user.tenant_id,
-                Customer.owner_user_id == representante.id,
+        clientes_rep = int(
+            await session.scalar(
+                select(func.count(Customer.id)).where(
+                    Customer.tenant_id == current_user.tenant_id,
+                    Customer.owner_user_id == representante.id,
+                )
             )
-        ) or 0)
-        contatos_rep = int(await session.scalar(
-            select(func.count(CustomerContact.id))
-            .join(Customer, Customer.id == CustomerContact.customer_id)
-            .where(
-                Customer.tenant_id == current_user.tenant_id,
-                Customer.owner_user_id == representante.id,
-                CustomerContact.active.is_(True),
+            or 0
+        )
+        contatos_rep = int(
+            await session.scalar(
+                select(func.count(CustomerContact.id))
+                .join(Customer, Customer.id == CustomerContact.customer_id)
+                .where(
+                    Customer.tenant_id == current_user.tenant_id,
+                    Customer.owner_user_id == representante.id,
+                    CustomerContact.active.is_(True),
+                )
             )
-        ) or 0)
+            or 0
+        )
         uf_rep = await session.scalar(
             select(Customer.state_code)
             .where(
@@ -657,50 +683,61 @@ async def pagina_carteira(
             .limit(1)
         )
         pending_rep = pending_by_owner.get(representante.id, 0)
-        representantes_resumo.append({
-            "id": str(representante.id),
-            "name": representante.full_name,
-            "state_code": uf_rep or "—",
-            # Um intake pendente já pertence à fila comercial do representante,
-            # embora ainda não seja cliente ativo nem autorize o telefone.
-            "customers": clientes_rep + pending_rep,
-            "confirmed_customers": clientes_rep,
-            "contacts": contatos_rep,
-            "pending_intakes": pending_rep,
-        })
+        representantes_resumo.append(
+            {
+                "id": str(representante.id),
+                "name": representante.full_name,
+                "state_code": uf_rep or "—",
+                # Um intake pendente já pertence à fila comercial do representante,
+                # embora ainda não seja cliente ativo nem autorize o telefone.
+                "customers": clientes_rep + pending_rep,
+                "confirmed_customers": clientes_rep,
+                "contacts": contatos_rep,
+                "pending_intakes": pending_rep,
+            }
+        )
     if pode_gerir:
-        sem_titular = int(await session.scalar(
-            select(func.count(Customer.id)).where(
-                Customer.tenant_id == current_user.tenant_id,
-                Customer.owner_user_id.is_(None),
+        sem_titular = int(
+            await session.scalar(
+                select(func.count(Customer.id)).where(
+                    Customer.tenant_id == current_user.tenant_id,
+                    Customer.owner_user_id.is_(None),
+                )
             )
-        ) or 0)
-        sem_titular_contatos = int(await session.scalar(
-            select(func.count(CustomerContact.id))
-            .join(Customer, Customer.id == CustomerContact.customer_id)
-            .where(
-                Customer.tenant_id == current_user.tenant_id,
-                Customer.owner_user_id.is_(None),
-                CustomerContact.active.is_(True),
+            or 0
+        )
+        sem_titular_contatos = int(
+            await session.scalar(
+                select(func.count(CustomerContact.id))
+                .join(Customer, Customer.id == CustomerContact.customer_id)
+                .where(
+                    Customer.tenant_id == current_user.tenant_id,
+                    Customer.owner_user_id.is_(None),
+                    CustomerContact.active.is_(True),
+                )
             )
-        ) or 0)
-        representantes_resumo.append({
-            "id": "sem-titular", "name": "Sem titular", "state_code": "—",
-            "customers": sem_titular, "confirmed_customers": sem_titular,
-            "contacts": sem_titular_contatos,
-            "pending_intakes": 0,
-        })
+            or 0
+        )
+        representantes_resumo.append(
+            {
+                "id": "sem-titular",
+                "name": "Sem titular",
+                "state_code": "—",
+                "customers": sem_titular,
+                "confirmed_customers": sem_titular,
+                "contacts": sem_titular_contatos,
+                "pending_intakes": 0,
+            }
+        )
     if busca and busca.strip():
         termo_representante = busca.strip().casefold()
         representantes_resumo = [
-            item for item in representantes_resumo
-            if termo_representante in item["name"].casefold()
+            item for item in representantes_resumo if termo_representante in item["name"].casefold()
         ]
     if uf and uf.strip():
         uf_representante = uf.strip().upper()
         representantes_resumo = [
-            item for item in representantes_resumo
-            if item["state_code"] == uf_representante
+            item for item in representantes_resumo if item["state_code"] == uf_representante
         ]
     return _render(
         request,
@@ -799,13 +836,16 @@ async def pagina_carteira_do_representante(
         scope, filtros, limit=300, offset=0
     )
     ids = [customer.id for customer, _ in linhas]
-    contatos = int(await session.scalar(
-        select(func.count(CustomerContact.id)).where(
-            CustomerContact.tenant_id == current_user.tenant_id,
-            CustomerContact.customer_id.in_(ids) if ids else CustomerContact.id.is_(None),
-            CustomerContact.active.is_(True),
+    contatos = int(
+        await session.scalar(
+            select(func.count(CustomerContact.id)).where(
+                CustomerContact.tenant_id == current_user.tenant_id,
+                CustomerContact.customer_id.in_(ids) if ids else CustomerContact.id.is_(None),
+                CustomerContact.active.is_(True),
+            )
         )
-    ) or 0)
+        or 0
+    )
     ativos = sum(1 for customer, _ in linhas if customer.active)
     pending_intakes = []
     pending_total = 0
@@ -1853,14 +1893,95 @@ def _simulator_history(raw: str) -> list[dict[str, str]]:
     return history
 
 
-async def _simulator_representatives(
+async def _simulator_representatives(session: AsyncSession, tenant_id: uuid.UUID) -> list[User]:
+    return list(
+        await session.scalars(
+            select(User)
+            .where(
+                User.tenant_id == tenant_id,
+                User.role == UserRole.REPRESENTATIVE,
+                User.active.is_(True),
+            )
+            .order_by(User.full_name)
+        )
+    )
+
+
+async def _simulator_scenarios(
     session: AsyncSession, tenant_id: uuid.UUID
-) -> list[User]:
-    return list(await session.scalars(select(User).where(
-        User.tenant_id == tenant_id,
-        User.role == UserRole.REPRESENTATIVE,
-        User.active.is_(True),
-    ).order_by(User.full_name)))
+) -> list[ConversationSimulationScenario]:
+    return list(
+        await session.scalars(
+            select(ConversationSimulationScenario)
+            .where(
+                ConversationSimulationScenario.tenant_id == tenant_id,
+                ConversationSimulationScenario.active.is_(True),
+            )
+            .order_by(ConversationSimulationScenario.created_at.desc())
+        )
+    )
+
+
+async def _run_simulator_scenario(
+    request: Request,
+    session: AsyncSession,
+    scenario: ConversationSimulationScenario,
+    representatives: list[User],
+) -> tuple[bool, str]:
+    actor_role = ActorRole.CUSTOMER
+    allowed_capabilities: frozenset[str] | None = None
+    if scenario.mode == "REPRESENTATIVE_ASSISTANT":
+        representative = next(
+            (item for item in representatives if item.id == scenario.representative_user_id),
+            None,
+        )
+        if representative is None:
+            return False, "Representante inativo ou não encontrado."
+        actor_role = ActorRole.REPRESENTATIVE
+        policy = await get_assistant_policy(session, scenario.tenant_id, representative.id)
+        allowed_capabilities = policy.effective_capabilities()
+
+    capabilities = simulation_capabilities(
+        actor_role,
+        allowed_capability_ids=allowed_capabilities,
+    )
+    try:
+        simulation = await GatewayWhatsappOnboardingClient(
+            request.app.state.settings
+        ).simulate_message(
+            actor_role=actor_role.value,
+            text=scenario.message,
+            capabilities=[
+                capability.model_dump(mode="json", exclude_none=True) for capability in capabilities
+            ],
+            history=[],
+        )
+    except GatewayOnboardingError:
+        return False, "Motor de interpretação indisponível."
+
+    checks = [simulation.status == scenario.expected_status]
+    differences = [f"status: {simulation.status} (esperado: {scenario.expected_status})"]
+    if scenario.expected_capability_id:
+        checks.append(simulation.capability_id == scenario.expected_capability_id)
+        differences.append(
+            "capacidade: "
+            f"{simulation.capability_id or 'nenhuma'} "
+            f"(esperada: {scenario.expected_capability_id})"
+        )
+    if scenario.expected_action:
+        checks.append(simulation.action == scenario.expected_action)
+        differences.append(
+            f"ação: {simulation.action or 'nenhuma'} (esperada: {scenario.expected_action})"
+        )
+    if scenario.expected_fact_text:
+        expected = scenario.expected_fact_text.casefold()
+        facts = [str(item.get("text") or "") for item in simulation.suggested_facts]
+        checks.append(any(expected in fact.casefold() for fact in facts))
+        differences.append(
+            f"informação aprendida: {', '.join(facts) or 'nenhuma'} "
+            f"(esperada: {scenario.expected_fact_text})"
+        )
+    return all(checks), "; ".join(differences)[:1000]
 
 
 @router.get("/assistant", include_in_schema=False)
@@ -1874,18 +1995,34 @@ async def pagina_assistente(
         return _redirect("/portal/customers", "sem-permissao")
     tenant_id = current_user.tenant_id
     organization = await session.get(AssistantOrganizationSettings, tenant_id)
-    users = (await session.scalars(select(User).where(
-        User.tenant_id == tenant_id, User.role == UserRole.REPRESENTATIVE
-    ).order_by(User.full_name))).all()
-    settings = (await session.scalars(select(AssistantRepresentativeSettings).where(
-        AssistantRepresentativeSettings.tenant_id == tenant_id
-    ))).all()
-    capabilities = (await session.scalars(select(AssistantRepresentativeCapability).where(
-        AssistantRepresentativeCapability.tenant_id == tenant_id
-    ))).all()
-    behaviors = (await session.scalars(select(ConversationBehaviorSettings).where(
-        ConversationBehaviorSettings.tenant_id == tenant_id
-    ))).all()
+    users = (
+        await session.scalars(
+            select(User)
+            .where(User.tenant_id == tenant_id, User.role == UserRole.REPRESENTATIVE)
+            .order_by(User.full_name)
+        )
+    ).all()
+    settings = (
+        await session.scalars(
+            select(AssistantRepresentativeSettings).where(
+                AssistantRepresentativeSettings.tenant_id == tenant_id
+            )
+        )
+    ).all()
+    capabilities = (
+        await session.scalars(
+            select(AssistantRepresentativeCapability).where(
+                AssistantRepresentativeCapability.tenant_id == tenant_id
+            )
+        )
+    ).all()
+    behaviors = (
+        await session.scalars(
+            select(ConversationBehaviorSettings).where(
+                ConversationBehaviorSettings.tenant_id == tenant_id
+            )
+        )
+    ).all()
     monitoring = await assistant_monitoring_snapshot(session, tenant_id)
     gateway_status = None
     gateway_error = None
@@ -1899,19 +2036,25 @@ async def pagina_assistente(
     for capability in capabilities:
         if capability.user_id in selected:
             selected[capability.user_id].add(capability.capability_id)
-    return _render(request, "assistant.html", {
-        "organization": organization,
-        "users": users,
-        "enabled": {setting.user_id: setting.enabled for setting in settings},
-        "selected": selected,
-        "capabilities": _ASSISTANT_CAPABILITIES,
-        "behaviors": {behavior.bot_kind: behavior for behavior in behaviors},
-        "default_instructions": _BEHAVIOR_DEFAULT_INSTRUCTIONS,
-        "monitoring": monitoring,
-        "gateway_status": gateway_status,
-        "gateway_error": gateway_error,
-        "enabled_representatives": sum(setting.enabled for setting in settings),
-    }, current_user=current_user, mensagem=m)
+    return _render(
+        request,
+        "assistant.html",
+        {
+            "organization": organization,
+            "users": users,
+            "enabled": {setting.user_id: setting.enabled for setting in settings},
+            "selected": selected,
+            "capabilities": _ASSISTANT_CAPABILITIES,
+            "behaviors": {behavior.bot_kind: behavior for behavior in behaviors},
+            "default_instructions": _BEHAVIOR_DEFAULT_INSTRUCTIONS,
+            "monitoring": monitoring,
+            "gateway_status": gateway_status,
+            "gateway_error": gateway_error,
+            "enabled_representatives": sum(setting.enabled for setting in settings),
+        },
+        current_user=current_user,
+        mensagem=m,
+    )
 
 
 @router.get("/simulator", include_in_schema=False)
@@ -1919,10 +2062,12 @@ async def pagina_simulador(
     request: Request,
     current_user: Annotated[CurrentUser, Depends(portal_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    m: Annotated[str | None, Query()] = None,
 ) -> Response:
     if current_user.role is not UserRole.ADMIN:
         return _redirect("/portal/customers", "sem-permissao")
     representatives = await _simulator_representatives(session, current_user.tenant_id)
+    scenarios = await _simulator_scenarios(session, current_user.tenant_id)
     return _render(
         request,
         "simulator.html",
@@ -1933,8 +2078,11 @@ async def pagina_simulador(
             "messages": [],
             "history_json": "[]",
             "simulation": None,
+            "last_message": "",
+            "scenarios": scenarios,
         },
         current_user=current_user,
+        mensagem=m,
     )
 
 
@@ -1955,6 +2103,7 @@ async def simular_mensagem(
         return _redirect("/portal/simulator", "csrf")
 
     representatives = await _simulator_representatives(session, current_user.tenant_id)
+    scenarios = await _simulator_scenarios(session, current_user.tenant_id)
     if mode not in _SIMULATOR_MODES:
         mode = "REPRESENTATIVE_ASSISTANT"
     text = message.strip()[:1000]
@@ -1976,9 +2125,7 @@ async def simular_mensagem(
         else:
             selected_id = str(representative.id)
             actor_role = ActorRole.REPRESENTATIVE
-            policy = await get_assistant_policy(
-                session, current_user.tenant_id, representative.id
-            )
+            policy = await get_assistant_policy(session, current_user.tenant_id, representative.id)
             allowed_capabilities = policy.effective_capabilities()
 
     if not text:
@@ -2000,10 +2147,12 @@ async def simular_mensagem(
                 ],
                 history=[dict(item) for item in history],
             )
-            history.extend([
-                {"role": "user", "text": text},
-                {"role": "assistant", "text": simulation.reply},
-            ])
+            history.extend(
+                [
+                    {"role": "user", "text": text},
+                    {"role": "assistant", "text": simulation.reply},
+                ]
+            )
             history = history[-12:]
         except GatewayOnboardingError:
             direct_error = (
@@ -2021,11 +2170,130 @@ async def simular_mensagem(
             "messages": history,
             "history_json": json.dumps(history, ensure_ascii=False),
             "simulation": simulation,
+            "last_message": text,
+            "scenarios": scenarios,
         },
         current_user=current_user,
         erro_direto=direct_error,
         status_code=503 if direct_error and text else 200,
     )
+
+
+@router.post("/simulator/scenarios", include_in_schema=False)
+async def salvar_cenario_simulador(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    scenario_name: Annotated[str, Form()] = "",
+    mode: Annotated[str, Form()] = "REPRESENTATIVE_ASSISTANT",
+    representative_id: Annotated[str, Form()] = "",
+    message: Annotated[str, Form()] = "",
+    expected_status: Annotated[str, Form()] = "RESOLVED",
+    expected_capability_id: Annotated[str, Form()] = "",
+    expected_action: Annotated[str, Form()] = "",
+    expected_fact_text: Annotated[str, Form()] = "",
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/simulator", "csrf")
+
+    name = scenario_name.strip()[:120]
+    text = message.strip()[:1000]
+    if (
+        mode not in _SIMULATOR_MODES
+        or expected_status not in {"RESOLVED", "OUT_OF_SCOPE", "UNCLEAR"}
+        or not name
+        or not text
+    ):
+        return _redirect("/portal/simulator", "cenario-invalido")
+
+    representative_uuid = None
+    if mode == "REPRESENTATIVE_ASSISTANT":
+        try:
+            representative_uuid = uuid.UUID(representative_id)
+        except ValueError:
+            return _redirect("/portal/simulator", "cenario-invalido")
+        representative = await session.scalar(
+            select(User.id).where(
+                User.id == representative_uuid,
+                User.tenant_id == current_user.tenant_id,
+                User.role == UserRole.REPRESENTATIVE,
+                User.active.is_(True),
+            )
+        )
+        if representative is None:
+            return _redirect("/portal/simulator", "cenario-invalido")
+
+    session.add(
+        ConversationSimulationScenario(
+            tenant_id=current_user.tenant_id,
+            name=name,
+            mode=mode,
+            representative_user_id=representative_uuid,
+            message=text,
+            expected_status=expected_status,
+            expected_capability_id=expected_capability_id.strip()[:120] or None,
+            expected_action=expected_action.strip()[:120] or None,
+            expected_fact_text=expected_fact_text.strip()[:240] or None,
+            created_by_user_id=current_user.user_id,
+        )
+    )
+    await session.commit()
+    return _redirect("/portal/simulator", "cenario-salvo")
+
+
+@router.post("/simulator/scenarios/run", include_in_schema=False)
+async def executar_cenarios_simulador(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/simulator", "csrf")
+    scenarios = await _simulator_scenarios(session, current_user.tenant_id)
+    if not scenarios:
+        return _redirect("/portal/simulator", "cenario-vazio")
+    representatives = await _simulator_representatives(session, current_user.tenant_id)
+    passed = 0
+    for scenario in scenarios:
+        scenario.last_passed, scenario.last_result = await _run_simulator_scenario(
+            request, session, scenario, representatives
+        )
+        scenario.last_run_at = datetime.now(UTC)
+        passed += int(scenario.last_passed)
+    await session.commit()
+    result = "cenarios-aprovados" if passed == len(scenarios) else "cenarios-reprovados"
+    return _redirect("/portal/simulator", result)
+
+
+@router.post("/simulator/scenarios/{scenario_id}/archive", include_in_schema=False)
+async def arquivar_cenario_simulador(
+    scenario_id: uuid.UUID,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/simulator", "csrf")
+    scenario = await session.scalar(
+        select(ConversationSimulationScenario).where(
+            ConversationSimulationScenario.id == scenario_id,
+            ConversationSimulationScenario.tenant_id == current_user.tenant_id,
+            ConversationSimulationScenario.active.is_(True),
+        )
+    )
+    if scenario is not None:
+        scenario.active = False
+        await session.commit()
+    return _redirect("/portal/simulator", "cenario-arquivado")
 
 
 @router.get("/assistant/unresolved", include_in_schema=False)
@@ -2062,39 +2330,53 @@ async def pagina_mensagens_nao_entendidas(
         for interaction in unresolved
         if ":out:" in interaction.external_ref
     }
-    inbound = {
-        interaction.external_ref: interaction
-        for interaction in await session.scalars(
-            select(CustomerInteraction).where(
-                CustomerInteraction.tenant_id == current_user.tenant_id,
-                CustomerInteraction.source == GATEWAY_SOURCE,
-                CustomerInteraction.external_ref.in_(source_refs),
+    inbound = (
+        {
+            interaction.external_ref: interaction
+            for interaction in await session.scalars(
+                select(CustomerInteraction).where(
+                    CustomerInteraction.tenant_id == current_user.tenant_id,
+                    CustomerInteraction.source == GATEWAY_SOURCE,
+                    CustomerInteraction.external_ref.in_(source_refs),
+                )
             )
-        )
-    } if source_refs else {}
+        }
+        if source_refs
+        else {}
+    )
     customer_ids = {item.customer_id for item in unresolved if item.customer_id}
     actor_ids = {item.actor_user_id for item in unresolved if item.actor_user_id}
-    customers = {
-        item.id: item.legal_name
-        for item in await session.scalars(select(Customer).where(Customer.id.in_(customer_ids)))
-    } if customer_ids else {}
-    actors = {
-        item.id: item.full_name
-        for item in await session.scalars(select(User).where(User.id.in_(actor_ids)))
-    } if actor_ids else {}
+    customers = (
+        {
+            item.id: item.legal_name
+            for item in await session.scalars(select(Customer).where(Customer.id.in_(customer_ids)))
+        }
+        if customer_ids
+        else {}
+    )
+    actors = (
+        {
+            item.id: item.full_name
+            for item in await session.scalars(select(User).where(User.id.in_(actor_ids)))
+        }
+        if actor_ids
+        else {}
+    )
     rows = []
     for response in unresolved:
         source_ref = response.external_ref.rsplit(":out:", 1)[0]
         message = inbound.get(source_ref)
-        rows.append({
-            "occurred_at": (message or response).occurred_at,
-            "speaker": customers.get(response.customer_id)
-            or actors.get(response.actor_user_id)
-            or "Contato identificado",
-            "message": message.summary if message else "Mensagem original indisponível",
-            "response": response.summary,
-            "outcome": (response.payload or {}).get("outcome"),
-        })
+        rows.append(
+            {
+                "occurred_at": (message or response).occurred_at,
+                "speaker": customers.get(response.customer_id)
+                or actors.get(response.actor_user_id)
+                or "Contato identificado",
+                "message": message.summary if message else "Mensagem original indisponível",
+                "response": response.summary,
+                "outcome": (response.payload or {}).get("outcome"),
+            }
+        )
     return _render(
         request,
         "assistant_unresolved.html",
@@ -2119,15 +2401,24 @@ async def salvar_comportamento(
     if not csrf_is_valid(request, csrf_token):
         return _redirect("/portal/assistant", "csrf")
     instructions = instructions.strip()
-    if (bot_kind not in _BEHAVIOR_BOTS or tone not in _BEHAVIOR_TONES
-            or not instructions or len(instructions) > 4000
-            or not 15 <= context_minutes <= 1440):
+    if (
+        bot_kind not in _BEHAVIOR_BOTS
+        or tone not in _BEHAVIOR_TONES
+        or not instructions
+        or len(instructions) > 4000
+        or not 15 <= context_minutes <= 1440
+    ):
         return _redirect("/portal/assistant", "comportamento-invalido")
     behavior = await session.get(ConversationBehaviorSettings, (current_user.tenant_id, bot_kind))
-    before = None if behavior is None else {
-        "tone": behavior.tone, "instructions": behavior.instructions,
-        "context_minutes": behavior.context_minutes,
-    }
+    before = (
+        None
+        if behavior is None
+        else {
+            "tone": behavior.tone,
+            "instructions": behavior.instructions,
+            "context_minutes": behavior.context_minutes,
+        }
+    )
     if behavior is None:
         behavior = ConversationBehaviorSettings(tenant_id=current_user.tenant_id, bot_kind=bot_kind)
         session.add(behavior)
@@ -2136,10 +2427,17 @@ async def salvar_comportamento(
     behavior.context_minutes = context_minutes
     behavior.updated_at = datetime.now(UTC)
     AuditRepository(session).record(
-        action="conversation.behavior.updated", entity="conversation_behavior_settings",
-        tenant_id=current_user.tenant_id, actor_user_id=current_user.user_id,
-        before=before, after={"bot_kind": bot_kind, "tone": tone,
-                              "instructions": instructions, "context_minutes": context_minutes},
+        action="conversation.behavior.updated",
+        entity="conversation_behavior_settings",
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.user_id,
+        before=before,
+        after={
+            "bot_kind": bot_kind,
+            "tone": tone,
+            "instructions": instructions,
+            "context_minutes": context_minutes,
+        },
     )
     await session.commit()
     return _redirect("/portal/assistant", "assistente-salvo")
@@ -2165,9 +2463,13 @@ async def salvar_assistente_organizacao(
     organization.enabled = enabled
     organization.updated_at = datetime.now(UTC)
     AuditRepository(session).record(
-        action="assistant.organization.updated", entity="assistant_organization_settings",
-        tenant_id=current_user.tenant_id, actor_user_id=current_user.user_id,
-        entity_id=current_user.tenant_id, before={"enabled": before}, after={"enabled": enabled},
+        action="assistant.organization.updated",
+        entity="assistant_organization_settings",
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.user_id,
+        entity_id=current_user.tenant_id,
+        before={"enabled": before},
+        after={"enabled": enabled},
     )
     await session.commit()
     return _redirect("/portal/assistant", "assistente-salvo")
@@ -2188,36 +2490,55 @@ async def salvar_assistente_representante(
     if not csrf_is_valid(request, csrf_token):
         return _redirect("/portal/assistant", "csrf")
     tenant_id = current_user.tenant_id
-    user = await session.scalar(select(User).where(
-        User.id == user_id, User.tenant_id == tenant_id, User.role == UserRole.REPRESENTATIVE
-    ))
+    user = await session.scalar(
+        select(User).where(
+            User.id == user_id, User.tenant_id == tenant_id, User.role == UserRole.REPRESENTATIVE
+        )
+    )
     chosen = set(capabilities or [])
     if user is None or not chosen <= REPRESENTATIVE_CAPABILITIES:
         return _redirect("/portal/assistant", "nao-encontrado")
     representative = await session.get(AssistantRepresentativeSettings, (tenant_id, user_id))
-    previous = (await session.scalars(select(AssistantRepresentativeCapability.capability_id).where(
-        AssistantRepresentativeCapability.tenant_id == tenant_id,
-        AssistantRepresentativeCapability.user_id == user_id,
-    ))).all()
-    before = {"enabled": representative.enabled if representative else False,
-              "capabilities": sorted(previous)}
+    previous = (
+        await session.scalars(
+            select(AssistantRepresentativeCapability.capability_id).where(
+                AssistantRepresentativeCapability.tenant_id == tenant_id,
+                AssistantRepresentativeCapability.user_id == user_id,
+            )
+        )
+    ).all()
+    before = {
+        "enabled": representative.enabled if representative else False,
+        "capabilities": sorted(previous),
+    }
     if representative is None:
         representative = AssistantRepresentativeSettings(tenant_id=tenant_id, user_id=user_id)
         session.add(representative)
         await session.flush()
     representative.enabled = enabled
     representative.updated_at = datetime.now(UTC)
-    await session.execute(delete(AssistantRepresentativeCapability).where(
-        AssistantRepresentativeCapability.tenant_id == tenant_id,
-        AssistantRepresentativeCapability.user_id == user_id,
-    ))
-    session.add_all([AssistantRepresentativeCapability(
-        tenant_id=tenant_id, user_id=user_id, capability_id=capability
-    ) for capability in sorted(chosen)])
+    await session.execute(
+        delete(AssistantRepresentativeCapability).where(
+            AssistantRepresentativeCapability.tenant_id == tenant_id,
+            AssistantRepresentativeCapability.user_id == user_id,
+        )
+    )
+    session.add_all(
+        [
+            AssistantRepresentativeCapability(
+                tenant_id=tenant_id, user_id=user_id, capability_id=capability
+            )
+            for capability in sorted(chosen)
+        ]
+    )
     AuditRepository(session).record(
-        action="assistant.representative.updated", entity="assistant_representative_settings",
-        tenant_id=tenant_id, actor_user_id=current_user.user_id, entity_id=user_id,
-        before=before, after={"enabled": enabled, "capabilities": sorted(chosen)},
+        action="assistant.representative.updated",
+        entity="assistant_representative_settings",
+        tenant_id=tenant_id,
+        actor_user_id=current_user.user_id,
+        entity_id=user_id,
+        before=before,
+        after={"enabled": enabled, "capabilities": sorted(chosen)},
     )
     await session.commit()
     return _redirect("/portal/assistant", "assistente-salvo")
@@ -2233,9 +2554,7 @@ def _representative_invite_service(session: AsyncSession) -> RepresentativeInvit
     )
 
 
-def _set_portal_session_cookie(
-    response: Response, settings: Settings, token: str
-) -> None:
+def _set_portal_session_cookie(response: Response, settings: Settings, token: str) -> None:
     response.set_cookie(
         key=settings.session_cookie_name,
         value=token,
@@ -2276,9 +2595,7 @@ async def criar_convite_de_representante(
         request_id=request.headers.get("x-request-id"),
     )
     await session.commit()
-    invite_url = str(
-        request.url_for("pagina_convite_representante", token=issued.token)
-    )
+    invite_url = str(request.url_for("pagina_convite_representante", token=issued.token))
     return _render(
         request,
         "representative_invite_created.html",
@@ -2300,10 +2617,7 @@ async def pagina_convite_representante(
     try:
         invite = await _representative_invite_service(session).resolve(token)
     except RepresentativeInviteUnavailable as error:
-        if (
-            error.invite is not None
-            and error.invite.status is RepresentativeInviteStatus.EXPIRED
-        ):
+        if error.invite is not None and error.invite.status is RepresentativeInviteStatus.EXPIRED:
             await session.commit()
         else:
             await session.rollback()
@@ -2316,8 +2630,7 @@ async def pagina_convite_representante(
                 "password_min_length": request.app.state.settings.password_min_length,
             },
             erro_direto=(
-                "Este convite não está mais disponível. "
-                "Peça um novo link ao administrador."
+                "Este convite não está mais disponível. Peça um novo link ao administrador."
             ),
             status_code=410,
         )
@@ -2384,9 +2697,7 @@ async def aceitar_convite_representante(
         )
         await session.flush()
         await enable_representative_assistant(session, invite.tenant_id, user.id)
-        invite_service.accept(
-            invite, user, request_id=request.headers.get("x-request-id")
-        )
+        invite_service.accept(invite, user, request_id=request.headers.get("x-request-id"))
         issued_session = await build_auth_service(request, session).authenticate(
             tenant_slug=tenant.slug if tenant else request.app.state.settings.tenant_slug,
             email=email,
@@ -2397,10 +2708,7 @@ async def aceitar_convite_representante(
         )
         await session.commit()
     except RepresentativeInviteUnavailable as error:
-        if (
-            error.invite is not None
-            and error.invite.status is RepresentativeInviteStatus.EXPIRED
-        ):
+        if error.invite is not None and error.invite.status is RepresentativeInviteStatus.EXPIRED:
             await session.commit()
         else:
             await session.rollback()
@@ -2413,8 +2721,7 @@ async def aceitar_convite_representante(
                 "password_min_length": request.app.state.settings.password_min_length,
             },
             erro_direto=(
-                "Este convite não está mais disponível. "
-                "Peça um novo link ao administrador."
+                "Este convite não está mais disponível. Peça um novo link ao administrador."
             ),
             status_code=410,
         )
@@ -3629,9 +3936,17 @@ async def exportar_tabela_atualizacao(
     escritor = csv.writer(arquivo, delimiter=";")
     escritor.writerow(
         [
-            "family_name", "family_order", "sku", "commercial_name", "specification",
-            "availability", "base_price", "expected_arrival_date", "arrival_note",
-            "display_order", "notes",
+            "family_name",
+            "family_order",
+            "sku",
+            "commercial_name",
+            "specification",
+            "availability",
+            "base_price",
+            "expected_arrival_date",
+            "arrival_note",
+            "display_order",
+            "notes",
         ]
     )
     for entrada, produto, familia in itens:
@@ -3651,9 +3966,7 @@ async def exportar_tabela_atualizacao(
             ]
         )
     nome = (
-        f"tabela-atualizacao-{competencia:%Y-%m}.csv"
-        if competencia
-        else "tabela-atualizacao.csv"
+        f"tabela-atualizacao-{competencia:%Y-%m}.csv" if competencia else "tabela-atualizacao.csv"
     )
     return Response(
         arquivo.getvalue(),
@@ -3688,8 +4001,7 @@ async def baixar_arquivo_original_do_lote(
         media_type=anexo.mime_type,
         headers={
             "Content-Disposition": (
-                f'attachment; filename="{nome_ascii}"; '
-                f"filename*=UTF-8''{quote(nome_original)}"
+                f"attachment; filename=\"{nome_ascii}\"; filename*=UTF-8''{quote(nome_original)}"
             ),
             "Cache-Control": "private, no-store",
             "X-Content-Type-Options": "nosniff",
