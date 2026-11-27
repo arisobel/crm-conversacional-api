@@ -275,6 +275,8 @@ class GatewayWhatsappOnboardingClient:
         raw_features = raw_features if isinstance(raw_features, dict) else {}
         raw_audio_limit = raw_features.get("limite_audio_segundos")
         audio_limit = raw_audio_limit if type(raw_audio_limit) in {int, float} else 0
+        raw_outbox = payload.get("fila_interacoes")
+        raw_outbox = raw_outbox if isinstance(raw_outbox, dict) else {}
         return {
             "service": payload["servico"],
             "version": str(payload.get("versao") or "unknown")[:80],
@@ -288,6 +290,13 @@ class GatewayWhatsappOnboardingClient:
                 "natural_replies": raw_features.get("respostas_naturais") is True,
                 "automatic_handoff": raw_features.get("transbordo_automatico") is True,
                 "max_audio_seconds": max(0, min(int(audio_limit), 600)),
+            },
+            "interaction_outbox": {
+                "persistent": raw_outbox.get("persistente") is True,
+                "available": raw_outbox.get("disponivel") is True,
+                "pending": max(0, int(raw_outbox.get("pendentes") or 0)),
+                "failed": max(0, int(raw_outbox.get("falhas") or 0)),
+                "last_failed_at": raw_outbox.get("ultima_falha_em"),
             },
             "lines": [
                 {

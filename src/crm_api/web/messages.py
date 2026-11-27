@@ -35,6 +35,10 @@ _MENSAGENS: dict[str, tuple[str, str]] = {
     ),
     "cenario-vazio": ("erro", "Salve pelo menos um cenário antes de executar a bateria."),
     "cenario-invalido": ("erro", "Confira o nome, a mensagem e o resultado esperado."),
+    "evidencia-salva": ("ok", "Evidência do teste ponta a ponta registrada."),
+    "evidencia-invalida": ("erro", "Confira o teste e o resultado informado."),
+    "escopo-congelado": ("ok", "Escopo desta versão congelado e registrado."),
+    "escopo-invalido": ("erro", "Informe uma versão válida para congelar o escopo."),
     # sucesso
     "cliente-criado": ("ok", "Cliente cadastrado."),
     "cliente-salvo": ("ok", "Cadastro atualizado."),

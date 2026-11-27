@@ -85,6 +85,64 @@
   {% endif %}
 </section>
 
+<section class="painel painel-glass central-liberacao">
+  <div class="central-secao-titulo">
+    <div>
+      <p class="inicio-etiqueta">LIBERAÇÃO DO MVP</p>
+      <h2>Gate objetivo de entrega</h2>
+      <p class="dica">A liberação só fica pronta quando operação, regressão, testes reais e escopo estiverem aprovados.</p>
+    </div>
+    <span class="central-status status-{{ mvp_gate.status|lower }}">
+      {% if mvp_gate.status == 'READY' %}Pronto para liberar{% elif mvp_gate.status == 'BLOCKED' %}Liberação bloqueada{% else %}Requer atenção{% endif %}
+    </span>
+  </div>
+  <div class="gate-grade">
+    {% for item in mvp_gate.items %}
+    <article class="gate-item {% if item.passed %}gate-ok{% else %}gate-pendente{% endif %}">
+      <strong>{% if item.passed %}&#10003;{% else %}!{% endif %} {{ item.label }}</strong>
+      <small>{{ item.detail }}</small>
+    </article>
+    {% endfor %}
+  </div>
+
+  <div class="gate-evidencias">
+    <div>
+      <h3>Validação real ponta a ponta</h3>
+      <p class="dica">Registre apenas o que foi executado no WhatsApp e conferido no CRM.</p>
+    </div>
+    {% for check in mvp_gate.checks %}
+    <form method="post" action="/portal/assistant/release/checks/{{ check.id }}" class="gate-check">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="check-{{ check.id }}"><strong>{{ check.label }}</strong></label>
+      <select id="check-{{ check.id }}" name="status">
+        {% for value, label in [('PENDING', 'Pendente'), ('PASS', 'Aprovado'), ('FAIL', 'Reprovado')] %}
+        <option value="{{ value }}" {% if check.status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <input name="note" maxlength="500" value="{{ check.note }}" placeholder="Evidência curta: número, horário ou resultado">
+      <button type="submit" class="botao-glass">Registrar</button>
+    </form>
+    {% endfor %}
+  </div>
+
+  <form method="post" action="/portal/assistant/release/freeze" class="gate-congelar">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div>
+      <label for="scope-version"><strong>Versão do escopo</strong></label>
+      <input id="scope-version" name="scope_version" maxlength="40" value="{{ mvp_gate.control.scope_version if mvp_gate.control else 'MVP-1' }}" required>
+    </div>
+    <div class="gate-escopo-info">
+      {% if mvp_gate.control and mvp_gate.control.scope_frozen_at %}
+      <strong>Congelado em {{ mvp_gate.control.scope_frozen_at.strftime('%d/%m/%Y %H:%M') }}</strong>
+      <small>{% if mvp_gate.scope_drifted %}Há mudanças posteriores; revise e congele novamente.{% else %}Configuração atual corresponde ao escopo aprovado.{% endif %}</small>
+      {% else %}
+      <strong>Ainda não congelado</strong><small>Congele somente depois de aprovar o comportamento que será entregue.</small>
+      {% endif %}
+    </div>
+    <button type="submit">Congelar escopo atual</button>
+  </form>
+</section>
+
 <section class="central-controles">
   <article class="painel painel-glass">
     <h2>Atendimento ao cliente</h2>

@@ -130,3 +130,26 @@ class ConversationSimulationScenario(Base):
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MvpReleaseControl(Base):
+    """Evidências e escopo aprovados para liberar uma versão do MVP."""
+
+    __tablename__ = "mvp_release_controls"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    scope_version: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="MVP-1", server_default=text("'MVP-1'")
+    )
+    scope_frozen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    scope_frozen_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    scope_snapshot_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    scope_snapshot: Mapped[dict | None] = mapped_column(_JSON_COLUMN, nullable=True)
+    acceptance_checks: Mapped[dict] = mapped_column(
+        _JSON_COLUMN, default=dict, server_default=text("'{}'"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

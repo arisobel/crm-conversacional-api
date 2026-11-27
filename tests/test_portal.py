@@ -20,6 +20,7 @@ from crm_api.models.assistant_settings import (
     AssistantRepresentativeSettings,
     ConversationBehaviorSettings,
     ConversationSimulationScenario,
+    MvpReleaseControl,
 )
 from crm_api.models.customer import Customer, CustomerFact, CustomerLocation
 from crm_api.models.customer_contact import CustomerContact
@@ -532,6 +533,55 @@ async def test_central_exibe_funcionamento_conversa_agenda_e_handoff(world, admi
     assert "Cadastros aguardando conferência" in page.text
     assert "1 há mais de 24h" in page.text
     assert "1 pré-cadastro(s) aguarda(m) conferência há mais de 24 horas." in page.text
+
+
+@pytest.mark.asyncio
+async def test_gate_mvp_registra_evidencia_e_detecta_mudanca_no_escopo(world, admin):
+    page = await admin.get("/portal/assistant")
+    assert "Gate objetivo de entrega" in page.text
+    assert "Liberação bloqueada" in page.text
+
+    evidence = await admin.post(
+        "/portal/assistant/release/checks/LINE_ROUTING",
+        data={
+            "csrf_token": _token(page.text),
+            "status": "PASS",
+            "note": "Cliente e representante testados em linhas distintas.",
+        },
+    )
+    assert "Evidência do teste ponta a ponta registrada" in evidence.text
+
+    frozen = await admin.post(
+        "/portal/assistant/release/freeze",
+        data={"csrf_token": _token(evidence.text), "scope_version": "MVP-PILOTO"},
+    )
+    assert "Escopo desta versão congelado" in frozen.text
+    assert "Configuração atual corresponde ao escopo aprovado" in frozen.text
+
+    changed = await admin.post(
+        "/portal/assistant/behavior/COEXISTENCE",
+        data={
+            "csrf_token": _token(frozen.text),
+            "tone": "cordial",
+            "context_minutes": "180",
+            "instructions": "Nova orientacao aprovada depois do congelamento.",
+        },
+    )
+    assert "Há mudanças posteriores; revise e congele novamente" in changed.text
+
+    async with world.app.state.session_factory() as session:
+        control = await session.get(MvpReleaseControl, world.tenant_id)
+        audits = list(
+            await session.scalars(
+                select(AuditLog.action).where(
+                    AuditLog.action.in_({"mvp.acceptance_check.updated", "mvp.scope.frozen"})
+                )
+            )
+        )
+    assert control is not None
+    assert control.scope_version == "MVP-PILOTO"
+    assert control.acceptance_checks["LINE_ROUTING"]["status"] == "PASS"
+    assert set(audits) == {"mvp.acceptance_check.updated", "mvp.scope.frozen"}
 
 
 @pytest.mark.asyncio

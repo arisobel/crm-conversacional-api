@@ -39,6 +39,7 @@ from crm_api.models.assistant_settings import (
     AssistantRepresentativeSettings,
     ConversationBehaviorSettings,
     ConversationSimulationScenario,
+    MvpReleaseControl,
 )
 from crm_api.models.customer import Customer, CustomerFactCategory, Tenant
 from crm_api.models.customer_contact import CustomerContact
@@ -149,6 +150,12 @@ from crm_api.services.interactions import (
     NoteNotFound,
     NoteNotOwned,
     UnknownNoteChannel,
+)
+from crm_api.services.mvp_release import (
+    normalize_acceptance_check,
+    release_gate,
+    scope_hash,
+    scope_snapshot,
 )
 from crm_api.services.portfolio import CustomerNotInScope, InvalidOwner, PortfolioService
 from crm_api.services.price_publication import (
@@ -2088,6 +2095,12 @@ async def pagina_assistente(
         ).status_overview()
     except GatewayOnboardingError as error:
         gateway_error = str(error)
+    mvp_gate = await release_gate(
+        session,
+        tenant_id,
+        monitoring=monitoring,
+        gateway_status=gateway_status,
+    )
     selected: dict[uuid.UUID, set[str]] = {user.id: set() for user in users}
     for capability in capabilities:
         if capability.user_id in selected:
@@ -2106,6 +2119,7 @@ async def pagina_assistente(
             "monitoring": monitoring,
             "gateway_status": gateway_status,
             "gateway_error": gateway_error,
+            "mvp_gate": mvp_gate,
             "enabled_representatives": sum(setting.enabled for setting in settings),
         },
         current_user=current_user,
@@ -2518,6 +2532,100 @@ async def salvar_comportamento(
     )
     await session.commit()
     return _redirect("/portal/assistant", "assistente-salvo")
+
+
+@router.post("/assistant/release/checks/{check_id}", include_in_schema=False)
+async def registrar_evidencia_mvp(
+    check_id: str,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    status: Annotated[str, Form()] = "PENDING",
+    note: Annotated[str, Form()] = "",
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/assistant", "csrf")
+    now = datetime.now(UTC)
+    try:
+        evidence = normalize_acceptance_check(
+            check_id,
+            status,
+            note,
+            updated_at=now,
+            updated_by=current_user.user_id,
+        )
+    except ValueError:
+        return _redirect("/portal/assistant", "evidencia-invalida")
+    control = await session.get(MvpReleaseControl, current_user.tenant_id)
+    if control is None:
+        control = MvpReleaseControl(tenant_id=current_user.tenant_id)
+        session.add(control)
+    previous = dict((control.acceptance_checks or {}).get(check_id) or {})
+    checks = dict(control.acceptance_checks or {})
+    checks[check_id] = evidence
+    control.acceptance_checks = checks
+    control.updated_at = now
+    AuditRepository(session).record(
+        action="mvp.acceptance_check.updated",
+        entity="mvp_release_controls",
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.user_id,
+        entity_id=current_user.tenant_id,
+        before={"check_id": check_id, **previous},
+        after={"check_id": check_id, **evidence},
+    )
+    await session.commit()
+    return _redirect("/portal/assistant", "evidencia-salva")
+
+
+@router.post("/assistant/release/freeze", include_in_schema=False)
+async def congelar_escopo_mvp(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(portal_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    scope_version: Annotated[str, Form()] = "MVP-1",
+    csrf_token: Annotated[str, Form(alias=CSRF_FIELD_NAME)] = "",
+) -> Response:
+    if current_user.role is not UserRole.ADMIN:
+        return _redirect("/portal/customers", "sem-permissao")
+    if not csrf_is_valid(request, csrf_token):
+        return _redirect("/portal/assistant", "csrf")
+    version = scope_version.strip()[:40]
+    if not version:
+        return _redirect("/portal/assistant", "escopo-invalido")
+    snapshot = await scope_snapshot(session, current_user.tenant_id)
+    digest = scope_hash(snapshot)
+    now = datetime.now(UTC)
+    control = await session.get(MvpReleaseControl, current_user.tenant_id)
+    before = None
+    if control is None:
+        control = MvpReleaseControl(tenant_id=current_user.tenant_id)
+        session.add(control)
+    else:
+        before = {
+            "scope_version": control.scope_version,
+            "scope_snapshot_hash": control.scope_snapshot_hash,
+        }
+    control.scope_version = version
+    control.scope_frozen_at = now
+    control.scope_frozen_by_user_id = current_user.user_id
+    control.scope_snapshot_hash = digest
+    control.scope_snapshot = snapshot
+    control.updated_at = now
+    AuditRepository(session).record(
+        action="mvp.scope.frozen",
+        entity="mvp_release_controls",
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.user_id,
+        entity_id=current_user.tenant_id,
+        before=before,
+        after={"scope_version": version, "scope_snapshot_hash": digest},
+    )
+    await session.commit()
+    return _redirect("/portal/assistant", "escopo-congelado")
 
 
 @router.post("/assistant/organization", include_in_schema=False)

@@ -92,6 +92,13 @@ async def test_gateway_status_overview_is_sanitized(monkeypatch):
                     "transbordo_automatico": False,
                     "limite_audio_segundos": 60,
                 },
+                "fila_interacoes": {
+                    "persistente": True,
+                    "disponivel": True,
+                    "pendentes": 2,
+                    "falhas": 0,
+                    "ultima_falha_em": None,
+                },
             }
 
     class Client:
@@ -122,6 +129,13 @@ async def test_gateway_status_overview_is_sanitized(monkeypatch):
             "natural_replies": True,
             "automatic_handoff": False,
             "max_audio_seconds": 60,
+        }
+        assert result["interaction_outbox"] == {
+            "persistent": True,
+            "available": True,
+            "pending": 2,
+            "failed": 0,
+            "last_failed_at": None,
         }
         assert result["lines"] == [{
             "label": "Atendimento", "status": "ACTIVE", "flow": "consulta_cliente"
